@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "DiskUtil": {
+      "commandName": "Project",
+      "commandLineArgs": "\"C:\\Projects\\Cobalt\\c.img\" Format --sectors-per-cluster=8 --clusters-per-block=1024 \"--stage1=C:\\Projects\\Cobalt\\Bootloader\\bin\\stage1.bin\" \"--stage2=C:\\Projects\\Cobalt\\Bootloader\\bin\\stage2.bin\""
+    }
+  }
+}

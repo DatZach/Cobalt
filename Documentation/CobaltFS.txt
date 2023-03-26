@@ -1,0 +1,272 @@
+CobaltFS
+
+Requirements
+ - Journaling
+ - Extensible by OS, Software, and Users (metadata parsers, permissions, reldb, etc)
+ - Fast indexing/search
+ - Scale from 64kb (EEPROM) to 4TB
+ - Configurable to optimize for flash and magnetic disks
+ - Required media support: SSD, HDD, EEPROM, USB Flash, CD
+ - Expandable and shrinkable
+
+Some Ideas
+ - ECC as an extension
+ - Dynamic cluster size per block allocation (effecient packing of small and large files)
+ - Relational DB for file metadata, user defined PKs
+ - Files/Directories same node allow "tarball" copy for direct installation (for fast installs, easy distribution)
+
+512GB Disk
+	134217728	full clusters
+	4096kb		cluster (8 sectors per cluster)
+	262144		full clusters per block (1GB blocks)
+	49152		bytes per bitmap (48kb)
+	
+512GB Disk
+	512			bytes per sector
+	8			sectors per cluster (4kb)
+	134217728	full clusters
+	67108864	half clusters
+	201326592	total clusters
+	201326591	addressable? clusters
+	262144		clusters per block
+	
+ 
+Disk Structure
+	0 FSCB
+	1 Block 0..n
+		0 BDT
+		1 Data
+
+FileSystemConfigBlock (READONLY)
+	jump					8b			Executable code
+	magic					4b			CoFS
+	version					1b			1
+	bytesPerSector?			2b			Set to media's sector size
+	sectorsPerCluster		1b			Sectors per cluster
+	logClustersPerBlock		1b			1 << x clusters per block
+	totalClusters			4b			Total clusters in the filesystem
+	mdtCluster				4b			MDT Cluster (Usually 0)
+	checksum				4b			Value of all fields added as loaded by their LE widths
+
+Block
+	Block are of a predefined size in the MDT BLOK. The first cluster is the superblock, reserved for bitmap and metadata.
+	The first half of a block following the superblock are standard clusters, the second half are half-clusters.
+	
+	magic					4b			BLOK
+	status					1b			0x01		IsFull
+	reserved0				3b
+	firstFreeFullCluster	4b			Relative to block
+	firstFreeHalfCluster	4b			Relative to block
+	reserved1				xb			Size = bytesPerSector - 16
+	bitmap					xb			Size = (1 << logClustersPerBlock) * 1.5 / 8 bytes
+
+MasterDescriptorTable (READONLY, except when unmounted and modifying parameters)
+	FileSystem features are flagged as existing when there's an entry in the MDT
+	Each entry is 32bytes larger, even if not entirely used by entry.
+	On a 4kb cluster system this allows for 128 entries per cluster, 16 per sector.
+	It should be noted that the MDT is largely readonly with modifications allowed generally only when
+	the filesystem is unmounted. Since the filesystem is extensible, this table serves to describe the
+	full scope of features enabled. Even if a driver doesn't have knowledge of a specific extension,
+	that extensions impact on the filesystem is concretely described, allowing anyone to continue read/write
+	operations safely.
+	
+	type					4b			ASCII Tag
+	specific-to-type		28b			See MDT entries below for details
+
+	MDT MDT\x7F - MDT Descriptor
+		ALWAYS THE FIRST ENTRY IN THE MDT
+		The 'type' and 'mirrorCluster' fields are unique here the rest of the fields are backups of the FSCB
+		info required to recover the block data if needed. In theory this data would duplicated 3 times, ensuring
+		its safety. The copy should not be referenced outside of recovery programs, which should try each backup
+		ensuring that it can verify the first 2 Block's magic numbers with the parameters.
+		In case of disk failure, recovery tools can search sector by sector for the MDT descriptor magic. The type
+		indicates if the found table is the primary table or a copy of the primary table. mirrorCluster points to
+		the cluster that contains a mirror of the MDT.
+		
+		type					1b			0 for primary, 1 for copy
+		reserved0				2b
+		rootDegree				1b			COPY MDT ROOT degree
+		bytesPerSector?			2b			COPY Set to media's sector size
+		logSectorsPerCluster	1b			COPY 1 << x
+		logClustersPerBlock		1b			COPY 1 << x clusters per block
+		totalClusters			4b			COPY Total clusters in the filesystem
+		mdtCluster				4b			COPY MDT Cluster (Usually 0)
+		mirrorCluster			4b			Cluster of mirror
+
+	MDT JRNL - Journal
+		flags					1b			0x01 Mount Count integrity check
+											0x02 Mount Timestamp integrity check
+											0x04 Journaling
+		reserved0				3b
+		journalCluster			4b			Cluster of the journal
+
+	MDT ROOT - Root Directory
+		HACK For now, just modify the rootCluster when the b-tree root changes, this part of the
+			 disk is SUPPOSED to be readonly except when unmounted but I cannot figure out how
+			 to do this otherwise
+		rootCluster				4b			Root cluster of B-Tree
+		lastNodeId				4b			Next free node id
+		degree					1b			Degree of b-tree
+
+	MDT BOOT - Bootloader
+		Bootloader is garuenteed to be written in contiguous clusters
+		cluster					4b			Cluster
+		size					4b			Size in clusters
+
+	MDT BCLS - Bad Clusters
+		TODO
+
+	MDT NDXT - Node Extension
+		type					4b			Describes installed node extension. Specific to OS or FS Driver
+		ordinal					1b			Set by filesystem incrementally and once, corresponds with ext flags in Node
+		size					1b			Size of extension in Node
+		
+	MDT MDXT - MDT Extension Pointer
+		If the MDT expands beyond the size available in the primary sector this entry will point to where to load
+		and read more MDT entries. This entry typically appears once per cluster and as the final entry. Effectively
+		creates a singly linked list.
+		
+		nextCluster				4b			Next MDT Cluster
+
+	MDT SIDX - Search Index
+		TODO
+
+B-Tree Nodes (Clusters)
+	B-Tree nodes are allocated on a single cluster.
+	Allocated into full-clusters only, since b-trees entries occupy degree-1 space, we can use the additional
+	space for house keeping.
+	The root cluster does not change index, all other clusters may.
+	
+	def get_cluster_size(degree):
+		return degree*4 + (degree-1)*128
+	
+	def get_bt_degree_for_cluster(size):
+	    result = size / 128
+	    overflow = get_cluster_size(result) - size
+	    if overflow <= 0:
+	            return result
+	    return result - overflow / 128
+	
+	child[degree*2]			4b*degree*2		Cluster Index of child B-Tree Node (0xFFFFFFFF if none)
+	reserved0				xb				Reserved to fill the rest of the 128b.
+											TODO LIMITED TO 4kb CLUSTERS (4096 / 128 = 32 * 4 = 128 > 124)
+	entry[degree*2-1]		128b			Node (key = value.NodeId, value = Node)
+	
+Node (128b)
+	Nodes are packed into a B-Tree
+	Root node pointed at by MDT ROOT has some specialization in the fields, though they are the same pos/size
+
+	NodeId					4b				Node ID
+	ParentNodeId			4b				Node ID of parent
+	ExtensionNodeId			4b				Node ID of extension node (0xFFFFFFFF if none)
+	Attributes				1b				See below
+	ExtFlags				1b				What extensions are enabled for this node, usually all available at link time
+	NameSize				1b				IN BYTES, NOT CHARACTERS. Full length across all records MaxLen = 1024b, ExtLen = 26b
+	reserved0				1b
+	DataSize				8b				Size in bytes
+	CreationTime			4b
+	LastAccessTime			4b
+	LastModificationTime	4b
+	Cluster0..15			4b * 16 = 64b	4kb cluster -> 64kb supported without EN
+	NODE EXTENSIONS			xb 				Size determined by ExtFlags and MDT NDXT entries (6b local max)
+	Name[]					xb		UTF8	(28b local max)
+
+ExtensionNode (128b)
+	NodeId					4b				Node ID
+	ParentNodeId			4b				Node ID of parent
+	ExtensionNodeId			4b				Next Node Index of extension node (0xFFFFFFFF if none)
+	Type					1b				0	Terminate
+											1	Name
+											2	Clusters
+											3	Node Extensions
+	Length					1b				Size of region, must not overflow record (128 bytes)
+	reserved0				2b
+	Data					xb				Size = specified in 'Length' field, Data is specific to 'Type' field
+	
+	EN Terminate
+		NULL Terminator, do no further parsing
+	
+	EN Name
+		Name[]				xb				Size = 'Length' field for this record, may be larger still (ref NameSize)
+		
+	EN Clusters
+		Cluster[n..m]		4b*x			Size = 'Length' field for this record, may be larger still (ref DataSize)
+											TODO 7bit encoded integer, maybe??
+		
+	EN NodeExtensions
+		NODE EXTENSIONS						Size determined by ExtFlags and MDT NDXT entries
+
+MDT ROOT Node
+	Name			Volume Name
+	Attributes		Ignored
+		
+Attributes (Bit flags)
+	Directory		0x01
+	ReadOnly		0x02
+	Hidden			0x04	? Might just be a permission extension thing
+	ExtendedNode	0x08
+	Reserved0		0x10
+	Reserved1		0x20
+	Reserved2		0x40
+	Deleted			0x80
+
+https://github.com/solangii/b-plus-tree/blob/master/BPlusTree.h
+MetaNode
+	isLeaf			1b
+	size			1b
+	capacity		1b
+	nodeOffset		1b
+	nodeCluster		4b
+	childIndex		4b*size
+	reserved0		For furture children?
+	
+
+Timestamp
+	Seconds since January 1st 2000, 00:00:01
+
+Journal SuperCluster
+	mountsSinceLastCheck	2b			Number of mounts the fs has had since its last consistency check
+	lastMountTimestamp		4b			Timestamp
+	mountState				1b			0x01		IsMounted
+	
+	TODO - The rest
+	
+THOUGHTS ON EXT2
+I like the idea of using block groups, I have concerns about implementing it as a bitmap at the start of the disk.
+	Namely expanding and shrinking volumes would be awkward, and it probably doesn't scale down to 64k very well.
+	Perhaps a tree structure is in order
+
+The BGD is relatively well put together but it could use more metadata to improve free block discovery.
+	The "number of free blocks" might not be a useful metric, perhaps "any free block" is better, single source
+	of truth and all. Plus you still have to search the bitmap for a free block, so add a "firstFree".
+
+inode direct and indirect blocks are interesting but could be improved on and made a bit more generic
+
+I don't like the superblock being RW, superblock should be RO. Also why is it offset by 1 sector.
+
+THOUGHTS ON NTFS
+I like the idea of the $MFT being an extensible table. I want CoFS to be modular, and this is a good way to implement
+	exactly that.
+
+I like $Boot, simplier code in the boot sector means we can use more of the sector for filesystem config.
+	Needing to allocate 8 bytes for the jump code is annoying because it feels platform specific but, Cobalt
+	will also just set the IP to $0000 because that just makes sense....
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

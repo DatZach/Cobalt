@@ -1,0 +1,43 @@
+namespace kernel;
+
+function main(args: string[]) -> i32 {
+	Video.SetCursor(0, 0);
+	Video.Print("Hello, World!");
+	
+	return 0;
+}
+
+class Video: static
+{
+	let cursorX = 0;
+	let cursorY = 0;
+
+	function SetCursor(x: i32, y: i32) {
+		cursorX = x;
+		cursorY = y;
+	}
+
+	function Print(format: string, params: ...const[]) {
+		const memory: &u8 = &0x7C00;
+		const width = 80, height = 25;
+		const stride = width * 2;
+		
+		for (let ch in format) {
+			const idx = cursorY * stride + cursorX;
+			memory[idx + 0] = ch;
+			memory[idx + 1] = 0x80;
+			
+			++cursorX;
+			if (cursorX >= width) {
+				++cursorY;
+				cursorX = 0;
+			}
+			if (cursorY >= height) {
+				Memory.ReverseCopy(memory + stride, memory, width * height * 2 - stride);
+				--cursorY;
+			}
+		}
+	}
+}
+
+
