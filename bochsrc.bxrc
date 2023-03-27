@@ -2,7 +2,7 @@
 plugin_ctrl: voodoo=false, unmapped=true, biosdev=true, speaker=true, extfpuirq=true, parallel=true, serial=true, busmouse=false, e1000=false, es1370=false, gameport=true, ne2k=false, sb16=false, usb_uhci=false, usb_ohci=false, usb_ehci=false, usb_xhci=false
 config_interface: win32config
 display_library: win32
-memory: host=32, guest=32
+memory: host=512, guest=512
 romimage: file="C:\Program Files\Bochs-2.7/BIOS-bochs-latest", address=0x00000000, options=none
 vgaromimage: file="C:\Program Files\Bochs-2.7/VGABIOS-lgpl-latest"
 boot: disk
@@ -10,7 +10,7 @@ floppy_bootsig_check: disabled=0
 # no floppya
 # no floppyb
 ata0: enabled=true, ioaddr1=0x1f0, ioaddr2=0x3f0, irq=14
-ata0-master: type=disk, path="c.img", mode=flat, cylinders=0, heads=16, spt=63, sect_size=512, model="Generic 1234", biosdetect=auto, translation=auto
+ata0-master: type=disk, path="C:\Projects\Cobalt\c.img", mode=flat, cylinders=0, heads=16, spt=63, sect_size=512, model="Generic 1234", biosdetect=auto, translation=auto
 ata0-slave: type=none
 ata1: enabled=true, ioaddr1=0x170, ioaddr2=0x370, irq=15
 ata1-master: type=none

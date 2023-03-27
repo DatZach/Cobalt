@@ -26,7 +26,8 @@
 org     0x7C00
 bits    16
 
-%define MdtBuffer 0x7E00
+%define MdtBuffer       0x7E00
+%define Stage2Address   0x0500
 
 jmp     Main
 
@@ -102,12 +103,15 @@ ReadClusters:
 	popad
 	ret
 
+;
+;   Entry Point
+;
 Main:
     ; Prepare stack
 	xor		ax, ax
 	mov		ds, ax
-	mov		sp, 0x7C00
-	
+	mov		sp, 0xFFE0
+    
 	; Save boot device
 	mov		byte [bootDrive], dl
 
@@ -142,24 +146,21 @@ Main:
     ; 3 - Read BOOT Clusters
     mov     eax, dword [ebx + 4]
     mov     ecx, dword [ebx + 8]
-    mov     ebx, 0x500
+    mov     ebx, Stage2Address
     call    ReadClusters
     jnc     .JumpStage2
     mov     al, 3
     call    Panic
 
-    ; 4 - Jump
+    ; 4 - FAR Jump
 .JumpStage2:
 	mov		dl, byte [bootDrive]
-	jmp		0x0000:0x0500
+	jmp		0x0000:Stage2Address
     cli
     hlt
 
 errorMsg                db "Error 0", 0
-bootDrive:				dd	0
-sectorData:				dd	0
-entrySector:			dw	0
-entryCluster:			dw	0
+bootDrive:				db	0
 
 DiskPacket:
 	.Size               db  0

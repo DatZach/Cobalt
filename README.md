@@ -1,5 +1,5 @@
 # Cobalt
-	Cobalt is a research/hobby computing environment. More than an Operating System, Cobalt aims to implement every
+Cobalt is a research/hobby computing environment. More than an Operating System, Cobalt aims to implement every
 element of a personal computer. Including hardware and software stacks. Inspiration from existing system is unavoidable,
 but where I see something interesting to try (or even better, simplify) Cobalt will experiment with. To clarify this
 means that CPU, Compilers, Kernels, Shells, and Programming Languages will all be home rolled to this environment.
@@ -9,7 +9,7 @@ non-Cobalt host can access via standard browser. The standards here are perhaps 
 unique to Cobalt (out of nessessity).
 
 # Cobalt OS
-	The goals here would be to implement an Operating System following the previously mentioned guidelines. An additional
+The goals here would be to implement an Operating System following the previously mentioned guidelines. An additional
 goal of supporting both Cobalt and x86-64 architectures in mind. The reasoning behind this is that the hardware layer will
 take a while to develop and I know most of the limitations of the Cobalt hardware and can design around it. It is likely
 that the first iteration x86 Cobalt OS will change significantly to support Cobalt architecture.
