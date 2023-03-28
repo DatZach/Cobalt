@@ -121,13 +121,13 @@ FindTreeNode:
 
     mov     eax, dword [ebx + RootDescriptor.RootCluster]
     mov     edi, TreeBuffer
-    mov     ecx, 1
+    mov     cx, 1
     call    ReadClusters
     pop     eax
 
 .SearchInternal:
     mov     ebx, TreeBuffer + 128
-    xor     ecx, ecx
+    xor     cx, cx
 .SearchInternal_Loop0:
     cmp     ebx, TreeBuffer + 4096 ; TODO BytesPerCluster
     jge     .SearchInternal_Loop0_Exit
@@ -136,13 +136,17 @@ FindTreeNode:
 
     cmp     dword [ebx], eax
     jle     .SearchInternal_Loop0_1
-    inc     ecx
+    inc     cx
 .SearchInternal_Loop0_1:
     add     ebx, 128
     jmp     .SearchInternal_Loop0
 .SearchInternal_Loop0_Exit:
-
-    cmp     dword [TreeBuffer + 128 + ecx * 128], eax
+    xor     ebx, ebx
+    mov     bx, cx
+    shl     bx, 7
+    add     bx, 128
+    add     ebx, TreeBuffer
+    cmp     dword [ebx], eax
     jne     .SearchInternal_SearchChildren
 
     shl     ecx, 7
@@ -176,10 +180,34 @@ FindTreeNode:
 ;       ?
 ;   Arguments
 ;       EBX     BTreeNode* node
-;       SI      string filename
-;       DX      NodeAttributes attributes
+;       ESI     string filename
+;       DL      NodeAttributes attributes
+;       Carry   SET if not found
 ;
 FindNodeEntry:
+    mov     eax, MDT_TYPE_ROOT
+    call    FindMdtEntry
+    xor     ax, ax
+    mov     al, byte [MdtBuffer + RootDescriptor.Degree]
+    shl     ax, 1
+    add     ebx, 128
+.FindNodeEntry_Loop0:
+    test     dl, byte [ebx + NodeEntry.Attributes]
+    jne     .FindNodeEntry_NotFound
+    mov     edi, ebx
+    add     edi, NodeEntry.Name
+    movzx   ecx, word [ebx + NodeEntry.NameSize]
+    push    esi
+    rep cmpsb   ; TODO Probably only using 16bit registers...
+    pop     esi
+    jne     .FindNodeEntry_NotFound
+    clc
+    ret
+.FindNodeEntry_NotFound:
+    add     ebx, 128
+    dec     ax
+    jnz     .FindNodeEntry_Loop0
+    stc
     ret
 
 ;
@@ -188,6 +216,9 @@ FindNodeEntry:
 ;       ?
 ;   Arguments
 ;       EAX     uint MDT Entry Magic to find
+;   Returns
+;       EBX     MdtEntry* pointer
+;       Carry   SET if error
 ;
 FindMdtEntry:
     clc
@@ -203,6 +234,18 @@ FindMdtEntry:
 .FindEntryError:
     stc
 .FoundEntry:
+    ret
+
+;
+;   GetBytesPerCluster
+;   Registers Clobbered
+;       None
+;   Returns
+;       EAX     uint Bytes per Cluster
+;
+GetBytesPerCluster:
+    movzx   eax, word [FscbBuffer + FSCB.BytesPerSector]
+    mul     word [FscbBuffer + FSCB.SectorsPerCluster]
     ret
 
 DiskPacket:

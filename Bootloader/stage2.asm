@@ -86,7 +86,7 @@ Main16:
 	call	FindTreeNode						; rootNode = FindTreeNode(0)
 	jc		Errors.KLoadError
 	mov		si, filenameOS
-	mov		dx, NODE_ATTRIBUTE_DIRECTORY
+	mov		dl, NODE_ATTRIBUTE_DIRECTORY
 	call	FindNodeEntry						; osEntry = FindNodeEntry(rootNode, Attributes.Directory, "os")
 	jc		Errors.KLoadError
 	mov		eax, dword [ebx + NodeEntry.Clusters]
