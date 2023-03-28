@@ -26,7 +26,7 @@
 org     0x7C00
 bits    16
 
-%define MdtBuffer       0x7E00
+%define MdtBuffer       0x8000
 %define Stage2Address   0x0500
 
 jmp     Main

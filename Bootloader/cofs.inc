@@ -6,10 +6,13 @@
 %ifndef __COFS_INC
 %define __COFS_INC
 
-%define MdtBuffer       0x7E00
+%define MdtBuffer       0x8000
 %define FscbBuffer      0x7C08
+%define TreeBuffer      0x10000
 
 %define NODE_ATTRIBUTE_DIRECTORY    2
+
+%define MDT_TYPE_ROOT   0x544F4F52
 
 struc FSCB
     .Magic:                 resd  1
@@ -20,6 +23,13 @@ struc FSCB
     .TotalClusters:         resd  1
     .MdtCluster:            resd  1
     .Checksum:              resd  1
+endstruc
+
+struc RootDescriptor
+    .Type:                  resd 1
+    .RootCluster:           resd 1
+    .LastNodeId:            resd 1
+    .Degree:                resb 1
 endstruc
 
 struc NodeEntry
@@ -97,14 +107,67 @@ ReadClusters:
 ;
 ;   FindTreeNode
 ;   Registers Clobbered
-;       ?
+;       ALL OF THEM
 ;   Arguments
 ;       EAX     Node ID
+;   Returns
+;       EBX     BTreeNode* node
+;       Carry   SET if error
 ;
 FindTreeNode:
-    pushad
+    push    eax
+    mov     eax, MDT_TYPE_ROOT
+    call    FindMdtEntry
 
-    popad
+    mov     eax, dword [ebx + RootDescriptor.RootCluster]
+    mov     edi, TreeBuffer
+    mov     ecx, 1
+    call    ReadClusters
+    pop     eax
+
+.SearchInternal:
+    mov     ebx, TreeBuffer + 128
+    xor     ecx, ecx
+.SearchInternal_Loop0:
+    cmp     ebx, TreeBuffer + 4096 ; TODO BytesPerCluster
+    jge     .SearchInternal_Loop0_Exit
+    cmp     dword [ebx], 0xFFFFFFFF
+    je      .SearchInternal_Loop0_Exit
+
+    cmp     dword [ebx], eax
+    jle     .SearchInternal_Loop0_1
+    inc     ecx
+.SearchInternal_Loop0_1:
+    add     ebx, 128
+    jmp     .SearchInternal_Loop0
+.SearchInternal_Loop0_Exit:
+
+    cmp     dword [TreeBuffer + 128 + ecx * 128], eax
+    jne     .SearchInternal_SearchChildren
+
+    shl     ecx, 7
+    mov     ebx, TreeBuffer + 128
+    add     ebx, ecx
+
+    clc
+    ret
+
+.SearchInternal_SearchChildren:
+    ; return node.IsLeaf ? default : SearchInternal(node.Children[i], key);
+    cmp     ecx, 0                      ; node.IsLeaf
+    je      .SearchInternal_NotFound
+
+    push    eax
+    mov     eax, dword [TreeBuffer + ecx * 4]
+    mov     edi, TreeBuffer
+    mov     ecx, 1
+    call    ReadClusters
+    pop     eax
+
+    jmp     .SearchInternal
+
+.SearchInternal_NotFound:
+    stc
     ret
 
 ;
@@ -120,8 +183,27 @@ FindNodeEntry:
     ret
 
 ;
-;   
+;   FindMdtEntry
+;   Registers Clobbered
+;       ?
+;   Arguments
+;       EAX     uint MDT Entry Magic to find
 ;
+FindMdtEntry:
+    clc
+    mov     ebx, MdtBuffer
+.FindEntry:
+    mov     edx, dword [ebx]
+    cmp     edx, eax
+    je      .FoundEntry
+    cmp     edx, 0
+    je      .FindEntryError
+    add     ebx, 32
+    jmp     .FindEntry
+.FindEntryError:
+    stc
+.FoundEntry:
+    ret
 
 DiskPacket:
 	.Size               db  0

@@ -5,14 +5,12 @@
 ;	Bootloader Memory Map:
 ;		0x00000000 - 0x000003FF - Real Mode Interrupt Vector Table
 ;		0x00000400 - 0x000004FF - BIOS Data Area
-;		0x00000500 - 0x000018FF - Stage 2 (5 KiB)
-;		0x00001900 - 0x00004A7F - FAT Buffer (12 KiB)
-;		0x00004A80 - 0x00007BFF - Directory Buffer (12 KiB)
+;		0x00000500 - 0x00007BFF - Stage 2 (29 KiB)
 ;		0x00007C00 - 0x00007FFF - Stage 1
-;		0x00008000 - 0x0000EFFF - Free (27 KiB)
+;		0x00008000 - 0x0000EFFF - MDT Buffer (27 KiB)
 ;		0x0000F000 - 0x0000FBFF - Memory map (127 entries)
 ;		0x0000FC00 - 0x0000FFFF - Stack
-;		0x00010000 - 0x0006FFFF - Relocation Buffer (383 KiB)
+;		0x00010000 - 0x0006FFFF - Tree Buffer (383 KiB)
 ;		0x00070000 - 0x00070800 - Boot module list
 ;		0x0007E200 - 0x00095000 - Paging Tables
 ;		0x00095000 - 0x0009FFFF - Free (32 KiB)
