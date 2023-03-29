@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using static DiskUtil.BTree<TEntry>;
 
 namespace DiskUtil
 {
@@ -30,6 +31,49 @@ namespace DiskUtil
                     break;
                 }
 
+                case Operation.CreateDirectory:
+                {
+                    var parts = config.DestinationPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+
+                    cobalt.Mount();
+                    var node = cobalt.FindTreeNode(0);
+                    foreach (var part in parts)
+                    {
+                        var childNode = cobalt.FindNodeEntry(node, part, Node.NodeAttributes.Directory);
+                        if (childNode == null)
+                            childNode = cobalt.CreateNodeEntry(node, part, Node.NodeAttributes.Directory);
+
+                        node = childNode;
+                    }
+
+                    cobalt.Dismount();
+                    break;
+                }
+
+                case Operation.WriteFile:
+                {
+                    var data = File.ReadAllBytes(config.SourcePath);
+                    var parts = config.DestinationPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+
+                    cobalt.Mount();
+                    var node = cobalt.FindTreeNode(0);
+                    for (var i = 0; node != null && i < parts.Length - 1; ++i)
+                    {
+                        var part = parts[i];
+                        node = cobalt.FindNodeEntry(node, part, Node.NodeAttributes.Directory);
+                    }
+
+                    if (node == null) throw new Exception("Directory does not exist");
+
+                    var fileNode = cobalt.CreateNodeEntry(node, parts[^1], Node.NodeAttributes.None); // TODO Attributes?
+                    if (fileNode == null) throw new Exception("Unable to create file node (out of space?)");
+
+                    cobalt.SetNodeContent(fileNode, data);
+
+                    cobalt.Dismount();
+                    break;
+                }
+
                 default:
                     throw new ArgumentOutOfRangeException("Operation");
             }
@@ -40,11 +84,11 @@ namespace DiskUtil
     {
         public string DiskPath { get; init; }
 
-        public string SourcePath { get; init; }
+        public string? SourcePath { get; init; }
 
         public Operation Operation { get; init; }
 
-        public string DestinationPath { get; init; }
+        public string? DestinationPath { get; init; }
 
         public int BytesPerSector { get; init; }
 
@@ -72,6 +116,8 @@ namespace DiskUtil
             {
                 DiskPath = args[0],
                 Operation = Enum.Parse<Operation>(args[1]),
+                DestinationPath = args.ElementAtOrDefault(2),
+                SourcePath = args.ElementAtOrDefault(3),
                 BytesPerSector = OptionalArgument("--bytes-per-sector", 512),
                 VolumeName = OptionalArgument<string>("--volume-name", "My Volume"),
                 SectorsPerCluster = OptionalArgument("--sectors-per-cluster", 8), // 4kb
@@ -93,13 +139,15 @@ namespace DiskUtil
         public static void PrintHelp()
         {
             Console.WriteLine("DiskUtil <DiskPath> <Operation> <SourceFilePath> <DestinationPath>");
-            Console.WriteLine("\tOperations = CopyBin, CopyFile");
+            //Console.WriteLine("\tOperations = CopyBin, CopyFile");
         }
     }
 
     internal enum Operation
     {
         None,
-        Format
+        Format,
+        CreateDirectory,
+        WriteFile
     }
 }

@@ -9,6 +9,10 @@ namespace DiskUtil
 {
     internal sealed class Cobalt
     {
+        private FileSystemConfigBlock? fscb;
+        private MasterDescriptorTable? mdt;
+        private BTree<Node>? tree;
+
         private readonly Disk disk;
 
         public Cobalt(Disk disk)
@@ -16,9 +20,138 @@ namespace DiskUtil
             this.disk = disk ?? throw new ArgumentNullException(nameof(disk));
         }
 
+        public Node? FindTreeNode(uint nodeId)
+        {
+            return tree?.Search(nodeId);
+        }
+
+        public Node? FindNodeEntry(Node node, string filename, Node.NodeAttributes attributes)
+        {
+            if (node == null) throw new ArgumentNullException(nameof(node));
+            if (tree == null) throw new InvalidOperationException();
+
+            if (filename == ".")
+                return node;
+            if (filename == "..")
+                return tree.Search(node.ParentNodeId);
+            
+            // TODO Support ExtensionNode
+            for (var i = 0; i < node.DataSize; ++i)
+            {
+                var childNodeId = node.Cluster[i];
+                var child = tree.Search(childNodeId);
+                if (child == null)
+                    continue;
+
+                if ((child.Attributes & attributes) == attributes
+                &&  string.Equals(child.Name, filename, StringComparison.InvariantCultureIgnoreCase))
+                    return child;
+            }
+
+            return null;
+        }
+
+        public Node? CreateNodeEntry(Node parent, string filename, Node.NodeAttributes attributes)
+        {
+            if (parent == null) throw new ArgumentNullException(nameof(parent));
+            if (tree == null) throw new InvalidOperationException();
+
+            if ((parent.Attributes & Node.NodeAttributes.Directory) != Node.NodeAttributes.Directory)
+                throw new InvalidOperationException("Cannot create a child node in file"); // But really we can
+
+            var node = tree.AllocateNode();
+            node.ParentNodeId = parent.ParentNodeId;
+            node.Attributes = attributes;
+            node.ExtFlags = 0; // TODO Support
+            node.Name = filename;
+
+            parent.Cluster[parent.DataSize++] = node.Key; // TODO Support ExtensionNode
+
+            return node;
+        }
+
+        public void SetNodeContent(Node node, byte[] data)
+        {
+            if (tree == null) throw new InvalidOperationException();
+
+            var bytesPerCluster = fscb.BytesPerSector * fscb.SectorsPerCluster;
+            var buffer = new byte[fscb.BytesPerSector];
+
+            // Existing clusters
+            int i = 0, j = 0;
+            for (; j < node.DataSize; ++i, j += bytesPerCluster)
+            {
+                var clusterIndex = node.Cluster[i]; // TODO Support halfClusters!
+                Array.Copy(data, j, buffer, 0, Math.Min(bytesPerCluster, data.Length - j)); // TODO Improve disk API
+                disk.Write(
+                    clusterIndex * fscb.SectorsPerCluster + 1,
+                    fscb.SectorsPerCluster,
+                    buffer
+                );
+            }
+            
+            // Node clusters
+            for (; j < data.LongLength; ++i, j += bytesPerCluster)
+            {
+                var clusterIndex = AllocateCluster(true, false); // TODO Support halfClusters!
+                if (clusterIndex == uint.MaxValue)
+                    throw new InvalidOperationException("Out of disk space!");
+
+                Array.Copy(data, j, buffer, 0, Math.Min(bytesPerCluster, data.Length - j)); // TODO Improve disk API
+                disk.Write(
+                    clusterIndex * fscb.SectorsPerCluster + 1,
+                    fscb.SectorsPerCluster,
+                    buffer
+                );
+
+                node.Cluster[i] = clusterIndex;
+            }
+
+            node.DataSize = data.LongLength;
+        }
+
+        private uint AllocateCluster(bool fullClusters, bool halfClusters)
+        {
+            var clustersPerBlock = 1 << fscb.LogClustersPerBlock;
+            var totalBlocks = fscb.TotalClusters / clustersPerBlock;
+            for (int i = 0; i < totalBlocks; ++i)
+            {
+                // TODO Cache
+                var bdtSector = (uint)(i * (clustersPerBlock * fscb.SectorsPerCluster) + 1);
+                var bdt = disk.Read<BlockDescriptorTable>(bdtSector);
+                var cluster = bdt.AllocateCluster(fullClusters, halfClusters);
+                if (cluster != uint.MaxValue)
+                {
+                    disk.Write(bdtSector, bdt);
+                    return cluster;
+                }
+            }
+
+            return uint.MaxValue;
+        }
+
         public void Mount()
         {
+            fscb = disk.Read<FileSystemConfigBlock>(0);
+            if (!fscb.IsValid)
+                throw new Exception("Invalid FSCB magic, version or checksum (Not a CoFS partition?)");
 
+            mdt = disk.Read<MasterDescriptorTable>(fscb.MdtCluster);
+
+            var rootDescriptor = mdt.EntryOrDefault<RootDescriptor>() ?? throw new Exception("Missing MDT ROOT");
+
+            // TODO It's a bad idea to deserialize the ENTIRE b-tree into memory
+            //      it'll get us off the ground for now while we still have small disks
+            //      we should keep at least a few clusters buffered, though
+            tree = new BTree<Node>(rootDescriptor.Degree);
+            tree.Deserialize(disk);
+
+            // TODO Update JRNL to indicate mount state, etc
+        }
+
+        public void Dismount()
+        {
+            // TODO Serialize everything to disk
         }
 
         public void Format(string volumeName, int sectorsPerCluster, int clustersPerBlock, byte[]? stage1, byte[]? stage2)
@@ -172,30 +305,17 @@ namespace DiskUtil
 
         public byte[]? Bootloader { get; set; }
 
-        public int SizeOnDiskBytes => 512; // TODO Don't hardcode
+        public bool IsValid => Magic == ExpectedMagic
+                            && Version >= ExpectedVersion
+                            && Checksum == CalculateChecksum(this);
 
-        public static uint CalculateChecksum(FileSystemConfigBlock fscb)
+        public int SizeOnDiskBytes => 512;
+
+        public FileSystemConfigBlock()
         {
-            if (fscb == null) throw new ArgumentNullException(nameof(fscb));
-
-            return (
-                 + (uint)fscb.Version
-                 + (uint)fscb.BytesPerSector
-                 + (uint)fscb.SectorsPerCluster
-                 + (uint)fscb.LogClustersPerBlock
-                 + (uint)fscb.TotalClusters
-                 + (uint)fscb.MdtCluster
-            ) ^ fscb.Magic;
+            // NOTE Empty ctor required for serialization
         }
-
-        public static int Bitlog2(int value)
-        {
-            int result = 0;
-            while ((value >>= 1) != 0)
-                ++result;
-            return result;
-        }
-
+        
         public void Serialize(BinaryWriter writer)
         {
             if (Bootloader != null)
@@ -214,7 +334,40 @@ namespace DiskUtil
 
         public void Deserialize(BinaryReader reader)
         {
-            throw new NotImplementedException();
+            Bootloader = new byte[SizeOnDiskBytes];
+            reader.Read(Bootloader, 0, SizeOnDiskBytes);
+
+            reader.BaseStream.Position = 8;
+            Magic = reader.ReadUInt32();
+            Version = reader.ReadByte();
+            BytesPerSector = reader.ReadUInt16();
+            SectorsPerCluster = reader.ReadByte();
+            LogClustersPerBlock = reader.ReadByte();
+            TotalClusters = reader.ReadUInt32();
+            MdtCluster = reader.ReadUInt32();
+            Checksum = reader.ReadUInt32();
+        }
+
+        public static uint CalculateChecksum(FileSystemConfigBlock fscb)
+        {
+            if (fscb == null) throw new ArgumentNullException(nameof(fscb));
+
+            return (
+                + (uint)fscb.Version
+                + (uint)fscb.BytesPerSector
+                + (uint)fscb.SectorsPerCluster
+                + (uint)fscb.LogClustersPerBlock
+                + (uint)fscb.TotalClusters
+                + (uint)fscb.MdtCluster
+            ) ^ fscb.Magic;
+        }
+
+        public static int Bitlog2(int value)
+        {
+            int result = 0;
+            while ((value >>= 1) != 0)
+                ++result;
+            return result;
         }
     }
 
@@ -337,14 +490,48 @@ namespace DiskUtil
 
     internal sealed class MasterDescriptorTable : IDiskSerializable
     {
+        private const int BytesPerEntry = 32;
+
         public List<MasterDescriptorTableEntry> Entries { get; }
-        
-        public int SizeOnDiskBytes { get; }
+
+        public int SizeOnDiskBytes => 4096; // TODO AAAAA
+
+        private readonly static Dictionary<uint, Type> types;
+        static MasterDescriptorTable()
+        {
+            types = new Dictionary<uint, Type>();
+            var asm = typeof(MasterDescriptorTable).Assembly;
+            foreach (var type in asm.GetTypes()
+                         .Where(x => x.IsClass && !x.IsAbstract && x.IsSubclassOf(typeof(MasterDescriptorTableEntry))))
+            {
+                var inst = (MasterDescriptorTableEntry)Activator.CreateInstance(type)!;
+                types.Add(inst.Type, type);
+            }
+        }
+
+        public MasterDescriptorTable()
+        {
+
+        }
 
         public MasterDescriptorTable(int clusterSize)
         {
             Entries = new List<MasterDescriptorTableEntry>();
-            SizeOnDiskBytes = clusterSize;
+            //SizeOnDiskBytes = clusterSize;
+        }
+
+        public T? EntryOrDefault<T>()
+            where T : MasterDescriptorTableEntry
+        {
+            // TODO Perhaps we should also cache these in a dictionary for O(1)?
+            //      how often is this going to be called?
+            foreach (var entry in Entries)
+            {
+                if (entry is T tableEntry)
+                    return tableEntry;
+            }
+
+            return default;
         }
 
         public void Serialize(BinaryWriter writer)
@@ -357,11 +544,31 @@ namespace DiskUtil
                 writer.Write(entry.Type);
                 entry.Serialize(writer);
             }
+
+            // TODO Support MDXT
         }
 
         public void Deserialize(BinaryReader reader)
         {
-            throw new NotImplementedException();
+            var bytesPerCluster = 4096; // TODO No
+
+            Entries.Clear();
+            for (int i = 0; i < bytesPerCluster / BytesPerEntry; ++i)
+            {
+                reader.BaseStream.Position = i * 32;
+                var key = reader.ReadUInt32();
+
+                // NOTE Not knowing an MDT entry is NOT an error, this is a modular filesystem after all
+                if (!types.TryGetValue(key, out var type))
+                    continue;
+
+                var entry = (MasterDescriptorTableEntry)Activator.CreateInstance(type)!;
+                entry.Deserialize(reader);
+
+                Entries.Add(entry);
+            }
+
+            // TODO Support MDXT
         }
     }
 
@@ -370,6 +577,8 @@ namespace DiskUtil
         public abstract uint Type { get; }
 
         public abstract void Serialize(BinaryWriter writer);
+
+        public abstract void Deserialize(BinaryReader reader);
     }
 
     internal sealed class MdtDescriptor : MasterDescriptorTableEntry
@@ -404,6 +613,18 @@ namespace DiskUtil
             writer.Write(MdtCluster);
             writer.Write(MirrorCluster);
         }
+
+        public override void Deserialize(BinaryReader reader)
+        {
+            PrimaryOrCopy = reader.ReadByte();
+            RootDegree = reader.ReadByte();
+            BytesPerSector = reader.ReadUInt16();
+            SectorsPerCluster = reader.ReadByte();
+            LogClustersPerBlock = reader.ReadByte();
+            TotalClusters = reader.ReadUInt32();
+            MdtCluster = reader.ReadUInt32();
+            MirrorCluster = reader.ReadUInt32();
+        }
     }
 
     internal sealed class JournalDescriptor : MasterDescriptorTableEntry
@@ -420,6 +641,14 @@ namespace DiskUtil
             writer.Write((byte)0);      // reserved
             writer.Write((ushort)0);    // reserved
             writer.Write(JournalCluster);
+        }
+
+        public override void Deserialize(BinaryReader reader)
+        {
+            Flags = (JournalFlags)reader.ReadByte();
+            reader.ReadByte();          // reserved
+            reader.ReadUInt16();        // reserved
+            JournalCluster = reader.ReadUInt32();
         }
 
         [Flags]
@@ -448,6 +677,13 @@ namespace DiskUtil
             writer.Write(LastNodeId);
             writer.Write(Degree);
         }
+
+        public override void Deserialize(BinaryReader reader)
+        {
+            RootCluster = reader.ReadUInt32();
+            LastNodeId = reader.ReadUInt32();
+            Degree = reader.ReadByte();
+        }
     }
 
     internal sealed class BootDescriptor : MasterDescriptorTableEntry
@@ -462,6 +698,12 @@ namespace DiskUtil
         {
             writer.Write(Cluster);
             writer.Write(Size);
+        }
+
+        public override void Deserialize(BinaryReader reader)
+        {
+            Cluster = reader.ReadUInt32();
+            Size = reader.ReadUInt32();
         }
     }
     
@@ -481,7 +723,7 @@ namespace DiskUtil
 
         public byte Reserved0 { get; set; }
 
-        public ulong DataSize { get; set; }
+        public long DataSize { get; set; }
 
         public int CreationTime { get; set; }
 

@@ -33,7 +33,7 @@ namespace DiskUtil
             return node;
         }
 
-        public TEntry Search(uint key)
+        public TEntry? Search(uint key)
         {
             return SearchInternal(Root, key);
         }
@@ -234,7 +234,7 @@ namespace DiskUtil
             return DeletePredecessor(node.Children.First());
         }
         
-        private TEntry SearchInternal(Node node, uint key)
+        private TEntry? SearchInternal(Node node, uint key)
         {
             int i = node.Entries.TakeWhile(entry => key.CompareTo(entry.Key) > 0).Count();
 
@@ -373,7 +373,7 @@ namespace DiskUtil
                 SerializeNode(disk, node.Children[i]);
         }
 
-        public void Deserialize(BinaryReader reader)
+        public void Deserialize(Disk disk)
         {
             
         }

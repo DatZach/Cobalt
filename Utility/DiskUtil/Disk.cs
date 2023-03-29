@@ -52,11 +52,11 @@ namespace DiskUtil
             Write(sector, count, buffer);
         }
 
-        public IDiskSerializable Read<T>(uint sector)
+        public T Read<T>(uint sector)
             where T : IDiskSerializable, new()
         {
             var value = new T();
-            var buffer = Read(sector, value.SizeOnDiskBytes / BytesPerSector);
+            var buffer = Read(sector, (value.SizeOnDiskBytes + (BytesPerSector - 1)) / BytesPerSector);
             using var ms = new MemoryStream(buffer);
             using var br = new BinaryReader(ms);
 

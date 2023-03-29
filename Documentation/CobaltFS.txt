@@ -69,6 +69,7 @@ MasterDescriptorTable (READONLY, except when unmounted and modifying parameters)
 	full scope of features enabled. Even if a driver doesn't have knowledge of a specific extension,
 	that extensions impact on the filesystem is concretely described, allowing anyone to continue read/write
 	operations safely.
+	NULL Terminated, type = 0
 	
 	type					4b			ASCII Tag
 	specific-to-type		28b			See MDT entries below for details
