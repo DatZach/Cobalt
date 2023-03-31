@@ -8,13 +8,14 @@ namespace DiskUtil
     internal sealed class BTree<TEntry>
         where TEntry : IBTreeEntry, new()
     {
-        public BTree(int degree)
+        public BTree(int degree, uint lastNodeId)
         {
             if (degree < 2)
                 throw new ArgumentException("BTree degree must be at least 2", "degree");
 
             Root = new Node(degree);
             Degree = degree;
+            LastNodeId = lastNodeId;
             Height = 1;
         }
 
@@ -318,25 +319,15 @@ namespace DiskUtil
 
         public void SerializeTree(Disk disk)
         {
-            //writer.Write('T');
-            //writer.Write('R');
-            //writer.Write('E');
-            //writer.Write('E');
-            //writer.Write(Root.Cluster);
-            //writer.Write(Degree);
-            //writer.Write(0);
-
             SerializeNode(disk, Root);
         }
 
         private void SerializeNode(Disk disk, Node? node)
         {
-            if (node == null)
+            if (node == null) // TODO Just implement in Node IDiskSerializable
                 return;
-
-            var sectorsPerCluster = 8; // HACK
-            var sector = (uint)(node.Cluster * sectorsPerCluster + 1);
-            var buffer = new byte[sectorsPerCluster * disk.BytesPerSector];
+            
+            var buffer = new byte[disk.SectorsPerCluster * disk.BytesPerSector];
             using var stream = new MemoryStream(buffer);
             using var writer = new BinaryWriter(stream);
 
@@ -367,30 +358,32 @@ namespace DiskUtil
             }
 
             writer.Flush();
-            disk.Write(sector, sectorsPerCluster, buffer);
+            disk.WriteCluster(node.Cluster, buffer);
 
             for (int i = 0; i < node.Children.Count; ++i)
                 SerializeNode(disk, node.Children[i]);
         }
 
-        public void Deserialize(Disk disk)
+        public void Deserialize(Disk disk, long cluster)
         {
-            
+            Root = DeserializeNode(disk, cluster, Degree); // TODO Just implement in Node IDiskSerializable
         }
 
-        private static Node DeserializeNode(uint clusterIndex, int degree, BinaryReader reader)
+        private static Node DeserializeNode(Disk disk, long cluster, int degree)
         {
-            var node = new Node(degree);
+            var node = new Node(degree) { Cluster = (uint)cluster };
 
-            reader.BaseStream.Position = clusterIndex * 4096;
+            var buffer = disk.ReadCluster(cluster);
+            using var ms = new MemoryStream(buffer);
+            using var br = new BinaryReader(ms);
             
-            reader.BaseStream.Position += 128 - 4;
+            br.BaseStream.Position = 128;
 
             for (int i = 0; i < degree*2 - 1; ++i)
             {
                 var value = new TEntry();
-                value.Deserialize(reader);
-                if (value.Key == 0xFFFFFFFF)
+                value.Deserialize(br);
+                if (value.Key == uint.MaxValue)
                     break;
 
                 node.Entries.Add(value);
@@ -398,12 +391,12 @@ namespace DiskUtil
             
             for (int i = 0; i < degree*2; ++i)
             {
-                reader.BaseStream.Position = clusterIndex * 4096 + 4 + i * 4;
-                var childCluster = reader.ReadUInt32();
-                if (childCluster == 0xFFFFFFFF)
+                br.BaseStream.Position = i * 4;
+                var childCluster = br.ReadUInt32();
+                if (childCluster == uint.MaxValue)
                     break;
 
-                var child = DeserializeNode(childCluster, degree, reader);
+                var child = DeserializeNode(disk, childCluster, degree);
                 node.Children.Add(child);
             }
 

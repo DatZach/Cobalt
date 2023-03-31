@@ -9,35 +9,76 @@ namespace DiskUtil
 
         public int BytesPerSector { get; init; }
 
+        public int SectorsPerCluster { get; set; }
+
         private FileStream Stream { get; init; }
+
+        private long OffsetSector { get; init; }
 
         private Disk()
         {
             // NOTE Private ctor to enforce factory pattern
         }
 
-        public void Write(uint sector, int count, byte[] data)
+        public void WriteCluster(long cluster, byte[] data)
+        {
+            if (SectorsPerCluster == 0) throw new InvalidOperationException("SectorsPerCluster == 0");
+
+            var sector = cluster * SectorsPerCluster + 1;
+            WriteSectors(sector, SectorsPerCluster, data);
+        }
+
+        public byte[] ReadCluster(long cluster)
+        {
+            if (SectorsPerCluster == 0) throw new InvalidOperationException("SectorsPerCluster == 0");
+
+            var sector = cluster * SectorsPerCluster + 1;
+            return ReadSectors(sector, SectorsPerCluster);
+        }
+
+        public void WriteCluster(long cluster, IDiskSerializable data)
+        {
+            var sector = cluster * SectorsPerCluster + 1;
+            WriteSectors(sector, data); // TODO Not technically correct because it might under/overflow a cluster
+        }
+
+        public T ReadCluster<T>(long cluster)
+            where T : IDiskSerializable, new()
+        {
+            var value = new T();
+            var sector = cluster * SectorsPerCluster + 1;
+            var buffer = ReadSectors(sector, SectorsPerCluster);
+            using var ms = new MemoryStream(buffer);
+            using var br = new BinaryReader(ms);
+
+            value.Deserialize(br);
+
+            return value;
+        }
+
+        public void WriteSectors(long sector, int count, byte[] data)
         {
             if (data == null) throw new ArgumentNullException(nameof(data));
-            if (data.Length < BytesPerSector) throw new InvalidDataException("data must be sector size");
+            if (count * BytesPerSector != data.Length) throw new ArgumentException("data must be sector size * count");
+            if (sector + count >= OffsetSector + TotalSectors) throw new ArgumentException("Would overwrite partition bounds");
 
-            Stream.Position = sector * BytesPerSector;
+            Stream.Position = (OffsetSector + sector) * BytesPerSector;
             Stream.Write(data, 0, count * BytesPerSector);
         }
 
-        public byte[] Read(uint sector, int count)
+        public byte[] ReadSectors(long sector, int count)
         {
             var size = count * BytesPerSector;
             var buffer = new byte[size];
 
-            Stream.Position = sector * BytesPerSector;
+            Stream.Position = (OffsetSector + sector) * BytesPerSector;
             if (Stream.Read(buffer, 0, size) != size)
                 throw new InvalidDataException();
 
             return buffer;
         }
 
-        public void Write(uint sector, IDiskSerializable data)
+        public void WriteSectors(long sector, IDiskSerializable data)
         {
             if (data == null) throw new ArgumentNullException(nameof(data));
 
@@ -49,14 +90,14 @@ namespace DiskUtil
             data.Serialize(bw);
             bw.Flush();
 
-            Write(sector, count, buffer);
+            WriteSectors(sector, count, buffer);
         }
 
-        public T Read<T>(uint sector)
+        public T ReadSectors<T>(long sector)
             where T : IDiskSerializable, new()
         {
             var value = new T();
-            var buffer = Read(sector, (value.SizeOnDiskBytes + (BytesPerSector - 1)) / BytesPerSector);
+            var buffer = ReadSectors(sector, (value.SizeOnDiskBytes + (BytesPerSector - 1)) / BytesPerSector);
             using var ms = new MemoryStream(buffer);
             using var br = new BinaryReader(ms);
 

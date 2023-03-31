@@ -3,15 +3,16 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace DiskUtil
 {
     internal sealed class Cobalt
     {
         private FileSystemConfigBlock? fscb;
-        private MasterDescriptorTable? mdt;
-        private BTree<Node>? tree;
+        
+        public MasterDescriptorTable? Mdt { get; private set; } // Hmm
+
+        private BTree<Node>? tree; // TODO Could probably expose API below in Node instead
 
         private readonly Disk disk;
 
@@ -60,7 +61,7 @@ namespace DiskUtil
                 throw new InvalidOperationException("Cannot create a child node in file"); // But really we can
 
             var node = tree.AllocateNode();
-            node.ParentNodeId = parent.ParentNodeId;
+            node.ParentNodeId = parent.Key;
             node.Attributes = attributes;
             node.ExtFlags = 0; // TODO Support
             node.Name = filename;
@@ -75,7 +76,7 @@ namespace DiskUtil
             if (tree == null) throw new InvalidOperationException();
 
             var bytesPerCluster = fscb.BytesPerSector * fscb.SectorsPerCluster;
-            var buffer = new byte[fscb.BytesPerSector];
+            var buffer = new byte[bytesPerCluster];
 
             // Existing clusters
             int i = 0, j = 0;
@@ -83,7 +84,7 @@ namespace DiskUtil
             {
                 var clusterIndex = node.Cluster[i]; // TODO Support halfClusters!
                 Array.Copy(data, j, buffer, 0, Math.Min(bytesPerCluster, data.Length - j)); // TODO Improve disk API
-                disk.Write(
+                disk.WriteSectors(
                     clusterIndex * fscb.SectorsPerCluster + 1,
                     fscb.SectorsPerCluster,
                     buffer
@@ -98,7 +99,7 @@ namespace DiskUtil
                     throw new InvalidOperationException("Out of disk space!");
 
                 Array.Copy(data, j, buffer, 0, Math.Min(bytesPerCluster, data.Length - j)); // TODO Improve disk API
-                disk.Write(
+                disk.WriteSectors(
                     clusterIndex * fscb.SectorsPerCluster + 1,
                     fscb.SectorsPerCluster,
                     buffer
@@ -118,11 +119,11 @@ namespace DiskUtil
             {
                 // TODO Cache
                 var bdtSector = (uint)(i * (clustersPerBlock * fscb.SectorsPerCluster) + 1);
-                var bdt = disk.Read<BlockDescriptorTable>(bdtSector);
+                var bdt = disk.ReadSectors<BlockDescriptorTable>(bdtSector);
                 var cluster = bdt.AllocateCluster(fullClusters, halfClusters);
                 if (cluster != uint.MaxValue)
                 {
-                    disk.Write(bdtSector, bdt);
+                    disk.WriteSectors(bdtSector, bdt);
                     return cluster;
                 }
             }
@@ -132,45 +133,56 @@ namespace DiskUtil
 
         public void Mount()
         {
-            fscb = disk.Read<FileSystemConfigBlock>(0);
+            fscb = disk.ReadSectors<FileSystemConfigBlock>(0);
             if (!fscb.IsValid)
                 throw new Exception("Invalid FSCB magic, version or checksum (Not a CoFS partition?)");
 
-            mdt = disk.Read<MasterDescriptorTable>(fscb.MdtCluster);
+            disk.SectorsPerCluster = fscb.SectorsPerCluster;
+            Mdt = disk.ReadCluster<MasterDescriptorTable>(fscb.MdtCluster);
 
-            var rootDescriptor = mdt.EntryOrDefault<RootDescriptor>() ?? throw new Exception("Missing MDT ROOT");
+            var rootDescriptor = Mdt.EntryOrDefault<RootDescriptor>() ?? throw new Exception("Missing MDT ROOT");
 
             // TODO It's a bad idea to deserialize the ENTIRE b-tree into memory
             //      it'll get us off the ground for now while we still have small disks
             //      we should keep at least a few clusters buffered, though
-            tree = new BTree<Node>(rootDescriptor.Degree);
-            tree.Deserialize(disk);
+            tree = new BTree<Node>(rootDescriptor.Degree, rootDescriptor.LastNodeId);
+            tree.Deserialize(disk, rootDescriptor.RootCluster);
 
             // TODO Update JRNL to indicate mount state, etc
         }
-
+        
         public void Dismount()
         {
-            // TODO Serialize everything to disk
+            if (fscb == null || Mdt == null || tree == null) throw new InvalidOperationException();
+
+            tree.SerializeTree(disk);
+
+            var rootDescriptor = Mdt.EntryOrDefault<RootDescriptor>() ?? throw new Exception("Missing MDT ROOT");
+            rootDescriptor.LastNodeId = tree.LastNodeId;
+            rootDescriptor.RootCluster = tree.Root.Cluster;
+            disk.WriteCluster(fscb.MdtCluster, Mdt);
+
+            // TODO Update JRNL to indicate mount state, etc
         }
 
         public void Format(string volumeName, int sectorsPerCluster, int clustersPerBlock, byte[]? stage1, byte[]? stage2)
         {
             // TODO -1 means auto-figure values
-
             var clusterSizeBytes = sectorsPerCluster * disk.BytesPerSector;
             var totalClusters = (uint)((disk.TotalSectors - 1) / sectorsPerCluster);
             var totalBlocks = totalClusters / clustersPerBlock;
 
             var stage2Clusters = stage2 is { Length: > 0 } ? stage2.Length / clusterSizeBytes + 1 : 0;
             var stage2Cluster = uint.MaxValue;
+
+            disk.SectorsPerCluster = sectorsPerCluster;
             
             // Block Descriptor Tables
             uint mdtCluster = 0, rootCluster = 0, journalCluster = 0, mdtMirrorCluster = 0;
             for (var i = totalBlocks - 1; i >= 0; --i)
             {
                 var bdt = new BlockDescriptorTable((int)i, clustersPerBlock, clusterSizeBytes);
-                var bdtSector = (uint)(i * (clustersPerBlock * sectorsPerCluster) + 1);
+                var bdtCluster = i * clustersPerBlock;
                 if (i == 0)
                 {
                     mdtCluster = bdt.AllocateCluster(true, false);
@@ -190,7 +202,7 @@ namespace DiskUtil
                 else if (i == totalBlocks - 1)
                     mdtMirrorCluster = bdt.AllocateCluster(true, false);
 
-                disk.Write(bdtSector, bdt);
+                disk.WriteCluster(bdtCluster, bdt);
             }
             
             // FSCB
@@ -207,7 +219,7 @@ namespace DiskUtil
             };
             fscb.Checksum = FileSystemConfigBlock.CalculateChecksum(fscb);
 
-            disk.Write(0, fscb);
+            disk.WriteSectors(0, fscb);
 
             // Root Directory
             var degree = clusterSizeBytes / 128;
@@ -215,7 +227,7 @@ namespace DiskUtil
             degree = overflow <= 0 ? degree : degree - overflow / 128;
             degree /= 2; // Don't forget :)
             
-            var tree = new BTree<Node>(degree);
+            var tree = new BTree<Node>(degree, 0);
             var root = tree.AllocateNode();
             root.Name = volumeName;
             root.Attributes = Node.NodeAttributes.Directory;
@@ -257,9 +269,9 @@ namespace DiskUtil
                 Size = (uint)stage2Clusters
             });
 
-            disk.Write((uint)(mdtCluster * sectorsPerCluster + 1), mdt);
+            disk.WriteCluster(mdtCluster, mdt);
             mdtDescriptor.PrimaryOrCopy = 1;
-            disk.Write((uint)(mdtMirrorCluster * sectorsPerCluster + 1), mdt);
+            disk.WriteCluster(mdtMirrorCluster, mdt);
 
             // Journal
             var journalSuper = new JournalSuper
@@ -269,14 +281,19 @@ namespace DiskUtil
                 MountState = 0
             };
 
-            disk.Write((uint)(journalCluster * sectorsPerCluster + 1), journalSuper);
+            disk.WriteCluster(journalCluster, journalSuper);
 
             // Boot
             if (stage2 != null)
             {
+                // TODO This API could definitely be improved
                 var stage2Buffer = new byte[stage2Clusters * sectorsPerCluster * disk.BytesPerSector];
                 Array.Copy(stage2, stage2Buffer, stage2.Length);
-                disk.Write((uint)(stage2Cluster * sectorsPerCluster + 1), stage2Clusters * sectorsPerCluster, stage2Buffer);
+                disk.WriteSectors(
+                    (uint)(stage2Cluster * sectorsPerCluster + 1),
+                    stage2Clusters * sectorsPerCluster,
+                    stage2Buffer
+                );
             }
         }
     }
@@ -392,6 +409,8 @@ namespace DiskUtil
         public BlockDescriptorTable()
         {
             // NOTE Required for interface
+            var clustersPerBlock = 1024; // TODO HACK DONT HARDCODE!!
+            SizeOnDiskBytes = (clustersPerBlock + clustersPerBlock / 2) / 8 + 512; // TODO HACK BAD NO NO HACK
         }
 
         public BlockDescriptorTable(int blockIndex, int clustersPerBlock, int clusterSize)
@@ -467,7 +486,7 @@ namespace DiskUtil
 
         public void Deserialize(BinaryReader reader)
         {
-            var clustersPerBlock = 0;
+            var clustersPerBlock = 1024; // TODO HACK DONT HARDCODE!!
             var bitmapSize = (clustersPerBlock + clustersPerBlock / 2) / 8;
             SizeOnDiskBytes = (clustersPerBlock + clustersPerBlock / 2) / 8 + 512;
 
@@ -492,7 +511,7 @@ namespace DiskUtil
     {
         private const int BytesPerEntry = 32;
 
-        public List<MasterDescriptorTableEntry> Entries { get; }
+        public List<MasterDescriptorTableEntry> Entries { get; private set; }
 
         public int SizeOnDiskBytes => 4096; // TODO AAAAA
 
@@ -511,7 +530,7 @@ namespace DiskUtil
 
         public MasterDescriptorTable()
         {
-
+            // NOTE Empty ctor required for factory pattern
         }
 
         public MasterDescriptorTable(int clusterSize)
@@ -552,7 +571,7 @@ namespace DiskUtil
         {
             var bytesPerCluster = 4096; // TODO No
 
-            Entries.Clear();
+            var entries = new List<MasterDescriptorTableEntry>();
             for (int i = 0; i < bytesPerCluster / BytesPerEntry; ++i)
             {
                 reader.BaseStream.Position = i * 32;
@@ -565,8 +584,10 @@ namespace DiskUtil
                 var entry = (MasterDescriptorTableEntry)Activator.CreateInstance(type)!;
                 entry.Deserialize(reader);
 
-                Entries.Add(entry);
+                entries.Add(entry);
             }
+
+            Entries = entries;
 
             // TODO Support MDXT
         }
@@ -790,7 +811,7 @@ namespace DiskUtil
             ExtFlags = reader.ReadByte();
             var NameSize = reader.ReadByte();
             Reserved0 = reader.ReadByte();
-            DataSize = reader.ReadUInt64();
+            DataSize = reader.ReadInt64();
             CreationTime = reader.ReadInt32();
             LastAccessTime = reader.ReadInt32();
             LastModificationTime = reader.ReadInt32();
