@@ -6,9 +6,10 @@
 %ifndef __COFS_INC
 %define __COFS_INC
 
-%define MdtBuffer       0x8000
-%define FscbBuffer      0x7C08
-%define TreeBuffer      0x10000
+%define MdtBuffer           0x00008000
+%define FscbBuffer          0x00007C08
+%define ADDR_SEGOFF_TREE    0x10000000      ; 64kb in SEG:OFF notation
+%define ADDR_TREE           0x00010000      ; 64kb in canonical notation
 
 %define NODE_ATTRIBUTE_DIRECTORY    2
 
@@ -77,6 +78,15 @@ endstruc
 ReadClusters:
 	pushad
 
+    cmp     eax, dword [LastCluster]
+    jne     .Read
+    cmp     edi, dword [LastClusterAddress]
+    jne     .Read
+
+    popad
+    jmp     .Done
+
+.Read:
     mul     byte [FscbBuffer + FSCB.SectorsPerCluster]
     inc     ax
 
@@ -98,6 +108,10 @@ ReadClusters:
 	
 	popad
 
+    mov     dword [LastCluster], eax
+    mov     dword [LastClusterAddress], edi
+
+.Done:
     movzx   eax, byte [FscbBuffer + FSCB.SectorsPerCluster]
     mul     word [FscbBuffer + FSCB.BytesPerSector]
     add     edi, eax
@@ -114,27 +128,34 @@ ReadClusters:
 ;       EBX     BTreeNode* node
 ;       Carry   SET if error
 ;
-FindTreeNode:
+FindTreeNode: ; 0xa23
     push    eax
     mov     eax, MDT_TYPE_ROOT
     call    FindMdtEntry
 
     mov     eax, dword [ebx + RootDescriptor.RootCluster]
-    mov     edi, TreeBuffer
+    mov     edi, ADDR_SEGOFF_TREE
     mov     cx, 1
     call    ReadClusters
     pop     eax
 
+    ; 0x0a40
+
 .SearchInternal:
-    mov     ebx, TreeBuffer + 128
+    mov     ebx, ADDR_TREE + 128
     xor     cx, cx
 .SearchInternal_Loop0:
-    cmp     ebx, TreeBuffer + 4096 ; TODO BytesPerCluster
+    push    eax
+    call    GetBytesPerCluster
+    add     eax, ADDR_TREE
+    mov     edx, eax
+    pop     eax
+    cmp     ebx, edx
     jge     .SearchInternal_Loop0_Exit
     cmp     dword [ebx], 0xFFFFFFFF
     je      .SearchInternal_Loop0_Exit
 
-    cmp     dword [ebx], eax
+    cmp     eax, dword [ebx]
     jle     .SearchInternal_Loop0_1
     inc     cx
 .SearchInternal_Loop0_1:
@@ -145,13 +166,9 @@ FindTreeNode:
     mov     bx, cx
     shl     bx, 7
     add     bx, 128
-    add     ebx, TreeBuffer
+    add     ebx, ADDR_TREE
     cmp     dword [ebx], eax
     jne     .SearchInternal_SearchChildren
-
-    shl     ecx, 7
-    mov     ebx, TreeBuffer + 128
-    add     ebx, ecx
 
     clc
     ret
@@ -162,8 +179,8 @@ FindTreeNode:
     je      .SearchInternal_NotFound
 
     push    eax
-    mov     eax, dword [TreeBuffer + ecx * 4]
-    mov     edi, TreeBuffer
+    mov     eax, dword [ADDR_TREE + ecx * 4]
+    mov     edi, ADDR_SEGOFF_TREE
     mov     ecx, 1
     call    ReadClusters
     pop     eax
@@ -183,32 +200,48 @@ FindTreeNode:
 ;       ESI     string filename
 ;       DL      NodeAttributes attributes
 ;       Carry   SET if not found
+;   Returns
+;       EBX     NodeEntry* entry
+;       Carry   SET If not found
 ;
 FindNodeEntry:
-    mov     eax, MDT_TYPE_ROOT
-    call    FindMdtEntry
-    xor     ax, ax
-    mov     al, byte [MdtBuffer + RootDescriptor.Degree]
-    shl     ax, 1
-    add     ebx, 128
+    mov     ecx, dword [ebx + NodeEntry.DataSize]    ; NOTE qword but don't support more than 16 entries in root for now
+    xor     edx, edx
+
 .FindNodeEntry_Loop0:
+    mov     eax, dword [ebx + NodeEntry.Clusters + edx * 4]
+    pushad
+    call    FindTreeNode
+    jc      .FindNodeEntry_NotFound_0
+    mov     dword [.tmp], ebx                       ; For shame :(
+    popad
+    mov     ebx, dword [.tmp]
     test     dl, byte [ebx + NodeEntry.Attributes]
     jne     .FindNodeEntry_NotFound
     mov     edi, ebx
     add     edi, NodeEntry.Name
-    movzx   ecx, word [ebx + NodeEntry.NameSize]
+    push    ecx
     push    esi
-    rep cmpsb   ; TODO Probably only using 16bit registers...
+    movzx   ecx, word [ebx + NodeEntry.NameSize]
+    db 0x67 ; HACK Address Size override
+    rep cmpsb
     pop     esi
+    pop     ecx
     jne     .FindNodeEntry_NotFound
+
     clc
     ret
+
+.FindNodeEntry_NotFound_0:
+    popad
 .FindNodeEntry_NotFound:
-    add     ebx, 128
-    dec     ax
+    inc     edx
+    dec     ecx
     jnz     .FindNodeEntry_Loop0
+
     stc
     ret
+.tmp    dd  0
 
 ;
 ;   FindMdtEntry
@@ -254,5 +287,8 @@ DiskPacket:
     .Blocks             dw  0
     .Buffer             dd  0
     .Sector             dq  0
+
+LastCluster:            dd  0
+LastClusterAddress:     dd  0
 
 %endif

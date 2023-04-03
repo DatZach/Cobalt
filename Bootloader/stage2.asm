@@ -27,9 +27,8 @@ bits    16
 
 jmp     Main16
 
-%define ADDRESS_KERNEL				0x00100000
-%define ADDRESS_BUFFER				0x10000000		; This is in seg:off format (0x10000)
-%define ADDRESS_BUFFER_LINEAR		0x00010000		; This is in 64bit canonical format
+%define ADDR_KERNEL					0x00100000
+%define ADDR_SEGOFF_KERNEL			0xFFFF0010
 %define ADDRESS_MEMORY_MAP			0x0000F000
 %define MEMORY_MAP_BUFFER_LENGTH	0x00000BFF
 %define MEMORY_MIN_SIZE				0x00003C00
@@ -85,26 +84,23 @@ Main16:
 	xor		eax, eax
 	call	FindTreeNode						; rootNode = FindTreeNode(0)
 	jc		Errors.KLoadError
-	mov		si, filenameOS
+	mov		esi, filenameOS
 	mov		dl, NODE_ATTRIBUTE_DIRECTORY
 	call	FindNodeEntry						; osEntry = FindNodeEntry(rootNode, Attributes.Directory, "os")
 	jc		Errors.KLoadError
-	mov		eax, dword [ebx + NodeEntry.Clusters]
-	call	FindTreeNode						; osNode = FindTreeNode(osEntry->clusters[0])
-	jc		Errors.KLoadError
-	mov		si, filenameKernel
+	mov		esi, filenameKernel
 	xor		dx, dx
 	call	FindNodeEntry						; kernelEntry = FindNodeEntry(osNode, Attributes.None, "kernel64.exe")
 	jc		Errors.KLoadError
 	xor		cx, cx
-	mov		edi, ADDRESS_KERNEL
+	mov		edi, ADDR_SEGOFF_KERNEL
 .Main16_LoadCluster:
 	mov		eax, dword [ebx + NodeEntry.Clusters + ecx * 4]
 	call	ReadClusters
 	inc		cx
 	cmp		cx, 14
 	jl		.Main16_LoadCluster
-	sub		ebx, ADDRESS_KERNEL
+	sub		ebx, ADDR_SEGOFF_KERNEL
 	cmp		ebx, dword [ebx + NodeEntry.DataSize + 4]
 	jl		Errors.KLoadError
 
