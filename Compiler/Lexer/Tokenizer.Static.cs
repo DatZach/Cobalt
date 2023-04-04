@@ -12,9 +12,8 @@ namespace Compiler.Lexer
         {
             Operators = new OperatorDictionary
             {
-                { "=>", TokenType.FatArrow },
-
                 { ";", TokenType.Semicolon },
+                { ",", TokenType.Comma },
                 { "=", TokenType.Assign },
                 { ":=", TokenType.Assign },
 
@@ -24,11 +23,15 @@ namespace Compiler.Lexer
                 { "}", TokenType.RightBrace },
                 
                 { "+", TokenType.Add },
+
+                { "=>", TokenType.FatArrow },
             };
             
             Keywords = new Dictionary<string, TokenType>
             {
+                { "import", TokenType.Extern },
                 { "const", TokenType.Const },
+                { "fn", TokenType.Function }
             };
         }
 

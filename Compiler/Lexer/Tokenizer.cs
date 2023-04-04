@@ -33,7 +33,35 @@ namespace Compiler.Lexer
                 var startLine = currentLine;
                 var startIndex = index;
                 var ch = PeekChar();
-                var chNext = PeekChar(1);
+
+                // String
+                if (ch == '"')
+                {
+                    bool isEscape = false;
+                    int i = index;
+
+                    TakeChar();
+                    while (index < length)
+                    {
+                        ch = TakeChar();
+                        if (ch == '"' && !isEscape)
+                            break;
+                        
+                        isEscape = !isEscape && ch == '\\';
+                    }
+
+                    if (index >= length)
+                        throw new Exception("Unterminated string");
+
+                    result.Add(new Token
+                    {
+                        Type = TokenType.String,
+                        Value = source.Substring(i + 1, index - i - 2),
+                        Line = startLine,
+                        Column = startIndex - currentLineStartIndex + 1
+                    });
+                    continue;
+                }
 
                 // Keyword/Identifier
                 if (char.IsLetter(ch) || ch == '_')

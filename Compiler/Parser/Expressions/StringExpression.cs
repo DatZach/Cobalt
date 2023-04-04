@@ -3,14 +3,14 @@ using Compiler.Parser.Visitors;
 
 namespace Compiler.Parser.Expressions
 {
-    internal sealed class ScriptExpression : Expression
+    internal sealed class StringExpression : Expression
     {
-        public IReadOnlyList<Expression> Expressions { get; }
+        public string Value => Token.Value!;
 
-        public ScriptExpression(Token token, IReadOnlyList<Expression> expressions)
+        public StringExpression(Token token)
             : base(token)
         {
-            Expressions = expressions;
+
         }
 
         public override T Accept<T>(IExpressionVisitor<T> visitor)

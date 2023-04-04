@@ -5,15 +5,20 @@ namespace Compiler.Parser.Expressions
 {
     internal sealed class CallExpression : Expression
     {
-        public CallExpression(Token token)
+        public Expression FunctionExpression { get; }
+
+        public IReadOnlyList<Expression> Arguments { get; }
+
+        public CallExpression(Token token, Expression functionExpression, IReadOnlyList<Expression> arguments)
             : base(token)
         {
-
+            FunctionExpression = functionExpression;
+            Arguments = arguments;
         }
 
         public override T Accept<T>(IExpressionVisitor<T> visitor)
         {
-            throw new NotImplementedException();
+            return visitor.Visit(this);
         }
     }
 }

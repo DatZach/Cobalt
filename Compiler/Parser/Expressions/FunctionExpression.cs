@@ -1,24 +1,31 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Compiler.Lexer;
+﻿using Compiler.Lexer;
 using Compiler.Parser.Visitors;
 
 namespace Compiler.Parser.Expressions
 {
     internal sealed class FunctionExpression : Expression
     {
-        public FunctionExpression(Token token)
+        public string Name => $"fn_{Token.Line}_{Token.Column}";
+
+        public IReadOnlyList<Parameter> Parameters { get; }
+
+        public Expression? Body { get; }
+
+        public FunctionExpression(Token token, IReadOnlyList<Parameter> parameters, Expression? body)
             : base(token)
         {
-
+            Parameters = parameters;
+            Body = body;
         }
 
         public override T Accept<T>(IExpressionVisitor<T> visitor)
         {
-            throw new NotImplementedException();
+            return visitor.Visit(this);
+        }
+
+        public sealed record Parameter
+        {
+
         }
     }
 }

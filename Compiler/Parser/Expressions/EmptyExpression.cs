@@ -13,7 +13,7 @@ namespace Compiler.Parser.Expressions
 
         public override T Accept<T>(IExpressionVisitor<T> visitor)
         {
-            throw new NotImplementedException();
+            return visitor.Visit(this);
         }
     }
 }

@@ -5,15 +5,17 @@ namespace Compiler.Parser.Expressions
 {
     internal sealed class NumberExpression : Expression
     {
-        public NumberExpression(Token token)
+        public long LongValue { get; }
+
+        public NumberExpression(Token token, long longValue)
             : base(token)
         {
-
+            LongValue = longValue;
         }
 
         public override T Accept<T>(IExpressionVisitor<T> visitor)
         {
-            throw new NotImplementedException();
+            return visitor.Visit(this);
         }
     }
 }

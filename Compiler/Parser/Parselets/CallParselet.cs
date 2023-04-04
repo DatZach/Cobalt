@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Compiler.Lexer;
+﻿using Compiler.Lexer;
 using Compiler.Parser.Expressions;
 
 namespace Compiler.Parser.Parselets
@@ -14,7 +9,25 @@ namespace Compiler.Parser.Parselets
 
         public Expression Parse(Parser parser, Expression left, Token token)
         {
-            throw new NotImplementedException();
+            IReadOnlyList<Expression> arguments;
+            
+            if (!parser.Match(TokenType.RightParen))
+            {
+                var lArguments = new List<Expression>(4);
+
+                do
+                {
+                    lArguments.Add(parser.ParseExpression(isConditional: true));
+                } while (parser.MatchAndTakeToken(TokenType.Comma) != null);
+
+                arguments = lArguments;
+            }
+            else
+                arguments = Array.Empty<Expression>();
+
+            parser.Take(TokenType.RightParen);
+
+            return new CallExpression(token, left, arguments);
         }
     }
 }

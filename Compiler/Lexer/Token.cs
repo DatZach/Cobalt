@@ -20,15 +20,19 @@
     {
         Identifier,
         Number,
+        String,
         Delimiter,
         
         Const,
+        Extern,
+        Function,
 
         Semicolon,
         LeftParen,
         RightParen,
         LeftBrace,
         RightBrace,
+        Comma,
 
         FatArrow,
         Add,

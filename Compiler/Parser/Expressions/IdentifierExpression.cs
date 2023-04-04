@@ -5,6 +5,8 @@ namespace Compiler.Parser.Expressions
 {
     internal sealed class IdentifierExpression : Expression
     {
+        public string Value => Token.Value!;
+
         public IdentifierExpression(Token token)
             : base(token)
         {
@@ -13,7 +15,7 @@ namespace Compiler.Parser.Expressions
 
         public override T Accept<T>(IExpressionVisitor<T> visitor)
         {
-            throw new NotImplementedException();
+            return visitor.Visit(this);
         }
     }
 }

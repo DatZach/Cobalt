@@ -10,12 +10,12 @@ namespace Compiler.Parser.Expressions
         public BlockExpression(Token token, IReadOnlyList<Expression> expressions)
             : base(token)
         {
-
+            Expressions = expressions;
         }
 
         public override T Accept<T>(IExpressionVisitor<T> visitor)
         {
-            throw new NotImplementedException();
+            return visitor.Visit(this);
         }
     }
 }

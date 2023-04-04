@@ -5,6 +5,8 @@ namespace Compiler.Parser.Expressions
 {
     internal sealed class BinaryOperatorExpression : Expression
     {
+        public TokenType Operator => Token.Type;
+
         public Expression Left { get; }
 
         public Expression Right { get; }
@@ -18,7 +20,7 @@ namespace Compiler.Parser.Expressions
 
         public override T Accept<T>(IExpressionVisitor<T> visitor)
         {
-            throw new NotImplementedException();
+            return visitor.Visit(this);
         }
     }
 }

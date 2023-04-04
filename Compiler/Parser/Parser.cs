@@ -11,7 +11,6 @@ namespace Compiler.Parser
 {
     internal sealed partial class Parser
     {
-        private Token? read;
         private int readIndex;
 
         private readonly IReadOnlyList<Token> tokens;
@@ -19,7 +18,6 @@ namespace Compiler.Parser
         public Parser(IReadOnlyList<Token> tokens)
         {
             this.tokens = tokens ?? throw new ArgumentNullException(nameof(tokens));
-            read = null;
         }
 
         public Expression ParseExpression(int precedence = 0, bool isConditional = false)
@@ -45,8 +43,13 @@ namespace Compiler.Parser
 
         public Expression ParseStatement(bool takeSemicolon = true)
         {
-            var result = ParseExpression();
+            Expression result;
+
             var token = Peek();
+            if (StatementPrefixParselets.TryGetValue(token.Type, out var prefixStatementParselet))
+                result = prefixStatementParselet.Parse(this, Take());
+            else
+                result = ParseExpression();
 
             if (takeSemicolon)
                 MatchAndTakeToken(TokenType.Semicolon);
@@ -86,7 +89,7 @@ namespace Compiler.Parser
             return new ScriptExpression(Take(), expressions);
         }
 
-        public Token MatchAndTakeToken(TokenType type)
+        public Token? MatchAndTakeToken(TokenType type)
         {
             var token = Peek();
             if (token.Type == type)
@@ -125,7 +128,7 @@ namespace Compiler.Parser
 
         public Token Peek()
         {
-            if (readIndex > tokens.Count)
+            if (readIndex >= tokens.Count)
                 return new Token { Type = TokenType.EndOfStream };
 
             return tokens[readIndex];
