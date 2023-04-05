@@ -27,6 +27,15 @@ namespace Compiler.Ast
 
             // Expression Operators
             Register(TokenType.Add, new BinaryOperatorParselet(PrecedenceTable.Addition));
+            Register(TokenType.Subtract, new BinaryOperatorParselet(PrecedenceTable.Subtraction));
+            Register(TokenType.Multiply, new BinaryOperatorParselet(PrecedenceTable.Multiplication));
+            Register(TokenType.Divide, new BinaryOperatorParselet(PrecedenceTable.Division));
+            Register(TokenType.Modulo, new BinaryOperatorParselet(PrecedenceTable.Modulo));
+            Register(TokenType.BitLeftShift, new BinaryOperatorParselet(PrecedenceTable.BitLeftShift));
+            Register(TokenType.BitRightShift, new BinaryOperatorParselet(PrecedenceTable.BitRightShift));
+            Register(TokenType.BitAnd, new BinaryOperatorParselet(PrecedenceTable.BitAnd));
+            Register(TokenType.BitOr, new BinaryOperatorParselet(PrecedenceTable.BitOr));
+            Register(TokenType.BitXor, new BinaryOperatorParselet(PrecedenceTable.BitXor));
 
             // Assignments
             Register(TokenType.Assign, new BinaryOperatorParselet(PrecedenceTable.Assignment));

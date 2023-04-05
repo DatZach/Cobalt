@@ -23,6 +23,15 @@ namespace Compiler.Lexer
                 { "}", TokenType.RightBrace },
                 
                 { "+", TokenType.Add },
+                { "-", TokenType.Subtract },
+                { "*", TokenType.Multiply },
+                { "/", TokenType.Divide },
+                { "%", TokenType.Modulo },
+                { "<<", TokenType.BitLeftShift },
+                { ">>", TokenType.BitRightShift },
+                { "&", TokenType.BitAnd },
+                { "|", TokenType.BitOr },
+                { "^", TokenType.BitXor },
 
                 { "=>", TokenType.FatArrow },
             };

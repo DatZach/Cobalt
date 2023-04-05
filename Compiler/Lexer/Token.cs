@@ -36,6 +36,15 @@
 
         FatArrow,
         Add,
+        Subtract,
+        Multiply,
+        Divide,
+        Modulo,
+        BitLeftShift,
+        BitRightShift,
+        BitAnd,
+        BitOr,
+        BitXor,
 
         Assign,
 

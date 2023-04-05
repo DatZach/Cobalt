@@ -184,6 +184,123 @@ namespace Compiler.CodeGeneration
                     CurrentFunction.Body.Emit($"mov {reg}, {a}");
                     break;
                 }
+
+                case TokenType.Subtract:
+                {
+                    var b = CurrentFunction.FreeRegister();
+                    var a = CurrentFunction.FreeRegister();
+                    CurrentFunction.Body.Emit($"sub {a}, {b}");
+                    var reg = CurrentFunction.AllocateRegister();
+                    CurrentFunction.Body.Emit($"mov {reg}, {a}");
+                    break;
+                }
+
+                case TokenType.Multiply:
+                {
+                    var b = CurrentFunction.FreeRegister();
+                    var a = CurrentFunction.FreeRegister();
+                    CurrentFunction.Body.Emit($"imul {a}, {b}"); // TODO unsigned version
+                    var reg = CurrentFunction.AllocateRegister();
+                    CurrentFunction.Body.Emit($"mov {reg}, {a}");
+                    break;
+                }
+
+                case TokenType.Divide:
+                {
+                    var b = CurrentFunction.FreeRegister();
+                    var a = CurrentFunction.FreeRegister();
+                    var eax = CurrentFunction.PreserveRegister("eax");
+                    var edx = CurrentFunction.PreserveRegister("edx");
+                    var ebx = CurrentFunction.PreserveRegister("ebx");
+                    CurrentFunction.Body.Emit($"mov ebx, {b}");
+                    CurrentFunction.Body.Emit($"mov eax, {a}");
+                    CurrentFunction.Body.Emit("cdq");
+                    CurrentFunction.Body.Emit($"idiv ebx");
+                    var reg = CurrentFunction.AllocateRegister();
+                    CurrentFunction.Body.Emit($"mov {reg}, eax");
+                    CurrentFunction.RestoreRegister(ebx);
+                    CurrentFunction.RestoreRegister(edx);
+                    CurrentFunction.RestoreRegister(eax);
+                    break;
+                }
+
+                case TokenType.Modulo:
+                {
+                    var b = CurrentFunction.FreeRegister();
+                    var a = CurrentFunction.FreeRegister();
+                    var eax = CurrentFunction.PreserveRegister("eax");
+                    var edx = CurrentFunction.PreserveRegister("edx");
+                    var ebx = CurrentFunction.PreserveRegister("ebx");
+                    CurrentFunction.Body.Emit($"mov ebx, {b}");
+                    CurrentFunction.Body.Emit($"mov eax, {a}");
+                    CurrentFunction.Body.Emit("cdq");
+                    CurrentFunction.Body.Emit($"idiv ebx");
+                    var reg = CurrentFunction.AllocateRegister();
+                    CurrentFunction.Body.Emit($"mov {reg}, edx");
+                    CurrentFunction.RestoreRegister(ebx);
+                    CurrentFunction.RestoreRegister(edx);
+                    CurrentFunction.RestoreRegister(eax);
+                    break;
+                }
+
+                case TokenType.BitLeftShift:
+                {
+                    var b = CurrentFunction.FreeRegister();
+                    var a = CurrentFunction.FreeRegister();
+                    var ecx = CurrentFunction.PreserveRegister("ecx");
+                    CurrentFunction.Body.Emit($"mov ecx, {b}");
+                    CurrentFunction.Body.Emit($"shl {a}, cl");
+                    var reg = CurrentFunction.AllocateRegister();
+                    CurrentFunction.Body.Emit($"mov {reg}, {a}");
+                    CurrentFunction.RestoreRegister(ecx);
+                    break;
+                }
+
+                case TokenType.BitRightShift:
+                {
+                    var b = CurrentFunction.FreeRegister();
+                    var a = CurrentFunction.FreeRegister();
+                    var ecx = CurrentFunction.PreserveRegister("ecx");
+                    CurrentFunction.Body.Emit($"mov ecx, {b}");
+                    CurrentFunction.Body.Emit($"shr {a}, cl");
+                    var reg = CurrentFunction.AllocateRegister();
+                    CurrentFunction.Body.Emit($"mov {reg}, {a}");
+                    CurrentFunction.RestoreRegister(ecx);
+                    break;
+                }
+
+                case TokenType.BitAnd:
+                {
+                    var b = CurrentFunction.FreeRegister();
+                    var a = CurrentFunction.FreeRegister();
+                    CurrentFunction.Body.Emit($"and {a}, {b}");
+                    var reg = CurrentFunction.AllocateRegister();
+                    CurrentFunction.Body.Emit($"mov {reg}, {a}");
+                    break;
+                }
+
+                case TokenType.BitOr:
+                {
+                    var b = CurrentFunction.FreeRegister();
+                    var a = CurrentFunction.FreeRegister();
+                    CurrentFunction.Body.Emit($"or {a}, {b}");
+                    var reg = CurrentFunction.AllocateRegister();
+                    CurrentFunction.Body.Emit($"mov {reg}, {a}");
+                    break;
+                }
+
+                case TokenType.BitXor:
+                {
+                    var b = CurrentFunction.FreeRegister();
+                    var a = CurrentFunction.FreeRegister();
+                    CurrentFunction.Body.Emit($"xor {a}, {b}");
+                    var reg = CurrentFunction.AllocateRegister();
+                    CurrentFunction.Body.Emit($"mov {reg}, {a}");
+                    break;
+                }
+
+                default:
+                    throw new NotImplementedException();
             }
 
             return 0;
@@ -291,6 +408,26 @@ namespace Compiler.CodeGeneration
                 --registersInUse;
 
                 return registers[registersInUse];
+            }
+
+            public string? PreserveRegister(string registerName)
+            {
+                var idx = Array.IndexOf(registers, registerName);
+                if (idx < registersInUse)
+                {
+                    Body.Emit($"push {registerName}");
+                    return registerName;
+                }
+
+                return null;
+            }
+
+            public void RestoreRegister(string? registerName)
+            {
+                if (registerName == null)
+                    return;
+
+                Body.Emit($"pop {registerName}");
             }
         }
     }
