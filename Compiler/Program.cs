@@ -1,75 +1,51 @@
 ﻿using System.Diagnostics;
 using Compiler.Ast;
+using Compiler.CodeGeneration;
 using Compiler.Lexer;
 
 namespace Compiler
 {
     public static class Program
     {
+        internal static RuntimeConfig Config { get; private set; }
+        
         public static void Main(string[] args)
         {
-            var t1 = Stopwatch.StartNew();
-
-            var config = RuntimeConfig.FromCommandLine(args);
-            if (config == null)
+            Config = RuntimeConfig.FromCommandLine(args);
+            if (Config == null)
             {
                 RuntimeConfig.PrintHelp();
                 return;
             }
 
-            var source = File.ReadAllText(config.EntrySourceFile);
-            var tokenizer = new Tokenizer(source);
-            var tokens = tokenizer.Tokenize();
-            var parser = new Parser.Parser(tokens);
-            var ast = parser.ParseScript();
+            var t1 = Stopwatch.StartNew();
+
+            var source = File.ReadAllText(Config.EntrySourceFile);
+            var tokens = Tokenizer.Tokenize(source);
+            var ast = Parser.Parse(tokens);
             var x86 = new X86Compiler();
             ast.Accept(x86);
-
-            var asm = x86.Buffer.ToString();
-
-            var tmpFilename = Path.Combine(Path.GetTempPath(), Path.GetTempFileName());
-            File.WriteAllText(tmpFilename, asm);
-
-            var process = new Process();
-            process.StartInfo.FileName = @"C:\Tools\fasmw17330\fasm.exe";
-            process.StartInfo.Arguments = $"\"{tmpFilename}\"";
-            process.StartInfo.WorkingDirectory = @"C:\Tools\fasmw17330";
-            process.StartInfo.CreateNoWindow = true;
-            process.StartInfo.UseShellExecute = false;
-            process.StartInfo.RedirectStandardOutput = true;
-            process.StartInfo.RedirectStandardError = true;
-            process.ErrorDataReceived += Assembler_StdOutRecieved;
-            process.EnableRaisingEvents = true;
-
-            process.Start();
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
-            process.WaitForExit();
-
-            File.Delete(tmpFilename);
-            tmpFilename = Path.ChangeExtension(tmpFilename, "exe");
-            var dstFilename = Path.ChangeExtension(Path.GetFileName(config.EntrySourceFile), "exe");
-            File.Copy(tmpFilename, dstFilename);
+            
+            var outputFilename = Path.ChangeExtension(Path.GetFileName(Config.EntrySourceFile), "exe");
+            X86Assembler.Assemble(x86.Buffer, outputFilename);
 
             t1.Stop();
-
-            //foreach (var token in tokens)
-            //    Console.WriteLine(token);
-
-            // Console.WriteLine(asm);
-            Console.WriteLine($"Compiled in {t1.ElapsedMilliseconds}ms");
             
-        }
-
-        private static void Assembler_StdOutRecieved(object sender, DataReceivedEventArgs e)
-        {
-            Console.Write(e.Data);
+            Console.WriteLine($"Compiled in {t1.ElapsedMilliseconds}ms");
         }
     }
 
     internal sealed class RuntimeConfig
     {
         public string EntrySourceFile { get; init; }
+
+        public string? FasmPath { get; init; }
+
+        public bool FasmVerboseOutput { get; init; }
+
+        public bool AstVerboseOutput { get; init; }
+
+        public bool AssemblyVerboseOutput { get; init; }
 
         private RuntimeConfig()
         {
@@ -83,8 +59,25 @@ namespace Compiler
 
             return new RuntimeConfig
             {
-                EntrySourceFile = args[0]
+                EntrySourceFile = args[0],
+                FasmPath = OptionalArgument<string>("--fasm"),
+                FasmVerboseOutput = OptionalArgument("--fasm-verbose", false),
+                AstVerboseOutput = OptionalArgument("--ast-verbose", false),
+                AssemblyVerboseOutput = OptionalArgument("--asm-verbose", false)
             };
+
+            T? OptionalArgument<T>(string key, T? fallback = default)
+            {
+                var arg = args.FirstOrDefault(x => x.StartsWith(key));
+                if (arg != null && typeof(T) == typeof(bool))
+                    return (T)(object)true;
+
+                var value = arg?.Split('=').ElementAtOrDefault(1);
+                if (value == null)
+                    return fallback;
+
+                return (T)Convert.ChangeType(value, typeof(T));
+            }
         }
 
         public static void PrintHelp()

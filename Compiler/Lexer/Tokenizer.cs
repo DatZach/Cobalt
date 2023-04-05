@@ -11,13 +11,13 @@ namespace Compiler.Lexer
         private int currentLine;
         private int currentLineStartIndex;
 
-        public Tokenizer(string source)
+        private Tokenizer(string source)
         {
             this.source = source ?? throw new ArgumentNullException(nameof(source));
             this.length = source.Length;
         }
 
-        public IReadOnlyList<Token> Tokenize()
+        private IReadOnlyList<Token> Tokenize()
         {
             var result = new List<Token>(4);
             
@@ -255,6 +255,12 @@ namespace Compiler.Lexer
         private char PeekChar()
         {
             return index < length ? source[index] : '\0';
+        }
+
+        public static IReadOnlyList<Token> Tokenize(string source)
+        {
+            var tokenizer = new Tokenizer(source);
+            return tokenizer.Tokenize();
         }
     }
 }

@@ -2,7 +2,7 @@
   "profiles": {
     "Compiler": {
       "commandName": "Project",
-      "commandLineArgs": "C:\\Temp\\corn.cob"
+      "commandLineArgs": "C:\\Temp\\corn.cob --asm-verbose --fasm-verbose"
     }
   }
 }
