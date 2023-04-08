@@ -2,6 +2,7 @@
 using Compiler.Ast;
 using Compiler.CodeGeneration;
 using Compiler.CodeGeneration.Platform;
+using Compiler.Interpreter;
 using Compiler.Lexer;
 
 namespace Compiler
@@ -34,6 +35,7 @@ namespace Compiler
             
             if (compiler.Artifact != null)
             {
+                // TODO Abstract further
                 var outputFilename = compiler.Artifact.Filename
                                   ?? Path.ChangeExtension(Path.GetFileName(Config.EntrySourceFile), "exe");
                 switch (compiler.Artifact.TargetPlatform)
@@ -46,13 +48,22 @@ namespace Compiler
                     default:
                         throw new Exception($"Unsupported artifact platform '{compiler.Artifact.TargetPlatform}'");
                 }
+
+                Console.WriteLine($"Compiled in {t1.ElapsedMilliseconds}ms");
             }
             else
             {
-                // TODO Run interpreter
+                using var vm = new VirtualMachine(compiler);
+                var mainFunctionIdx = compiler.Functions.FindIndex(x => x.Name == "Main");
+                if (mainFunctionIdx == -1)
+                {
+                    Console.WriteLine("Aborting. No artifact specified, and no Main function exported.");
+                    return;
+                }
+
+                var mainFunction = compiler.Functions[mainFunctionIdx];
+                vm.ExecuteFunction(mainFunction);
             }
-            
-            Console.WriteLine($"Compiled in {t1.ElapsedMilliseconds}ms");
         }
 
         private static void PrintCompilerState(CodeGeneration.Compiler compiler)

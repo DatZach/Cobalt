@@ -593,6 +593,8 @@ namespace Compiler.CodeGeneration
         public CobType Type { get; }
 
         public byte[]? Data { get; set; } // TODO HACK AAAAAA???
+        
+        public long Value { get; set; }
 
         public CobVariable(string name, CobType type)
         {
