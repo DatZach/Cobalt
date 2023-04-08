@@ -45,6 +45,8 @@ namespace Compiler.Ast
             Register(TokenType.Const, new VarParselet());
             Register(TokenType.Export, new VarParselet());
             Register(TokenType.Import, new ImportParselet());
+            Register(TokenType.Return, new ReturnParselet());
+            Register(TokenType.AheadOfTime, new AheadOfTimeParselet());
         }
 
         private static void Register(TokenType type, IPrefixExpressionParselet parselet)

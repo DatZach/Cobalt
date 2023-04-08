@@ -43,6 +43,8 @@ namespace Compiler.Lexer
                 ["export"] = TokenType.Export,
                 ["const"] = TokenType.Const,
                 ["fn"] = TokenType.Function,
+                ["return"] = TokenType.Return,
+                ["aot"] = TokenType.AheadOfTime,
 
                 ["machine"] = TokenType.Machine,
                 ["stdcall"] = TokenType.StdCall,

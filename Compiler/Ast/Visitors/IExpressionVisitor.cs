@@ -9,6 +9,8 @@ namespace Compiler.Ast.Visitors
         T Visit(VarExpression expression);
         T Visit(ImportExpression expression);
         T Visit(ArtifactExpression expression);
+        T Visit(ReturnStatement expression);
+        T Visit(AheadOfTimeExpression expression);
         
         T Visit(FunctionExpression expression);
         T Visit(BinaryOperatorExpression expression);

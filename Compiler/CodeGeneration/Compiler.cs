@@ -111,6 +111,30 @@ namespace Compiler.CodeGeneration
             return 0;
         }
 
+        public int Visit(ReturnStatement expression)
+        {
+            if (expression.Expression == null)
+                CurrentFunction.Body.Emit(Opcode.Return);
+            else
+            {
+                expression.Expression.Accept(this);
+                if (CurrentFunction.ReturnType.Type == CobPrimitive.None)
+                    CurrentFunction.ReturnType = tmpValue.Type;
+                else if (CurrentFunction.ReturnType != tmpValue.Type)
+                    throw new Exception("Return value does not match function return type"); // TODO
+                
+                var reg = CurrentFunction.FreeRegister();
+                CurrentFunction.Body.EmitR(Opcode.Return, reg);
+            }
+
+            return 0;
+        }
+
+        public int Visit(AheadOfTimeExpression expression)
+        {
+            throw new NotImplementedException();
+        }
+
         public int Visit(FunctionExpression expression)
         {
             var function = new Function(
@@ -123,6 +147,8 @@ namespace Compiler.CodeGeneration
             functionStack.Push(function);
             
             expression.Body?.Accept(this);
+            function.ReturnLabel.Mark();
+            function.Body.FixLabels();
             
             functionStack.Pop();
             Functions.Add(function);
@@ -195,6 +221,14 @@ namespace Compiler.CodeGeneration
             if (globalIdx == -1) throw new Exception($"Undeclared identifier {functionName}");
             CurrentFunction.Body.EmitF(Opcode.Call, globalIdx);
 
+            var callee = Functions[globalIdx];
+            if (callee.ReturnType.Type != CobPrimitive.None)
+            {
+                tmpValue = new CobVariable("$return_value$", callee.ReturnType);
+                var reg = CurrentFunction.AllocateRegister();
+                CurrentFunction.Body.EmitRR(Opcode.Move, reg, 0);
+            }
+            
             return 0;
         }
 
@@ -295,6 +329,7 @@ namespace Compiler.CodeGeneration
 
         Call,
         Return,
+        Jump,
 
         Move,
         Push,
@@ -319,7 +354,7 @@ namespace Compiler.CodeGeneration
 
         public byte Size { get; init; }
 
-        public long Value { get; init; }
+        public long Value { get; set; } // TODO init only? need to mutate for Label
 
         public override string ToString()
         {
@@ -360,6 +395,8 @@ namespace Compiler.CodeGeneration
 
         public List<Instruction> Instructions => instructions; // TODO Implement interface on base
 
+        private readonly List<Label> labels;
+
         private readonly List<Instruction> instructions;
 
         public InstructionBuffer()
@@ -367,6 +404,7 @@ namespace Compiler.CodeGeneration
             PlatformWordWidth = 32; // TODO Don't hardcode
 
             instructions = new List<Instruction>(4);
+            labels = new List<Label>(4);
         }
 
         public void Emit(Opcode opcode)
@@ -481,6 +519,52 @@ namespace Compiler.CodeGeneration
                 A = new Operand { Type = OperandType.Function, Size = PlatformWordWidth, Value = funA }
             });
         }
+
+        public void FixLabels()
+        {
+            foreach (var label in labels)
+                label.Fix();
+        }
+    }
+
+    internal sealed class Label
+    {
+        private int labelOffset;
+
+        private readonly InstructionBuffer buffer;
+        private readonly List<int> patches;
+
+        public Label(InstructionBuffer buffer)
+        {
+            this.buffer = buffer;
+            patches = new List<int>();
+            labelOffset = 0;
+        }
+
+        public void Mark()
+        {
+            labelOffset = buffer.Instructions.Count;
+        }
+
+        public void PatchHere()
+        {
+            //buffer.Instructions.Last().Operand.IntValue = 0;
+            patches.Add(buffer.Instructions.Count - 1);
+        }
+
+        public void Fix()
+        {
+            for (var i = 0; i < patches.Count; i++)
+            {
+                var offset = patches[i];
+                buffer.Instructions[offset].A!.Value = labelOffset;
+            }
+        }
+
+        public void ClearPatches()
+        {
+            patches.Clear();
+        }
     }
 
     internal sealed record Import
@@ -504,9 +588,11 @@ namespace Compiler.CodeGeneration
 
         public IReadOnlyList<FunctionExpression.Parameter> Parameters { get; }
 
-        public CobType ReturnType { get; }
+        public CobType ReturnType { get; set; }
 
         public InstructionBuffer Body { get; }
+
+        public Label ReturnLabel { get; }
 
         private int registerStack;
 
@@ -523,6 +609,7 @@ namespace Compiler.CodeGeneration
             Parameters = parameters;
             ReturnType = returnType;
             Body = new InstructionBuffer();
+            ReturnLabel = new Label(Body);
 
             registerStack = 0;
         }

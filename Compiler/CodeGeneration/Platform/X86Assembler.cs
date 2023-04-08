@@ -63,6 +63,7 @@ namespace Compiler.CodeGeneration.Platform
 
                 EmitIntermediateInstructionBuffer(buffer, f.Body);
 
+                buffer.EmitLine(".return:");
                 for (var i = 32 - 1; i >= 3; --i) // TODO 64 + stdcall, naked, etc
                 {
                     if ((f.ClobberedRegisters & (1u << i)) == 0)
@@ -137,8 +138,12 @@ namespace Compiler.CodeGeneration.Platform
                         buffer.EmitLine(GetOperandString(inst.A));
                         break;
                     case Opcode.Return:
-                        buffer.EmitLine("ret");
+                    {
+                        if (inst.A != null)
+                            buffer.EmitLine($"mov eax, {GetOperandString(inst.A)}");
+                        buffer.EmitLine("jmp .return");
                         break;
+                    }
                     case Opcode.Move:
                         buffer.Emit("mov ");
                         buffer.Emit(GetOperandString(inst.A));
@@ -248,7 +253,13 @@ namespace Compiler.CodeGeneration.Platform
                 case OperandType.Global:
                     return $"rdata_{operand.Value}";
                 case OperandType.Function:
-                    return "[" + HACK_Compiler.Functions[(int)operand.Value].Name + "]"; // TODO
+                {
+                    var functionName = HACK_Compiler.Functions[(int)operand.Value].Name;
+                    if (HACK_Compiler.Imports.Any(x => x.SymbolName == functionName)) // TODO Probably could improve
+                        return "[" + functionName + "]";
+
+                    return functionName;
+                }
                 default:
                     throw new ArgumentOutOfRangeException();
             }

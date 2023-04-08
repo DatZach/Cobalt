@@ -28,6 +28,8 @@
         Export,
         Const,
         Function,
+        Return,
+        AheadOfTime,
 
         CCall,
         StdCall,
