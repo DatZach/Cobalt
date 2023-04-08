@@ -2,6 +2,7 @@
 using Compiler.Ast.Expressions;
 using Compiler.Ast.Expressions.Statements;
 using Compiler.Ast.Visitors;
+using Compiler.Interpreter;
 using Compiler.Lexer;
 
 namespace Compiler.CodeGeneration
@@ -132,7 +133,33 @@ namespace Compiler.CodeGeneration
 
         public int Visit(AheadOfTimeExpression expression)
         {
-            throw new NotImplementedException();
+            var evalType = new CobType(CobPrimitive.Signed, 32); // TODO How do we even determine this correctly??
+            var function = new Function(
+                "$aot_eval$",
+                CallingConvention.CCall,
+                Array.Empty<FunctionExpression.Parameter>(),
+                evalType
+            );
+
+            functionStack.Push(function);
+            expression.Expression.Accept(this);
+            var retReg = CurrentFunction.FreeRegister();
+            CurrentFunction.Body.EmitR(Opcode.Return, retReg);
+
+            function.ReturnLabel.Mark();
+            function.Body.FixLabels();
+            
+            functionStack.Pop();
+
+            using var vm = new VirtualMachine(this);
+            var result = vm.ExecuteFunction(function);
+
+            var reg = CurrentFunction.AllocateRegister();
+            CurrentFunction.Body.EmitRI(Opcode.Move, reg, result);
+
+            tmpValue = new CobVariable("literal", evalType);
+
+            return 0;
         }
 
         public int Visit(FunctionExpression expression)
@@ -147,6 +174,8 @@ namespace Compiler.CodeGeneration
             functionStack.Push(function);
             
             expression.Body?.Accept(this);
+            function.Body.Emit(Opcode.Return);
+
             function.ReturnLabel.Mark();
             function.Body.FixLabels();
             

@@ -40,7 +40,7 @@ namespace Compiler.Interpreter
             }
         }
         
-        public void ExecuteFunction(Function function)
+        public long ExecuteFunction(Function function)
         {
             functionStack.Push(function);
 
@@ -54,21 +54,36 @@ namespace Compiler.Interpreter
                         break;
                     case Opcode.Call:
                     {
-                        var format = localStack.Pop();
-                        var formatVar = compiler.Globals[(int)format].Data;
-                        var formatString = Encoding.UTF8.GetString(formatVar);
-                        var a = localStack.Pop();
+                        var global = compiler.Globals[(int)ReadOperand(inst.A!)]; // TODO This is actually a function index, not a global
+                        if (global.Type.Function == null)
+                        {
+                            // TODO Get rid of the prototype hardcoded hacks
+                            var format = localStack.Pop();
+                            var formatVar = compiler.Globals[(int)format].Data;
+                            var formatString = Encoding.UTF8.GetString(formatVar);
+                            var a = localStack.Pop();
 
-                        // TODO Support native and bytecode calls
-                        var sub = nativeLibraries["msvcrt"].Functions["printf"];
-                        sub(formatString, (int)a);
-                        //var sub = compiler.Functions[(int)inst.A!.Value];
-                        //ExecuteFunction(sub);
+                            // TODO Support native and bytecode calls
+                            var sub = nativeLibraries["msvcrt"].Functions["printf"];
+                            sub(formatString, (int)a);
+                        }
+                        else
+                        {
+                            var sub = global.Type.Function;
+                            ExecuteFunction(sub);
+                        }
                         break;
                     }
                     case Opcode.Return:
+                    {
+                        long value;
+                        if (inst.A != null)
+                            value = ReadOperand(inst.A);
+                        else
+                            value = -1;
                         functionStack.Pop();
-                        return;
+                        return value;
+                    }
                     case Opcode.Move:
                     {
                         WriteOperand(inst.A!, ReadOperand(inst.B!));
@@ -159,8 +174,7 @@ namespace Compiler.Interpreter
                 }
             }
 
-            // TODO Uncomment
-            //throw new InvalidOperationException("End of buffer without a ret instruction");
+            throw new InvalidOperationException("End of buffer without a ret instruction");
         }
 
         private void WriteOperand(Operand operand, long value)
@@ -207,7 +221,7 @@ namespace Compiler.Interpreter
                     return operand.Value;
                     //throw new NotImplementedException();
                 case OperandType.Function:
-                    throw new NotImplementedException();
+                    return operand.Value; // TODO Hacky??
                 default:
                     throw new ArgumentOutOfRangeException();
             }
