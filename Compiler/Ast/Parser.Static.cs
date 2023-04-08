@@ -41,8 +41,10 @@ namespace Compiler.Ast
             Register(TokenType.Assign, new BinaryOperatorParselet(PrecedenceTable.Assignment));
 
             // Statements
+            Register(TokenType.Artifact, new ArtifactParselet());
             Register(TokenType.Const, new VarParselet());
-            Register(TokenType.Extern, new ExternParselet());
+            Register(TokenType.Export, new VarParselet());
+            Register(TokenType.Import, new ImportParselet());
         }
 
         private static void Register(TokenType type, IPrefixExpressionParselet parselet)

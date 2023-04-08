@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using Compiler.Ast;
 using Compiler.CodeGeneration;
+using Compiler.CodeGeneration.Platform;
 using Compiler.Lexer;
 
 namespace Compiler
@@ -23,15 +24,72 @@ namespace Compiler
             var source = File.ReadAllText(Config.EntrySourceFile);
             var tokens = Tokenizer.Tokenize(source);
             var ast = Parser.Parse(tokens);
-            var x86 = new X86Compiler();
-            ast.Accept(x86);
-            
-            var outputFilename = Path.ChangeExtension(Path.GetFileName(Config.EntrySourceFile), "exe");
-            X86Assembler.Assemble(x86.Buffer, outputFilename);
+            var compiler = new CodeGeneration.Compiler();
+            ast.Accept(compiler);
 
             t1.Stop();
+
+            if (Config.AssemblyVerboseOutput)
+                PrintCompilerState(compiler);
+            
+            if (compiler.Artifact != null)
+            {
+                var outputFilename = compiler.Artifact.Filename
+                                  ?? Path.ChangeExtension(Path.GetFileName(Config.EntrySourceFile), "exe");
+                switch (compiler.Artifact.TargetPlatform)
+                {
+                    case "pe":
+                    case "PE":
+                        X86Assembler.Assemble(compiler, outputFilename);
+                        break;
+
+                    default:
+                        throw new Exception($"Unsupported artifact platform '{compiler.Artifact.TargetPlatform}'");
+                }
+            }
+            else
+            {
+                // TODO Run interpreter
+            }
             
             Console.WriteLine($"Compiled in {t1.ElapsedMilliseconds}ms");
+        }
+
+        private static void PrintCompilerState(CodeGeneration.Compiler compiler)
+        {
+            Console.WriteLine(compiler.Artifact);
+            
+            Console.WriteLine("Imports");
+            foreach (var import in compiler.Imports)
+                Console.WriteLine($"\t{import.Library} {import.SymbolName}");
+            Console.WriteLine();
+
+            Console.WriteLine("Exports");
+            foreach (var export in compiler.Exports)
+                Console.WriteLine($"\t{export}");
+            Console.WriteLine();
+
+            Console.WriteLine("Globals");
+            foreach (var global in compiler.Globals)
+                Console.WriteLine($"\t{global}");
+            Console.WriteLine();
+
+            Console.WriteLine("Functions");
+            foreach (var function in compiler.Functions)
+            {
+                Console.WriteLine($"\t{function.Name} -> {function.ReturnType}");
+                Console.WriteLine($"\t\t.locals = {function.Locals.Count}");
+                Console.WriteLine($"\t\t.cconv = {function.CallingConvention}");
+                if (function.Body == null)
+                {
+                    Console.WriteLine("\tBodyless");
+                    continue;
+                }
+
+                foreach (var inst in function.Body.Instructions)
+                    Console.WriteLine($"\t{inst}");
+            }
+            Console.WriteLine();
         }
     }
 

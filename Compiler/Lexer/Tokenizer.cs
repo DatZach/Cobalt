@@ -80,11 +80,32 @@ namespace Compiler.Lexer
                 // Number
                 if (char.IsDigit(ch))
                 {
+                    bool hasHexSpecified = false;
+                    bool hasBinSpecified = false;
+                    bool hasDecimal = false;
+
+                    var chNext = PeekChar(1);
+                    if (ch == '0' && chNext == 'x')
+                        hasHexSpecified = true;
+                    else if (ch == '0' && chNext == 'b')
+                        hasBinSpecified = true;
+
                     ident = TakeWhile(c =>
                     {
                         if (c == '_')
                             return true;
                         
+                        if (hasHexSpecified)
+                            return IsHexChar(c);
+                        if (hasBinSpecified)
+                            return IsBinChar(c);
+
+                        if (c == '.' && !hasDecimal)
+                        {
+                            hasDecimal = true;
+                            return true;
+                        }
+
                         return char.IsDigit(c);
                     });
 

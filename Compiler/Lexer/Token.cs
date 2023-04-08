@@ -4,7 +4,7 @@
     {
         public TokenType Type { get; init; }
 
-        public string? Value { get; init; }
+        public string Value { get; init; }
 
         public int Line { get; init; }
 
@@ -12,7 +12,7 @@
 
         public override string ToString()
         {
-            return $"{Type} ('{Value ?? ""}')";
+            return $"{Type} ('{Value}')";
         }
     }
 
@@ -23,9 +23,15 @@
         String,
         Delimiter,
         
+        Artifact,
+        Import,
+        Export,
         Const,
-        Extern,
         Function,
+
+        CCall,
+        StdCall,
+        Machine,
 
         Semicolon,
         LeftParen,

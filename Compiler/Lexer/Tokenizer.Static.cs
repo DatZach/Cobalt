@@ -12,35 +12,41 @@ namespace Compiler.Lexer
         {
             Operators = new OperatorDictionary
             {
-                { ";", TokenType.Semicolon },
-                { ",", TokenType.Comma },
-                { "=", TokenType.Assign },
-                { ":=", TokenType.Assign },
+                [";"] = TokenType.Semicolon,
+                [","] = TokenType.Comma,
+                ["="] = TokenType.Assign,
+                [":="] = TokenType.Assign,
 
-                { "(", TokenType.LeftParen },
-                { ")", TokenType.RightParen },
-                { "{", TokenType.LeftBrace },
-                { "}", TokenType.RightBrace },
+                ["("] = TokenType.LeftParen,
+                [")"] = TokenType.RightParen,
+                ["{"] = TokenType.LeftBrace,
+                ["}"] = TokenType.RightBrace,
                 
-                { "+", TokenType.Add },
-                { "-", TokenType.Subtract },
-                { "*", TokenType.Multiply },
-                { "/", TokenType.Divide },
-                { "%", TokenType.Modulo },
-                { "<<", TokenType.BitLeftShift },
-                { ">>", TokenType.BitRightShift },
-                { "&", TokenType.BitAnd },
-                { "|", TokenType.BitOr },
-                { "^", TokenType.BitXor },
+                ["+"] = TokenType.Add,
+                ["-"] = TokenType.Subtract,
+                ["*"] = TokenType.Multiply,
+                ["/"] = TokenType.Divide,
+                ["%"] = TokenType.Modulo,
+                ["<<"] = TokenType.BitLeftShift,
+                [">>"] = TokenType.BitRightShift,
+                ["&"] = TokenType.BitAnd,
+                ["|"] = TokenType.BitOr,
+                ["^"] = TokenType.BitXor,
 
-                { "=>", TokenType.FatArrow },
+                ["=>"] = TokenType.FatArrow,
             };
             
             Keywords = new Dictionary<string, TokenType>
             {
-                { "import", TokenType.Extern },
-                { "const", TokenType.Const },
-                { "fn", TokenType.Function }
+                ["artifact"] = TokenType.Artifact,
+                ["import"] = TokenType.Import,
+                ["export"] = TokenType.Export,
+                ["const"] = TokenType.Const,
+                ["fn"] = TokenType.Function,
+
+                ["machine"] = TokenType.Machine,
+                ["stdcall"] = TokenType.StdCall,
+                ["ccall"] = TokenType.CCall
             };
         }
 
@@ -50,10 +56,30 @@ namespace Compiler.Lexer
             return Keywords.ContainsKey(ident);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool IsHexChar(char ch)
+        {
+            return char.IsDigit(ch)
+                || (ch >= 'a' && ch <= 'f')
+                || (ch >= 'A' && ch <= 'F');
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool IsBinChar(char ch)
+        {
+            return ch == '0' || ch == '1';
+        }
+
         private sealed class OperatorDictionary : IEnumerable<object>
         {
             private readonly GenericComparer<Tuple<string, TokenType>> comparer;
             private readonly Dictionary<char, List<Tuple<string, TokenType>>> operatorDictionary;
+
+            public TokenType this[string op]
+            {
+                get => throw new InvalidOperationException();
+                set => Add(op, value);
+            }
 
             public OperatorDictionary()
             {

@@ -1,21 +1,34 @@
 ﻿using Compiler.Lexer;
 using Compiler.Ast.Visitors;
+using Compiler.CodeGeneration;
 
 namespace Compiler.Ast.Expressions
 {
     internal sealed class FunctionExpression : Expression
     {
         public string Name => $"fn_{Token.Line}_{Token.Column}";
+        
+        public string ReturnType { get; }
+
+        public CallingConvention CallingConvention { get; }
 
         public IReadOnlyList<Parameter> Parameters { get; }
 
         public Expression? Body { get; }
 
-        public FunctionExpression(Token token, IReadOnlyList<Parameter> parameters, Expression? body)
+        public FunctionExpression(
+            Token token,
+            IReadOnlyList<Parameter> parameters,
+            Expression? body,
+            string returnType,
+            CallingConvention callingConvention
+        )
             : base(token)
         {
             Parameters = parameters;
             Body = body;
+            ReturnType = returnType;
+            CallingConvention = callingConvention;
         }
 
         public override T Accept<T>(IExpressionVisitor<T> visitor)
@@ -25,7 +38,9 @@ namespace Compiler.Ast.Expressions
 
         public sealed record Parameter
         {
+            public string Name { get; init; }
 
+            public string Type { get; init; }
         }
     }
 }

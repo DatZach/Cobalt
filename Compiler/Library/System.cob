@@ -1,0 +1,1 @@
+import msvcrt printf fn (format: string, ...args: trait) s32 ccall;

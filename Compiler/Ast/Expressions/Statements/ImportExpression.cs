@@ -3,16 +3,16 @@ using Compiler.Ast.Visitors;
 
 namespace Compiler.Ast.Expressions.Statements
 {
-    internal sealed class ExternExpression : Expression
+    internal sealed class ImportExpression : Expression
     {
         public string Library { get; }
 
-        public string SymbolName { get; }
+        public string? SymbolName { get; }
 
         public FunctionExpression? FunctionSignture { get; }
 
 
-        public ExternExpression(Token token, string library, string symbolName, FunctionExpression? functionSignature)
+        public ImportExpression(Token token, string library, string? symbolName, FunctionExpression? functionSignature)
             : base(token)
         {
             Library = library;
