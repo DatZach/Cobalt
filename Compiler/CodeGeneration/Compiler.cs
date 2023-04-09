@@ -7,13 +7,13 @@ using Compiler.Lexer;
 
 namespace Compiler.CodeGeneration
 {
-    internal sealed class Compiler : IExpressionVisitor<int>
+    internal sealed class Compiler : IExpressionVisitor<CobType?>
     {
-        public Artifact? Artifact { get; private set; }
+        public List<ArtifactExpression> Artifacts { get; }
 
         public List<Import> Imports { get; }
 
-        public List<string> Exports { get; }
+        public Dictionary<string, string> Exports { get; } // (ExternalName, InternalName)
 
         public List<Function> Functions { get; }
 
@@ -24,57 +24,55 @@ namespace Compiler.CodeGeneration
         private Function? CurrentFunction => functionStack.Count == 0 ? null : functionStack.Peek();
 
         private readonly Stack<Function> functionStack;
-
-        private CobVariable? tmpValue; // HACK TODO Find a better way to pass back variables from RHS
-
+        
         public Compiler()
         {
-            Functions = new List<Function>();
+            Artifacts = new List<ArtifactExpression>();
             Imports = new List<Import>();
-            Exports = new List<string>();
-            //Globals = new Dictionary<string, CobVariable>();
+            Exports = new Dictionary<string, string>();
+            Functions = new List<Function>();
             Globals = new List<CobVariable>();
             functionStack = new Stack<Function>();
         }
 
-        public int Visit(ScriptExpression expression)
+        public CobType? Visit(ScriptExpression expression)
         {
             var expressions = expression.Expressions;
             for (int i = 0; i < expressions.Count; ++i)
                 expressions[i].Accept(this);
 
-            return 0;
+            return null;
         }
 
-        public int Visit(VarExpression expression)
+        public CobType? Visit(VarExpression expression)
         {
-            foreach (var decl in expression.Declarations)
+            for (var i = 0; i < expression.Declarations.Count; ++i)
             {
-                tmpValue = null;
-                decl.Initializer?.Accept(this);
+                var decl = expression.Declarations[i];
+                var rhsType = decl.Initializer?.Accept(this);
 
-                if (CurrentFunction != null && tmpValue != null)
+                if (CurrentFunction != null && rhsType != null) // Local Decl
                 {
-                    tmpValue.Name = decl.Name;
-                    var local = CurrentFunction.AllocateLocal(tmpValue);
+                    var local = CurrentFunction.AllocateLocal(new CobVariable(decl.Name, rhsType));
                     var reg = CurrentFunction.FreeRegister();
                     CurrentFunction.Body.EmitLR(Opcode.Move, local, reg);
                 }
-                else if (CurrentFunction == null && tmpValue != null)
+                else if (CurrentFunction == null && rhsType != null) // Global Decl
                 {
-                    tmpValue.Name = decl.Name;
-                    tmpValue.Type.Function.Name = decl.Name;
-                    AllocateGlobal(tmpValue);
+                    //rhsType.Function.Name = decl.Name;
+                    AllocateGlobal(new CobVariable(decl.Name, rhsType));
+
+                    // TODO Throw exception if export declared outside root level
+                    // TODO Throw exception if export declared on non-function?
+                    if (expression.Type == TokenType.Export)
+                        Exports.Add(decl.Name, rhsType.Function.Name);
                 }
-                
-                if (expression.Type == TokenType.Export)
-                    Exports.Add(decl.Name);
             }
 
-            return 0;
+            return null;
         }
 
-        public int Visit(ImportExpression expression)
+        public CobType? Visit(ImportExpression expression)
         {
             Imports.Add(new Import
             {
@@ -98,40 +96,35 @@ namespace Compiler.CodeGeneration
                 }
             }
             
-            return 0;
+            return null;
         }
 
-        public int Visit(ArtifactExpression expression)
+        public CobType? Visit(ArtifactExpression expression)
         {
-            Artifact = new Artifact
-            {
-                TargetPlatform = expression.TargetPlaform,
-                Filename = expression.Filename
-            };
-
-            return 0;
+            Artifacts.Add(expression);
+            return null;
         }
 
-        public int Visit(ReturnStatement expression)
+        public CobType? Visit(ReturnStatement expression)
         {
             if (expression.Expression == null)
                 CurrentFunction.Body.Emit(Opcode.Return);
             else
             {
-                expression.Expression.Accept(this);
+                var rhsType = expression.Expression.Accept(this);
                 if (CurrentFunction.ReturnType.Type == CobPrimitive.None)
-                    CurrentFunction.ReturnType = tmpValue.Type;
-                else if (CurrentFunction.ReturnType != tmpValue.Type)
+                    CurrentFunction.ReturnType = rhsType;
+                else if (CurrentFunction.ReturnType != rhsType)
                     throw new Exception("Return value does not match function return type"); // TODO
                 
                 var reg = CurrentFunction.FreeRegister();
                 CurrentFunction.Body.EmitR(Opcode.Return, reg);
             }
 
-            return 0;
+            return null;
         }
 
-        public int Visit(AheadOfTimeExpression expression)
+        public CobType? Visit(AheadOfTimeExpression expression)
         {
             var evalType = new CobType(CobPrimitive.Signed, 32); // TODO How do we even determine this correctly??
             var function = new Function(
@@ -156,13 +149,11 @@ namespace Compiler.CodeGeneration
 
             var reg = CurrentFunction.AllocateRegister();
             CurrentFunction.Body.EmitRI(Opcode.Move, reg, result);
-
-            tmpValue = new CobVariable("literal", evalType);
-
-            return 0;
+            
+            return evalType;
         }
 
-        public int Visit(FunctionExpression expression)
+        public CobType? Visit(FunctionExpression expression)
         {
             var function = new Function(
                 expression.Name,
@@ -181,16 +172,11 @@ namespace Compiler.CodeGeneration
             
             functionStack.Pop();
             Functions.Add(function);
-
-            tmpValue = new CobVariable(
-                function.Name,
-                new CobType(CobPrimitive.Function, 0, function: function)
-            );
-
-            return 0;
+            
+            return new CobType(CobPrimitive.Function, 0, function: function);
         }
 
-        public int Visit(BinaryOperatorExpression expression)
+        public CobType? Visit(BinaryOperatorExpression expression)
         {
             expression.Left.Accept(this);
             expression.Right.Accept(this);
@@ -217,10 +203,10 @@ namespace Compiler.CodeGeneration
             var c = CurrentFunction.AllocateRegister();
             CurrentFunction.Body.EmitRR(Opcode.Move, c, a);
 
-            return 0;
+            return new CobType(CobPrimitive.Signed, 32);
         }
 
-        public int Visit(BlockExpression expression)
+        public CobType? Visit(BlockExpression expression)
         {
             for (var i = 0; i < expression.Expressions.Count; i++)
             {
@@ -228,10 +214,10 @@ namespace Compiler.CodeGeneration
                 expr.Accept(this);
             }
 
-            return 0;
+            return null;
         }
 
-        public int Visit(CallExpression expression)
+        public CobType? Visit(CallExpression expression)
         {
             // TODO Parameters
             // TODO Calling convention?
@@ -253,15 +239,15 @@ namespace Compiler.CodeGeneration
             var callee = Functions[globalIdx];
             if (callee.ReturnType.Type != CobPrimitive.None)
             {
-                tmpValue = new CobVariable("$return_value$", callee.ReturnType);
                 var reg = CurrentFunction.AllocateRegister();
                 CurrentFunction.Body.EmitRR(Opcode.Move, reg, 0);
+                return callee.ReturnType;
             }
             
-            return 0;
+            return new CobType(CobPrimitive.None, 0);
         }
 
-        public int Visit(IdentifierExpression expression)
+        public CobType? Visit(IdentifierExpression expression)
         {
             int idx = -1;
 
@@ -272,7 +258,7 @@ namespace Compiler.CodeGeneration
             {
                 idx = CurrentFunction.FindLocal(expression.Value);
                 CurrentFunction.Body.EmitRL(Opcode.Move, reg, idx);
-                return 0;
+                return CurrentFunction.Locals[idx].Type;
             }
 
             // GLOBALS
@@ -280,50 +266,48 @@ namespace Compiler.CodeGeneration
             {
                 idx = FindGlobal(expression.Value);
                 CurrentFunction.Body.EmitRG(Opcode.Move, reg, idx);
-                return 0;
+                return Globals[idx].Type;
             }
 
             throw new Exception($"Undeclared identifier {expression.Value}");
-            
-            return 0;
+
+            return null;
         }
 
-        public int Visit(NumberExpression expression)
+        public CobType? Visit(NumberExpression expression)
         {
             var reg = CurrentFunction.AllocateRegister();
             CurrentFunction.Body.EmitRI(Opcode.Move, reg, expression.LongValue);
-
-            tmpValue = new CobVariable("literal", new CobType(CobPrimitive.Signed, 32));
-
-            return 0;
+            
+            return new CobType(CobPrimitive.Signed, 32);
         }
 
-        public int Visit(StringExpression expression)
+        public CobType? Visit(StringExpression expression)
         {
             var byteCount = Encoding.UTF8.GetByteCount(expression.Value);
             var data = new byte[byteCount + 1];
             Encoding.UTF8.GetBytes(expression.Value, 0, expression.Value.Length, data, 0);
 
-            tmpValue = new CobVariable(
-                $"string{Globals.Count}",
-                new CobType(
-                    CobPrimitive.Array,
-                    expression.Value.Length,
-                    new CobType(CobPrimitive.Unsigned, 8)
-                )
-            ) { Data = data };
+            var type = new CobType(
+                CobPrimitive.Array,
+                expression.Value.Length,
+                new CobType(CobPrimitive.Unsigned, 8)
+            );
 
-            var global = AllocateGlobal(tmpValue);
+            var global = AllocateGlobal(new CobVariable(
+                $"string{Globals.Count}",
+                type
+            ) { Data = data });
 
             var reg = CurrentFunction.AllocateRegister();
             CurrentFunction.Body.EmitRG(Opcode.Move, reg, global);
 
-            return 0;
+            return type;
         }
 
-        public int Visit(EmptyExpression expression)
+        public CobType? Visit(EmptyExpression expression)
         {
-            return 0;
+            return null;
         }
 
         public int FindGlobal(string name)
@@ -343,13 +327,6 @@ namespace Compiler.CodeGeneration
 
             return idx;
         }
-    }
-
-    public sealed record Artifact
-    {
-        public string TargetPlatform { get; init; }
-
-        public string? Filename { get; init; }
     }
 
     internal enum Opcode
@@ -383,11 +360,30 @@ namespace Compiler.CodeGeneration
 
         public byte Size { get; init; }
 
-        public long Value { get; set; } // TODO init only? need to mutate for Label
+        public long Value { get; init; }
 
         public override string ToString()
         {
-            return $"{Type.ToString()[..3]}{Value}.{Size}";
+            switch (Type)
+            {
+                case OperandType.ImmediateSigned:
+                    return Value.ToString("D");
+                case OperandType.ImmediateUnsigned:
+                    return ((ulong)Value).ToString("D");
+                case OperandType.ImmediateFloat:
+                    return BitConverter.Int64BitsToDouble(Value).ToString("F");
+                case OperandType.Register:
+                case OperandType.Pointer:
+                case OperandType.Local:
+                case OperandType.Global:
+                case OperandType.Function:
+                    return Type.ToString()[..1].ToLowerInvariant()
+                         + Value.ToString("G")
+                         + "."
+                         + Size.ToString("G");
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
         }
     }
 
@@ -551,8 +547,8 @@ namespace Compiler.CodeGeneration
 
         public void FixLabels()
         {
-            foreach (var label in labels)
-                label.Fix();
+            for (var i = 0; i < labels.Count; ++i)
+                labels[i].Fix();
         }
     }
 
@@ -585,8 +581,8 @@ namespace Compiler.CodeGeneration
         {
             for (var i = 0; i < patches.Count; i++)
             {
-                var offset = patches[i];
-                buffer.Instructions[offset].A!.Value = labelOffset;
+                //var offset = patches[i];
+                //buffer.Instructions[offset].A!.Value = labelOffset;
             }
         }
 
@@ -605,9 +601,16 @@ namespace Compiler.CodeGeneration
         public Function? FunctionSignature { get; init; }
     }
 
+    internal sealed record Export
+    {
+        public string ExternalName { get; init; }
+
+        public string InternalName { get; init; }
+    }
+
     internal sealed class Function
     {
-        public string Name { get; set; } // TODO HACK DO NOT ALLOW MUTATIONS
+        public string Name { get; } // TODO HACK DO NOT ALLOW MUTATIONS
 
         public List<CobVariable> Locals { get; }
 

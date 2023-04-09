@@ -28,27 +28,14 @@ namespace Compiler
             var compiler = new CodeGeneration.Compiler();
             ast.Accept(compiler);
 
-            t1.Stop();
+            t1.Stop(); // TODO Not the fully story
 
             if (Config.AssemblyVerboseOutput)
                 PrintCompilerState(compiler);
             
-            if (compiler.Artifact != null)
+            if (compiler.Artifacts.Count > 0)
             {
-                // TODO Abstract further
-                var outputFilename = compiler.Artifact.Filename
-                                  ?? Path.ChangeExtension(Path.GetFileName(Config.EntrySourceFile), "exe");
-                switch (compiler.Artifact.TargetPlatform)
-                {
-                    case "pe":
-                    case "PE":
-                        X86Assembler.Assemble(compiler, outputFilename);
-                        break;
-
-                    default:
-                        throw new Exception($"Unsupported artifact platform '{compiler.Artifact.TargetPlatform}'");
-                }
-
+                ArtifactFactory.ProduceFrom(compiler);
                 Console.WriteLine($"Compiled in {t1.ElapsedMilliseconds}ms");
             }
             else
@@ -68,7 +55,7 @@ namespace Compiler
 
         private static void PrintCompilerState(CodeGeneration.Compiler compiler)
         {
-            Console.WriteLine(compiler.Artifact);
+            Console.WriteLine(string.Join("\r\n", compiler.Artifacts));
             
             Console.WriteLine("Imports");
             foreach (var import in compiler.Imports)

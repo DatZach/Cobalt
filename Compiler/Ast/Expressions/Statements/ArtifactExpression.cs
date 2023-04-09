@@ -5,14 +5,26 @@ namespace Compiler.Ast.Expressions.Statements
 {
     internal sealed class ArtifactExpression : Expression
     {
-        public string TargetPlaform { get; }
+        public string Container { get; } // pe, joe
+
+        public IReadOnlyList<string> ContainerParameters { get; } // +gui, +console
+
+        public string Platform { get; } // x86, x86_64, cobalt
 
         public string? Filename { get; }
 
-        public ArtifactExpression(Token token, string targetPlatform, string? filename)
+        public ArtifactExpression(
+            Token token,
+            string container,
+            IReadOnlyList<string> containerParameters,
+            string platform,
+            string? filename
+        )
             : base(token)
         {
-            TargetPlaform = targetPlatform;
+            Container = container;
+            ContainerParameters = containerParameters;
+            Platform = platform;
             Filename = filename;
         }
 

@@ -1,48 +1,71 @@
 ﻿using System.Diagnostics;
 using System.Text;
-using System.Xml.Linq;
+using Compiler.Ast.Expressions.Statements;
 
 namespace Compiler.CodeGeneration.Platform
 {
-    internal static class X86Assembler
+    internal sealed class X86Assembler : ArtifactAssembler
     {
         public const string DefaultFasmPath = @"C:\Tools\fasmw17330\fasm.exe";
 
-        private static Compiler HACK_Compiler;
+        public override IReadOnlyList<string> SupportedPlatforms => new[] { "x86", "x86_64" };
 
-        public static void Assemble(Compiler compiler, string outputFilename)
+        public override string DefaultExtension => "exe";
+
+        private Compiler compiler;
+
+        public override void Assemble(Compiler compiler, ArtifactExpression artifact, string outputFilename)
         {
-            HACK_Compiler = compiler; // HACK I made this a static class but I don't want to pass this further
+            this.compiler = compiler;
+
             var buffer = new MachineCodeBuffer();
-            EmitProgram(buffer, compiler);
+            EmitProgram(buffer, artifact);
             Assemble(buffer, outputFilename);
         }
 
-        private static void EmitProgram(MachineCodeBuffer buffer, Compiler compiler)
+        private void EmitProgram(MachineCodeBuffer buffer, ArtifactExpression artifact)
         {
-            compiler.Imports.Add(new Import
-            {
-                Library = "kernel32",
-                SymbolName = "ExitProcess"
-            });
-
-            var hasEntryPoint = compiler.Exports.Contains("Main");
+            var hasEntryPoint = compiler.Exports.TryGetValue("Main", out var entryPointName);
 
             // Preamble
-            buffer.EmitLine("format PE console"); // TODO GUI subsystem
+            buffer.Emit("format ");
+            buffer.Emit(artifact.Container);
+            buffer.Emit(" ");
+            if (artifact.ContainerParameters.Count > 0)
+                buffer.Emit(string.Join(' ', artifact.ContainerParameters));
+            else
+                buffer.Emit("console");
+            buffer.EmitLine("");
             if (hasEntryPoint) buffer.EmitLine("entry start");
-            buffer.EmitLine("use32"); // TODO 64bit
+            buffer.EmitLine(artifact.Platform switch
+            {
+                "x86" => "use32",
+                "x86_64" => "use64"
+            });
             buffer.EmitLine("include 'include/win32a.inc'");
 
-            buffer.EmitLine("section '.text' code executable");
-            buffer.EmitLine("start:");
-            buffer.EmitLine("        call Main");
-            buffer.EmitLine("        push 0");
-            buffer.EmitLine("        call [ExitProcess]");
-
             // Text
-            foreach (var f in compiler.Functions)
+            buffer.EmitLine("section '.text' code executable");
+
+            // Entry Point
+            if (hasEntryPoint)
             {
+                buffer.EmitLine("start:");
+                buffer.EmitLine("        call " + entryPointName);
+                buffer.EmitLine("        push 0");
+                buffer.EmitLine("        call [ExitProcess]");
+
+                compiler.Imports.Add(new Import
+                {
+                    Library = "kernel32",
+                    SymbolName = "ExitProcess"
+                });
+            }
+
+            for (var i = 0; i < compiler.Functions.Count; i++)
+            {
+                var f = compiler.Functions[i];
+
                 // TODO HACK GARBAGE BAD CODE SLOW
                 if (compiler.Imports.Any(x => x.SymbolName == f.Name))
                     continue;
@@ -52,24 +75,24 @@ namespace Compiler.CodeGeneration.Platform
                 buffer.EmitLine("push ebp");
                 buffer.EmitLine("mov ebp, esp");
                 buffer.EmitLine($"sub esp, {f.Locals.Count * 4}"); // TODO Calculate actual stack space required
-                for (var i = 3; i < 32; i++) // TODO 64
+                for (var j = 3; j < 32; j++) // TODO 64
                 {
-                    if ((f.ClobberedRegisters & (1u << i)) == 0)
+                    if ((f.ClobberedRegisters & (1u << j)) == 0)
                         continue;
 
                     // EAX, ECX, EDX are not preserved in cdecl TODO support others
-                    buffer.EmitLine($"push {GetRegisterName(i)}");
+                    buffer.EmitLine($"push {GetRegisterName(j)}");
                 }
 
                 EmitIntermediateInstructionBuffer(buffer, f.Body);
 
                 buffer.EmitLine(".return:");
-                for (var i = 32 - 1; i >= 3; --i) // TODO 64 + stdcall, naked, etc
+                for (var j = 32 - 1; j >= 3; --j) // TODO 64 + stdcall, naked, etc
                 {
-                    if ((f.ClobberedRegisters & (1u << i)) == 0)
+                    if ((f.ClobberedRegisters & (1u << j)) == 0)
                         continue;
-                    
-                    buffer.EmitLine($"pop {GetRegisterName(i)}");
+
+                    buffer.EmitLine($"pop {GetRegisterName(j)}");
                 }
 
                 buffer.EmitLine("leave");
@@ -123,7 +146,7 @@ namespace Compiler.CodeGeneration.Platform
             }
         }
 
-        private static void EmitIntermediateInstructionBuffer(MachineCodeBuffer buffer, InstructionBuffer body)
+        private void EmitIntermediateInstructionBuffer(MachineCodeBuffer buffer, InstructionBuffer body)
         {
             for (var i = 0; i < body.Instructions.Count; i++)
             {
@@ -230,7 +253,7 @@ namespace Compiler.CodeGeneration.Platform
             }
         }
 
-        private static string GetOperandString(Operand? operand)
+        private string GetOperandString(Operand? operand)
         {
             if (operand == null) throw new ArgumentNullException(nameof(operand));
 
@@ -254,8 +277,8 @@ namespace Compiler.CodeGeneration.Platform
                     return $"rdata_{operand.Value}";
                 case OperandType.Function:
                 {
-                    var functionName = HACK_Compiler.Functions[(int)operand.Value].Name;
-                    if (HACK_Compiler.Imports.Any(x => x.SymbolName == functionName)) // TODO Probably could improve
+                    var functionName = compiler.Functions[(int)operand.Value].Name;
+                    if (compiler.Imports.Any(x => x.SymbolName == functionName)) // TODO Probably could improve
                         return "[" + functionName + "]";
 
                     return functionName;
