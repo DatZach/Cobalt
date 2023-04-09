@@ -1,4 +1,5 @@
-﻿using Compiler.Ast.Expressions.Statements;
+﻿using System;
+using Compiler.Ast.Expressions.Statements;
 
 namespace Compiler.CodeGeneration
 {
@@ -8,6 +9,8 @@ namespace Compiler.CodeGeneration
 
         static ArtifactFactory()
         {
+            platforms = new Dictionary<string, ArtifactAssembler>();
+
             var asm = typeof(ArtifactFactory).Assembly;
 
             var types = asm.GetTypes().Where(myType =>
@@ -20,7 +23,7 @@ namespace Compiler.CodeGeneration
             }
         }
 
-        public static void ProduceFrom(Compiler compiler)
+        public static void Assemble(Compiler compiler)
         {
             foreach (var artifact in compiler.Artifacts)
             {

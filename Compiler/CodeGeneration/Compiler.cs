@@ -1,4 +1,6 @@
-﻿using System.Text;
+﻿using System.Reflection.Emit;
+using System;
+using System.Text;
 using Compiler.Ast.Expressions;
 using Compiler.Ast.Expressions.Statements;
 using Compiler.Ast.Visitors;
@@ -74,28 +76,42 @@ namespace Compiler.CodeGeneration
 
         public CobType? Visit(ImportExpression expression)
         {
-            Imports.Add(new Import
+            if (expression.SymbolName == null)
             {
-                Library = expression.Library,
-                SymbolName = expression.SymbolName,
-                //FunctionSignature = expression.FunctionSignture
-            });
-
-            if (expression.SymbolName != null)
+                // TODO Library import
+            }
+            else
             {
-                AllocateGlobal(new CobVariable(expression.SymbolName, new CobType(CobPrimitive.Function, 0)));
-
+                // Symbol import
+                Function? function;
                 if (expression.FunctionSignture != null)
                 {
-                    Functions.Add(new Function(
+                    function = new Function(
                         expression.SymbolName,
                         expression.FunctionSignture.CallingConvention,
                         expression.FunctionSignture.Parameters,
                         new CobType(CobPrimitive.None, 0)
+                    ) { IsNativeImport = true };
+                }
+                else
+                    function = null;
+
+                Imports.Add(new Import
+                {
+                    Library = expression.Library,
+                    SymbolName = expression.SymbolName,
+                    Function = function
+                });
+
+                if (function != null)
+                {
+                    AllocateGlobal(new CobVariable(
+                        expression.SymbolName,
+                        new CobType(CobPrimitive.Function, 0, function: function)
                     ));
                 }
             }
-            
+
             return null;
         }
 
@@ -136,6 +152,7 @@ namespace Compiler.CodeGeneration
 
             functionStack.Push(function);
             expression.Expression.Accept(this);
+            // TODO Error if aot'd void
             var retReg = CurrentFunction.FreeRegister();
             CurrentFunction.Body.EmitR(Opcode.Return, retReg);
 
@@ -230,18 +247,16 @@ namespace Compiler.CodeGeneration
                 CurrentFunction.Body.EmitR(Opcode.Push, reg);
             }
 
-            // TODO Dive LHS expession
-            var functionName = expression.FunctionExpression.Token.Value;
-            var globalIdx = Functions.FindIndex(x => x.Name == functionName);
-            if (globalIdx == -1) throw new Exception($"Undeclared identifier {functionName}");
-            CurrentFunction.Body.EmitF(Opcode.Call, globalIdx);
-
-            var callee = Functions[globalIdx];
-            if (callee.ReturnType.Type != CobPrimitive.None)
+            var functionType = expression.FunctionExpression.Accept(this);
+            var freg = CurrentFunction.FreeRegister();
+            
+            CurrentFunction.Body.EmitR(Opcode.Call, freg);
+            
+            if (functionType.Function.ReturnType.Type != CobPrimitive.None)
             {
                 var reg = CurrentFunction.AllocateRegister();
                 CurrentFunction.Body.EmitRR(Opcode.Move, reg, 0);
-                return callee.ReturnType;
+                return functionType.Function.ReturnType;
             }
             
             return new CobType(CobPrimitive.None, 0);
@@ -249,24 +264,29 @@ namespace Compiler.CodeGeneration
 
         public CobType? Visit(IdentifierExpression expression)
         {
-            int idx = -1;
+            int idx;
 
             var reg = CurrentFunction.AllocateRegister();
 
             // LOCALS
-            if (CurrentFunction != null)
+            if ((idx = CurrentFunction.FindLocal(expression.Value)) != -1)
             {
-                idx = CurrentFunction.FindLocal(expression.Value);
                 CurrentFunction.Body.EmitRL(Opcode.Move, reg, idx);
                 return CurrentFunction.Locals[idx].Type;
             }
 
             // GLOBALS
-            if (idx == -1)
+            if ((idx = FindGlobal(expression.Value)) != -1)
             {
-                idx = FindGlobal(expression.Value);
                 CurrentFunction.Body.EmitRG(Opcode.Move, reg, idx);
                 return Globals[idx].Type;
+            }
+
+            // FUCNTIONS
+            if ((idx = Functions.FindIndex(x => x.Name == expression.Value)) != -1)
+            {
+                CurrentFunction.Body.EmitRF(Opcode.Move, reg, idx);
+                return new CobType(CobPrimitive.Function, 0, function: Functions[idx]);
             }
 
             throw new Exception($"Undeclared identifier {expression.Value}");
@@ -432,6 +452,12 @@ namespace Compiler.CodeGeneration
             labels = new List<Label>(4);
         }
 
+        public void FixLabels()
+        {
+            for (var i = 0; i < labels.Count; ++i)
+                labels[i].Fix();
+        }
+
         public void Emit(Opcode opcode)
         {
             instructions.Add(new Instruction
@@ -544,11 +570,15 @@ namespace Compiler.CodeGeneration
                 A = new Operand { Type = OperandType.Function, Size = PlatformWordWidth, Value = funA }
             });
         }
-
-        public void FixLabels()
+        
+        public void EmitRF(Opcode opcode, int regA, int funB)
         {
-            for (var i = 0; i < labels.Count; ++i)
-                labels[i].Fix();
+            instructions.Add(new Instruction
+            {
+                Opcode = opcode,
+                A = new Operand { Type = OperandType.Register, Size = PlatformWordWidth, Value = regA },
+                B = new Operand { Type = OperandType.Function, Size = PlatformWordWidth, Value = funB }
+            });
         }
     }
 
@@ -598,7 +628,7 @@ namespace Compiler.CodeGeneration
 
         public string? SymbolName { get; init; }
 
-        public Function? FunctionSignature { get; init; }
+        public Function? Function { get; init; }
     }
 
     internal sealed record Export
@@ -610,13 +640,15 @@ namespace Compiler.CodeGeneration
 
     internal sealed class Function
     {
-        public string Name { get; } // TODO HACK DO NOT ALLOW MUTATIONS
+        public string Name { get; }
 
         public List<CobVariable> Locals { get; }
 
         public ulong ClobberedRegisters { get; private set; }
 
         public CallingConvention CallingConvention { get; }
+
+        public bool IsNativeImport { get; init; } // TODO init??
 
         public IReadOnlyList<FunctionExpression.Parameter> Parameters { get; }
 
@@ -723,7 +755,7 @@ namespace Compiler.CodeGeneration
 
         public override string ToString()
         {
-            return $"{Name,20}{Type} = {Data}";
+            return $"{Name,-20}{Type} = {Data}";
         }
     }
 

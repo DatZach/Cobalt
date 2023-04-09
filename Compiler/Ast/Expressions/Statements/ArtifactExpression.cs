@@ -1,4 +1,5 @@
-﻿using Compiler.Ast.Visitors;
+﻿using System.Diagnostics;
+using Compiler.Ast.Visitors;
 using Compiler.Lexer;
 
 namespace Compiler.Ast.Expressions.Statements
@@ -28,6 +29,7 @@ namespace Compiler.Ast.Expressions.Statements
             Filename = filename;
         }
 
+        [DebuggerStepThrough]
         public override T Accept<T>(IExpressionVisitor<T> visitor)
         {
             return visitor.Visit(this);

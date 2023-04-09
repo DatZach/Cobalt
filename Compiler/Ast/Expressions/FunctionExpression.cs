@@ -1,6 +1,7 @@
 ﻿using Compiler.Lexer;
 using Compiler.Ast.Visitors;
 using Compiler.CodeGeneration;
+using System.Diagnostics;
 
 namespace Compiler.Ast.Expressions
 {
@@ -31,6 +32,7 @@ namespace Compiler.Ast.Expressions
             CallingConvention = callingConvention;
         }
 
+        [DebuggerStepThrough]
         public override T Accept<T>(IExpressionVisitor<T> visitor)
         {
             return visitor.Visit(this);

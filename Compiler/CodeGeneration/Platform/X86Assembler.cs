@@ -13,10 +13,12 @@ namespace Compiler.CodeGeneration.Platform
         public override string DefaultExtension => "exe";
 
         private Compiler compiler;
+        private bool is64Bit;
 
         public override void Assemble(Compiler compiler, ArtifactExpression artifact, string outputFilename)
         {
             this.compiler = compiler;
+            is64Bit = artifact.Platform == "x86_64";
 
             var buffer = new MachineCodeBuffer();
             EmitProgram(buffer, artifact);
@@ -37,11 +39,7 @@ namespace Compiler.CodeGeneration.Platform
                 buffer.Emit("console");
             buffer.EmitLine("");
             if (hasEntryPoint) buffer.EmitLine("entry start");
-            buffer.EmitLine(artifact.Platform switch
-            {
-                "x86" => "use32",
-                "x86_64" => "use64"
-            });
+            buffer.EmitLine(is64Bit ? "use64" : "use32");
             buffer.EmitLine("include 'include/win32a.inc'");
 
             // Text
@@ -65,9 +63,7 @@ namespace Compiler.CodeGeneration.Platform
             for (var i = 0; i < compiler.Functions.Count; i++)
             {
                 var f = compiler.Functions[i];
-
-                // TODO HACK GARBAGE BAD CODE SLOW
-                if (compiler.Imports.Any(x => x.SymbolName == f.Name))
+                if (f.IsNativeImport)
                     continue;
 
                 buffer.EmitLine(f.Name + ":");
@@ -274,7 +270,16 @@ namespace Compiler.CodeGeneration.Platform
                 case OperandType.Local: // TODO Use size
                     return $"dword [ebp - {(operand.Value + 1) * 4}]";
                 case OperandType.Global:
+                {
+                    var fun = compiler.Globals[(int)operand.Value];
+                    if (fun.Type.Type == CobPrimitive.Function)
+                    {
+                        if (fun.Type.Function.IsNativeImport)
+                            return "[" + fun.Type.Function.Name + "]";
+                        return fun.Type.Function.Name;
+                    }
                     return $"rdata_{operand.Value}";
+                }
                 case OperandType.Function:
                 {
                     var functionName = compiler.Functions[(int)operand.Value].Name;

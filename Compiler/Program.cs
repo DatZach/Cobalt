@@ -35,7 +35,7 @@ namespace Compiler
             
             if (compiler.Artifacts.Count > 0)
             {
-                ArtifactFactory.ProduceFrom(compiler);
+                ArtifactFactory.Assemble(compiler);
                 Console.WriteLine($"Compiled in {t1.ElapsedMilliseconds}ms");
             }
             else
