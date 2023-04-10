@@ -43,6 +43,8 @@ namespace Compiler.Ast.Expressions
             public string Name { get; init; }
 
             public string Type { get; init; }
+
+            public bool IsSpread { get; init; }
         }
     }
 }

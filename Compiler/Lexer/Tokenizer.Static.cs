@@ -14,8 +14,9 @@ namespace Compiler.Lexer
             {
                 [";"] = TokenType.Semicolon,
                 [","] = TokenType.Comma,
+                [":"] = TokenType.Colon,
                 ["="] = TokenType.Assign,
-                [":="] = TokenType.Assign,
+                ["..."] = TokenType.Spread,
 
                 ["("] = TokenType.LeftParen,
                 [")"] = TokenType.RightParen,
@@ -33,7 +34,7 @@ namespace Compiler.Lexer
                 ["|"] = TokenType.BitOr,
                 ["^"] = TokenType.BitXor,
 
-                ["=>"] = TokenType.FatArrow,
+                ["=>"] = TokenType.FatArrow
             };
             
             Keywords = new Dictionary<string, TokenType>
@@ -48,7 +49,8 @@ namespace Compiler.Lexer
 
                 ["machine"] = TokenType.Machine,
                 ["stdcall"] = TokenType.StdCall,
-                ["ccall"] = TokenType.CCall
+                ["ccall"] = TokenType.CCall,
+                ["nakedcall"] = TokenType.NakedCall
             };
         }
 

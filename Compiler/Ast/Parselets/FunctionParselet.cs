@@ -13,16 +13,26 @@ namespace Compiler.Ast.Parselets
             parser.Take(TokenType.LeftParen);
             if (!parser.Match(TokenType.RightParen))
             {
+                var hasSpread = false;
                 var lParameters = new List<FunctionExpression.Parameter>(4);
                 while (!parser.Match(TokenType.RightParen))
                 {
                     var name = parser.Take(TokenType.Identifier);
-                    
+                    parser.Take(TokenType.Colon);
+                    var isSpread = parser.MatchAndTakeToken(TokenType.Spread) != null;
                     var type = parser.Take(TokenType.Identifier);
+                    parser.MatchAndTakeToken(TokenType.Comma);
+                    
+                    if (isSpread && hasSpread)
+                        throw new Exception("Function cannot define multiple spread parameters");
+
+                    hasSpread = hasSpread || isSpread;
+
                     lParameters.Add(new FunctionExpression.Parameter
                     {
                         Name = name.Value,
-                        Type = type.Value
+                        Type = type.Value,
+                        IsSpread = isSpread
                     });
                 }
                 

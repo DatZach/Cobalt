@@ -140,6 +140,9 @@ namespace Compiler.CodeGeneration.Platform
 
                 buffer.EmitLine($"import {import.Library}, {import.SymbolName}, '{import.SymbolName}'");
             }
+
+            // Exports
+            // TODO
         }
 
         private void EmitIntermediateInstructionBuffer(MachineCodeBuffer buffer, InstructionBuffer body)

@@ -237,18 +237,29 @@ namespace Compiler.CodeGeneration
 
         public CobType? Visit(CallExpression expression)
         {
-            // TODO Parameters
+            var functionType = expression.FunctionExpression.Accept(this);
+            if (functionType == null || functionType.Type != eCobType.Function
+            ||  functionType.Function == null)
+                throw new Exception($"Cannot call type '{functionType}'");
+
+            var parameters = functionType.Function.Parameters;
+            var arguments = expression.Arguments;
+            if (arguments.Count != parameters.Count
+            && (parameters.Count == 0 || (parameters.Count > 0 && !parameters[^1].IsSpread)))
+                throw new Exception($"Expected {parameters.Count} parameters, but received {arguments.Count} instead");
+            
             // TODO Calling convention?
-            var args = expression.Arguments;
-            for (int i = args.Count - 1; i >= 0; --i)
+            
+            for (int i = arguments.Count - 1; i >= 0; --i)
             {
-                args[i].Accept(this);
+                var argType = arguments[i].Accept(this);
+                //if (argType != CobType.FromString(parameters[i].Type))
+                //    throw new Exception($"Expected '{parameters[i].Type}' but received '{argType}' instead");
 
                 var reg = CurrentFunction.FreeRegister();
                 CurrentFunction.Body.EmitR(Opcode.Push, reg);
             }
-
-            var functionType = expression.FunctionExpression.Accept(this);
+            
             var freg = CurrentFunction.FreeRegister();
             
             CurrentFunction.Body.EmitR(Opcode.Call, freg);
@@ -806,6 +817,11 @@ namespace Compiler.CodeGeneration
             if (left == null)
                 return false;
 
+            if (left.Type == eCobType.Array && right == eCobType.String)
+                return true;
+            if (right == eCobType.Array && left.Type == eCobType.String)
+                return true;
+
             return left.Type == right;
         }
 
@@ -815,13 +831,15 @@ namespace Compiler.CodeGeneration
                 return None;
 
             if (typeName[0] == 's' && char.IsDigit(typeName[1]))
-                return new CobType(eCobType.Signed, int.Parse(typeName[1..2]));
+                return new CobType(eCobType.Signed, int.Parse(typeName[1..3]));
             if (typeName[0] == 'u' && char.IsDigit(typeName[1]))
-                return new CobType(eCobType.Unsigned, int.Parse(typeName[1..2]));
+                return new CobType(eCobType.Unsigned, int.Parse(typeName[1..3]));
             if (typeName[0] == 'f' && char.IsDigit(typeName[1]))
-                return new CobType(eCobType.Float, int.Parse(typeName[1..2]));
+                return new CobType(eCobType.Float, int.Parse(typeName[1..3]));
             if (typeName[0] == 'f' && typeName[1] == 'n')
-                return new CobType(eCobType.Function);
+                return new CobType(eCobType.Function, 0);
+            if (typeName == "string")
+                return new CobType(eCobType.String, 0);
 
             // TODO Arrays, Traits
 

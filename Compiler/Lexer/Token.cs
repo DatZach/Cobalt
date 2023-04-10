@@ -33,6 +33,7 @@
 
         CCall,
         StdCall,
+        NakedCall,
         Machine,
 
         Semicolon,
@@ -41,6 +42,8 @@
         LeftBrace,
         RightBrace,
         Comma,
+        Colon,
+        Spread,
 
         FatArrow,
         Add,
