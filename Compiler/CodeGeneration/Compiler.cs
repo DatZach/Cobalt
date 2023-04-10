@@ -90,7 +90,7 @@ namespace Compiler.CodeGeneration
                         expression.SymbolName,
                         expression.FunctionSignture.CallingConvention,
                         expression.FunctionSignture.Parameters,
-                        new CobType(CobPrimitive.None, 0)
+                        new CobType(eCobType.None, 0)
                     ) { IsNativeImport = true };
                 }
                 else
@@ -107,7 +107,7 @@ namespace Compiler.CodeGeneration
                 {
                     AllocateGlobal(new CobVariable(
                         expression.SymbolName,
-                        new CobType(CobPrimitive.Function, 0, function: function)
+                        new CobType(eCobType.Function, 0, function: function)
                     ));
                 }
             }
@@ -128,7 +128,7 @@ namespace Compiler.CodeGeneration
             else
             {
                 var rhsType = expression.Expression.Accept(this);
-                if (CurrentFunction.ReturnType.Type == CobPrimitive.None)
+                if (CurrentFunction.ReturnType.Type == eCobType.None)
                     CurrentFunction.ReturnType = rhsType;
                 else if (CurrentFunction.ReturnType != rhsType)
                     throw new Exception("Return value does not match function return type"); // TODO
@@ -142,17 +142,18 @@ namespace Compiler.CodeGeneration
 
         public CobType? Visit(AheadOfTimeExpression expression)
         {
-            var evalType = new CobType(CobPrimitive.Signed, 32); // TODO How do we even determine this correctly??
             var function = new Function(
                 "$aot_eval$",
                 CallingConvention.CCall,
                 Array.Empty<FunctionExpression.Parameter>(),
-                evalType
+                CobType.None
             );
 
             functionStack.Push(function);
-            expression.Expression.Accept(this);
-            // TODO Error if aot'd void
+            var evalType = expression.Expression.Accept(this);
+            if (evalType == null || evalType == eCobType.None)
+                throw new Exception("Cannot evaluate ahead-of-time expression on void");
+            function.ReturnType = evalType;
             var retReg = CurrentFunction.FreeRegister();
             CurrentFunction.Body.EmitR(Opcode.Return, retReg);
 
@@ -176,7 +177,7 @@ namespace Compiler.CodeGeneration
                 expression.Name,
                 expression.CallingConvention,
                 expression.Parameters,
-                new CobType(CobPrimitive.None, 0) // TODO expression.ReturnType
+                CobType.FromString(expression.ReturnType)
             );
 
             functionStack.Push(function);
@@ -190,7 +191,7 @@ namespace Compiler.CodeGeneration
             functionStack.Pop();
             Functions.Add(function);
             
-            return new CobType(CobPrimitive.Function, 0, function: function);
+            return new CobType(eCobType.Function, 0, function: function);
         }
 
         public CobType? Visit(BinaryOperatorExpression expression)
@@ -220,7 +221,7 @@ namespace Compiler.CodeGeneration
             var c = CurrentFunction.AllocateRegister();
             CurrentFunction.Body.EmitRR(Opcode.Move, c, a);
 
-            return new CobType(CobPrimitive.Signed, 32);
+            return new CobType(eCobType.Signed, 32);
         }
 
         public CobType? Visit(BlockExpression expression)
@@ -252,14 +253,14 @@ namespace Compiler.CodeGeneration
             
             CurrentFunction.Body.EmitR(Opcode.Call, freg);
             
-            if (functionType.Function.ReturnType.Type != CobPrimitive.None)
+            if (functionType.Function.ReturnType != eCobType.None)
             {
                 var reg = CurrentFunction.AllocateRegister();
                 CurrentFunction.Body.EmitRR(Opcode.Move, reg, 0);
                 return functionType.Function.ReturnType;
             }
             
-            return new CobType(CobPrimitive.None, 0);
+            return CobType.None;
         }
 
         public CobType? Visit(IdentifierExpression expression)
@@ -286,7 +287,7 @@ namespace Compiler.CodeGeneration
             if ((idx = Functions.FindIndex(x => x.Name == expression.Value)) != -1)
             {
                 CurrentFunction.Body.EmitRF(Opcode.Move, reg, idx);
-                return new CobType(CobPrimitive.Function, 0, function: Functions[idx]);
+                return new CobType(eCobType.Function, 0, function: Functions[idx]);
             }
 
             throw new Exception($"Undeclared identifier {expression.Value}");
@@ -299,7 +300,7 @@ namespace Compiler.CodeGeneration
             var reg = CurrentFunction.AllocateRegister();
             CurrentFunction.Body.EmitRI(Opcode.Move, reg, expression.LongValue);
             
-            return new CobType(CobPrimitive.Signed, 32);
+            return new CobType(eCobType.Signed, 32);
         }
 
         public CobType? Visit(StringExpression expression)
@@ -309,9 +310,9 @@ namespace Compiler.CodeGeneration
             Encoding.UTF8.GetBytes(expression.Value, 0, expression.Value.Length, data, 0);
 
             var type = new CobType(
-                CobPrimitive.Array,
+                eCobType.Array,
                 expression.Value.Length,
-                new CobType(CobPrimitive.Unsigned, 8)
+                new CobType(eCobType.Unsigned, 8)
             );
 
             var global = AllocateGlobal(new CobVariable(
@@ -761,7 +762,9 @@ namespace Compiler.CodeGeneration
 
     internal sealed record CobType
     {
-        public CobPrimitive Type { get; }
+        public readonly static CobType None = eCobType.None;
+
+        public eCobType Type { get; }
 
         public int Size { get; }
 
@@ -769,12 +772,60 @@ namespace Compiler.CodeGeneration
 
         public Function? Function { get; }
 
-        public CobType(CobPrimitive type, int size, CobType? elementType = null, Function? function = null)
+        public CobType(eCobType type, int size, CobType? elementType = null, Function? function = null)
         {
             Type = type;
             Size = size;
             ElementType = elementType;
             Function = function;
+        }
+
+        public static implicit operator CobType(eCobType type)
+        {
+            return new CobType(type, 32);
+        }
+        
+        public override int GetHashCode()
+        {
+            return HashCode.Combine((int)Type, Size, ElementType, Function);
+        }
+
+        // TODO Needed?
+        public static bool operator ==(CobType left, eCobType right)
+        {
+            return EqualsType(left, right);
+        }
+
+        public static bool operator !=(CobType left, eCobType right)
+        {
+            return !EqualsType(left, right);
+        }
+
+        private static bool EqualsType(CobType left, eCobType right)
+        {
+            if (left == null)
+                return false;
+
+            return left.Type == right;
+        }
+
+        public static CobType FromString(string? typeName)
+        {
+            if (typeName == null || typeName.Length < 2)
+                return None;
+
+            if (typeName[0] == 's' && char.IsDigit(typeName[1]))
+                return new CobType(eCobType.Signed, int.Parse(typeName[1..2]));
+            if (typeName[0] == 'u' && char.IsDigit(typeName[1]))
+                return new CobType(eCobType.Unsigned, int.Parse(typeName[1..2]));
+            if (typeName[0] == 'f' && char.IsDigit(typeName[1]))
+                return new CobType(eCobType.Float, int.Parse(typeName[1..2]));
+            if (typeName[0] == 'f' && typeName[1] == 'n')
+                return new CobType(eCobType.Function);
+
+            // TODO Arrays, Traits
+
+            return None;
         }
 
         public override string ToString()
@@ -785,7 +836,7 @@ namespace Compiler.CodeGeneration
         }
     }
 
-    internal enum CobPrimitive
+    internal enum eCobType
     {
         None,
         Signed,

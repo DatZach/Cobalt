@@ -272,7 +272,7 @@ namespace Compiler.CodeGeneration.Platform
                 case OperandType.Global:
                 {
                     var fun = compiler.Globals[(int)operand.Value];
-                    if (fun.Type.Type == CobPrimitive.Function)
+                    if (fun.Type.Type == eCobType.Function)
                     {
                         if (fun.Type.Function.IsNativeImport)
                             return "[" + fun.Type.Function.Name + "]";

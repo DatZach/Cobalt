@@ -8,6 +8,8 @@ namespace Compiler.Ast.Parselets.Statements
     {
         public Expression Parse(Parser parser, Token token)
         {
+            var platform = parser.Take(TokenType.Identifier);
+
             var container = parser.Take(TokenType.Identifier);
             
             IReadOnlyList<string> containerParameters;
@@ -25,8 +27,6 @@ namespace Compiler.Ast.Parselets.Statements
             else
                 containerParameters = Array.Empty<string>();
 
-            var platform = parser.Take(TokenType.Identifier);
-            
             var filename = parser.MatchAndTakeToken(TokenType.String);
 
             return new ArtifactExpression(
