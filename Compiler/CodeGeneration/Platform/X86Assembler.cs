@@ -21,11 +21,11 @@ namespace Compiler.CodeGeneration.Platform
             is64Bit = artifact.Platform == "x86_64";
 
             var buffer = new MachineCodeBuffer();
-            EmitProgram(buffer, artifact);
+            EmitProgram(buffer, artifact, outputFilename);
             Assemble(buffer, outputFilename);
         }
 
-        private void EmitProgram(MachineCodeBuffer buffer, ArtifactExpression artifact)
+        private void EmitProgram(MachineCodeBuffer buffer, ArtifactExpression artifact, string outputFilename)
         {
             var hasEntryPoint = compiler.Exports.TryGetValue("Main", out var entryPointName);
 
@@ -63,36 +63,48 @@ namespace Compiler.CodeGeneration.Platform
             for (var i = 0; i < compiler.Functions.Count; i++)
             {
                 var f = compiler.Functions[i];
-                if (f.IsNativeImport)
+                if (f.NativeImport != null)
                     continue;
 
+                var stackSpace = f.ResolveStackSpaceRequired();
                 buffer.EmitLine(f.Name + ":");
-                // TODO Support stdcall and naked
-                buffer.EmitLine("push ebp");
-                buffer.EmitLine("mov ebp, esp");
-                buffer.EmitLine($"sub esp, {f.Locals.Count * 4}"); // TODO Calculate actual stack space required
-                for (var j = 3; j < 32; j++) // TODO 64
+                if (f.CallingConvention != CallingConvention.None)
                 {
-                    if ((f.ClobberedRegisters & (1u << j)) == 0)
-                        continue;
+                    buffer.EmitLine("push ebp");
+                    buffer.EmitLine("mov ebp, esp");
+                    buffer.EmitLine($"sub esp, {stackSpace}");
+                    for (var j = 3; j < 32; j++)
+                    {
+                        if ((f.ClobberedRegisters & (1u << j)) == 0)
+                            continue;
 
-                    // EAX, ECX, EDX are not preserved in cdecl TODO support others
-                    buffer.EmitLine($"push {GetRegisterName(j)}");
+                        // EAX, ECX, EDX are not preserved in cdecl
+                        buffer.EmitLine($"push {GetRegisterName(j)}");
+                    }
                 }
 
                 EmitIntermediateInstructionBuffer(buffer, f.Body);
 
                 buffer.EmitLine(".return:");
-                for (var j = 32 - 1; j >= 3; --j) // TODO 64 + stdcall, naked, etc
+                if (f.CallingConvention != CallingConvention.None)
                 {
-                    if ((f.ClobberedRegisters & (1u << j)) == 0)
-                        continue;
+                    for (var j = 32 - 1; j >= 3; --j)
+                    {
+                        if ((f.ClobberedRegisters & (1u << j)) == 0)
+                            continue;
 
-                    buffer.EmitLine($"pop {GetRegisterName(j)}");
+                        buffer.EmitLine($"pop {GetRegisterName(j)}");
+                    }
+
+                    if (stackSpace > 0)
+                        buffer.EmitLine("leave");
+
+                    buffer.EmitLine(
+                        f.CallingConvention == CallingConvention.CCall
+                            ? "ret"
+                            : $"ret {stackSpace}"
+                    );
                 }
-
-                buffer.EmitLine("leave");
-                buffer.EmitLine("ret");
             }
 
             // Readonly Data
@@ -142,7 +154,22 @@ namespace Compiler.CodeGeneration.Platform
             }
 
             // Exports
-            // TODO
+            if ((!hasEntryPoint && compiler.Exports.Count > 0)
+            ||  (hasEntryPoint && compiler.Exports.Count > 1))
+            {
+                buffer.EmitLine("section '.edata' export data readable");
+                buffer.EmitLine($"export '{outputFilename}', \\");
+
+                int i = 0;
+                foreach (var export in compiler.Exports)
+                {
+                    buffer.Emit($"    {export.Key}, '{export.Value}'");
+                    if (i != compiler.Exports.Count - 1)
+                        buffer.EmitLine(", \\");
+                }
+
+                buffer.EmitLine();
+            }
         }
 
         private void EmitIntermediateInstructionBuffer(MachineCodeBuffer buffer, InstructionBuffer body)
@@ -166,6 +193,9 @@ namespace Compiler.CodeGeneration.Platform
                         buffer.EmitLine("jmp .return");
                         break;
                     }
+                    case Opcode.RestoreStack:
+                        buffer.EmitLine($"add esp, {GetOperandString(inst.A)}");
+                        break;
                     case Opcode.Move:
                         buffer.Emit("mov ");
                         buffer.Emit(GetOperandString(inst.A));
@@ -275,9 +305,9 @@ namespace Compiler.CodeGeneration.Platform
                 case OperandType.Global:
                 {
                     var fun = compiler.Globals[(int)operand.Value];
-                    if (fun.Type.Type == eCobType.Function)
+                    if (fun.Type == eCobType.Function)
                     {
-                        if (fun.Type.Function.IsNativeImport)
+                        if (fun.Type.Function.NativeImport != null)
                             return "[" + fun.Type.Function.Name + "]";
                         return fun.Type.Function.Name;
                     }
@@ -369,6 +399,11 @@ namespace Compiler.CodeGeneration.Platform
         public void EmitLine(string op)
         {
             builder.AppendLine(op);
+        }
+
+        public void EmitLine()
+        {
+            builder.AppendLine();
         }
 
         public override string ToString()

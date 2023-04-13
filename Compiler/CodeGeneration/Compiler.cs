@@ -91,20 +91,23 @@ namespace Compiler.CodeGeneration
                         expression.FunctionSignture.CallingConvention,
                         expression.FunctionSignture.Parameters,
                         new CobType(eCobType.None, 0)
-                    ) { IsNativeImport = true };
+                    );
                 }
                 else
                     function = null;
 
-                Imports.Add(new Import
+                var import = new Import
                 {
                     Library = expression.Library,
                     SymbolName = expression.SymbolName,
                     Function = function
-                });
+                };
 
+                Imports.Add(import);
+                
                 if (function != null)
                 {
+                    function.NativeImport = import;
                     AllocateGlobal(new CobVariable(
                         expression.SymbolName,
                         new CobType(eCobType.Function, 0, function: function)
@@ -238,40 +241,50 @@ namespace Compiler.CodeGeneration
         public CobType? Visit(CallExpression expression)
         {
             var functionType = expression.FunctionExpression.Accept(this);
-            if (functionType == null || functionType.Type != eCobType.Function
-            ||  functionType.Function == null)
+            var function = functionType?.Function;
+            if (function == null)
                 throw new Exception($"Cannot call type '{functionType}'");
 
-            var parameters = functionType.Function.Parameters;
+            var parameters = function.Parameters;
             var arguments = expression.Arguments;
             if (arguments.Count != parameters.Count
             && (parameters.Count == 0 || (parameters.Count > 0 && !parameters[^1].IsSpread)))
                 throw new Exception($"Expected {parameters.Count} parameters, but received {arguments.Count} instead");
-            
+
+            if (function.CallingConvention != CallingConvention.CCall
+            && (parameters.Count > 0 && !parameters[^1].IsSpread))
+                throw new Exception("Cannot use spread parameters without ccall");
+
             // TODO Calling convention?
-            
+
+            var stackSpace = 0;
             for (int i = arguments.Count - 1; i >= 0; --i)
             {
                 var argType = arguments[i].Accept(this);
+                // TODO
                 //if (argType != CobType.FromString(parameters[i].Type))
                 //    throw new Exception($"Expected '{parameters[i].Type}' but received '{argType}' instead");
 
                 var reg = CurrentFunction.FreeRegister();
                 CurrentFunction.Body.EmitR(Opcode.Push, reg);
+
+                stackSpace += (argType.Size + 7) / 8;
             }
             
             var freg = CurrentFunction.FreeRegister();
             
             CurrentFunction.Body.EmitR(Opcode.Call, freg);
             
-            if (functionType.Function.ReturnType != eCobType.None)
+            if (function.ReturnType != eCobType.None)
             {
                 var reg = CurrentFunction.AllocateRegister();
                 CurrentFunction.Body.EmitRR(Opcode.Move, reg, 0);
-                return functionType.Function.ReturnType;
+                
+                if (function.CallingConvention == CallingConvention.CCall)
+                    CurrentFunction.Body.EmitI(Opcode.RestoreStack, stackSpace);
             }
             
-            return CobType.None;
+            return function.ReturnType;
         }
 
         public CobType? Visit(IdentifierExpression expression)
@@ -367,6 +380,7 @@ namespace Compiler.CodeGeneration
 
         Call,
         Return,
+        RestoreStack,
         Jump,
 
         Move,
@@ -383,7 +397,7 @@ namespace Compiler.CodeGeneration
         Sub,
         Mul,
         Div,
-        Mod,
+        Mod
     }
 
     public sealed record Operand
@@ -656,11 +670,11 @@ namespace Compiler.CodeGeneration
 
         public List<CobVariable> Locals { get; }
 
-        public ulong ClobberedRegisters { get; private set; }
+        public uint ClobberedRegisters { get; private set; }
 
         public CallingConvention CallingConvention { get; }
 
-        public bool IsNativeImport { get; init; } // TODO init??
+        public Import? NativeImport { get; set; } // TODO init??
 
         public IReadOnlyList<FunctionExpression.Parameter> Parameters { get; }
 
@@ -693,7 +707,7 @@ namespace Compiler.CodeGeneration
         public int AllocateRegister()
         {
             var register = registerStack++;
-            ClobberedRegisters |= 1ul << register;
+            ClobberedRegisters |= 1u << register;
 
             return register;
         }
@@ -739,6 +753,15 @@ namespace Compiler.CodeGeneration
         public int FindLocal(string name)
         {
             return Locals.FindIndex(x => x.Name == name);
+        }
+
+        public int ResolveStackSpaceRequired()
+        {
+            int bytes = 0;
+            for (var i = 0; i < Locals.Count; ++i)
+                bytes += (Locals[i].Type.Size + 7) / 8;
+
+            return bytes;
         }
     }
 
@@ -862,6 +885,7 @@ namespace Compiler.CodeGeneration
         Float,
         Trait,
         Array,
-        Function
+        Function,
+        String // TODO Eh?
     }
 }

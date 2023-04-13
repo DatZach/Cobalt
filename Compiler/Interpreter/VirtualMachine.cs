@@ -1,4 +1,5 @@
-﻿using System.Runtime.InteropServices;
+﻿using System;
+using System.Runtime.InteropServices;
 using System.Text;
 using Compiler.CodeGeneration;
 
@@ -54,23 +55,22 @@ namespace Compiler.Interpreter
                         break;
                     case Opcode.Call:
                     {
-                        var global = compiler.Globals[(int)ReadOperand(inst.A!)]; // TODO This is actually a function index, not a global
-                        if (global.Type.Function == null)
+                        var callee = ReadFunctionOperand(inst.A!);
+                        var native = callee.NativeImport;
+                        if (native != null)
                         {
                             // TODO Get rid of the prototype hardcoded hacks
                             var format = localStack.Pop();
                             var formatVar = compiler.Globals[(int)format].Data;
                             var formatString = Encoding.UTF8.GetString(formatVar);
                             var a = localStack.Pop();
-
-                            // TODO Support native and bytecode calls
-                            var sub = nativeLibraries["msvcrt"].Functions["printf"];
+                            
+                            var sub = nativeLibraries[native.Library].Functions[native.SymbolName!];
                             sub(formatString, (int)a);
                         }
                         else
                         {
-                            var sub = global.Type.Function;
-                            ExecuteFunction(sub);
+                            ExecuteFunction(callee);
                         }
                         break;
                     }
@@ -81,8 +81,16 @@ namespace Compiler.Interpreter
                             value = ReadOperand(inst.A);
                         else
                             value = -1;
+
                         functionStack.Pop();
                         return value;
+                    }
+                    case Opcode.RestoreStack:
+                    {
+                        var size = ReadOperand(inst.A!) / 4;
+                        while (size-- > 0)
+                            localStack.Pop();
+                        break;
                     }
                     case Opcode.Move:
                     {
@@ -224,6 +232,38 @@ namespace Compiler.Interpreter
                     return operand.Value; // TODO Hacky??
                 default:
                     throw new ArgumentOutOfRangeException();
+            }
+        }
+
+        // TODO This really should be unified somehow, but this is the fastest approach rn
+        private Function ReadFunctionOperand(Operand operand)
+        {
+            switch (operand.Type)
+            {
+                // TODO AAAA???? This is just as hacky! We don't know if we have a global or a function index or what
+                case OperandType.Register:
+                {
+                    var global = compiler.Globals[(int)registers[operand.Value]];
+                    if (global.Type == eCobType.Function)
+                        return global.Type.Function;
+
+                    throw new InvalidOperationException($"VM Expected function but received {global.Type} instead");
+                }
+
+                case OperandType.Global:
+                {
+                    var global = compiler.Globals[(int)operand.Value];
+                    if (global.Type == eCobType.Function)
+                        return global.Type.Function;
+
+                    throw new InvalidOperationException($"VM Expected function but received {global.Type} instead");
+                }
+
+                case OperandType.Function:
+                    return compiler.Functions[(int)operand.Value];
+
+                default:
+                    throw new InvalidOperationException($"VM Expected function operand but received {operand.Type} instead");
             }
         }
         

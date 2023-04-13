@@ -41,14 +41,13 @@ namespace Compiler
             else
             {
                 using var vm = new VirtualMachine(compiler);
-                var mainFunctionIdx = compiler.Functions.FindIndex(x => x.Name == "Main");
-                if (mainFunctionIdx == -1)
+                if (!compiler.Exports.TryGetValue("Main", out var mainFunctionName))
                 {
                     Console.WriteLine("Aborting. No artifact specified, and no Main function exported.");
                     return;
                 }
 
-                var mainFunction = compiler.Functions[mainFunctionIdx];
+                var mainFunction = compiler.Functions.FirstOrDefault(x => x.Name == mainFunctionName);
                 vm.ExecuteFunction(mainFunction);
             }
         }
