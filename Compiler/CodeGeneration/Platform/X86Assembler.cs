@@ -163,8 +163,8 @@ namespace Compiler.CodeGeneration.Platform
                 int i = 0;
                 foreach (var export in compiler.Exports)
                 {
-                    buffer.Emit($"    {export.Key}, '{export.Value}'");
-                    if (i != compiler.Exports.Count - 1)
+                    buffer.Emit($"    {export.Value}, '{export.Key}'");
+                    if (i++ != compiler.Exports.Count - 1)
                         buffer.EmitLine(", \\");
                 }
 
