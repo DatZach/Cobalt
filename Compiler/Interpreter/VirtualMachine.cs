@@ -8,8 +8,11 @@ namespace Compiler.Interpreter
     internal sealed class VirtualMachine : IDisposable
     {
         private Function currentFunction => functionStack.Peek(); // TODO Optimize
+        private IReadOnlyList<long>? currentParameters => parameterStack.Peek(); // TODO Optimize
+
         private readonly Dictionary<string, LoadedNativeLibrary> nativeLibraries;
         private readonly Stack<Function> functionStack;
+        private readonly Stack<IReadOnlyList<long>?> parameterStack;
         private readonly Stack<long> localStack;
         private readonly long[] registers;
 
@@ -21,6 +24,7 @@ namespace Compiler.Interpreter
         {
             this.compiler = compiler ?? throw new ArgumentNullException(nameof(compiler));
             functionStack = new Stack<Function>(4);
+            parameterStack = new Stack<IReadOnlyList<long>>(4);
             localStack = new Stack<long>(4);
             registers = new long[64];
             
@@ -41,9 +45,10 @@ namespace Compiler.Interpreter
             }
         }
         
-        public long ExecuteFunction(Function function)
+        public long ExecuteFunction(Function function, IReadOnlyList<long>? parameters = null)
         {
             functionStack.Push(function);
+            parameterStack.Push(parameters);
 
             var instructions = function.Body.Instructions;
             for (int i = 0; i < instructions.Count; ++i)
@@ -70,7 +75,23 @@ namespace Compiler.Interpreter
                         }
                         else
                         {
-                            ExecuteFunction(callee);
+                            IReadOnlyList<long>? calleeParameters;
+                            if (callee.Parameters.Count > 0)
+                            {
+                                var aCalleeParameters = new long[callee.Parameters.Count];
+                                for (int j = 0; j < aCalleeParameters.Length; ++j)
+                                    aCalleeParameters[j] = localStack.Pop();
+
+                                calleeParameters = aCalleeParameters;
+                            }
+                            else
+                                calleeParameters = null;
+
+                            ExecuteFunction(callee, calleeParameters);
+
+                            // HACK UnrestoreStack
+                            for (int j = 0; j < callee.Parameters.Count; ++j)
+                                localStack.Push(0);
                         }
                         break;
                     }
@@ -222,6 +243,8 @@ namespace Compiler.Interpreter
                     return registers[operand.Value];
                 case OperandType.Pointer:
                     throw new NotImplementedException();
+                case OperandType.Parameter:
+                    return currentParameters[(int)operand.Value];
                 case OperandType.Local:
                     return currentFunction.Locals[(int)operand.Value].Value;
                 case OperandType.Global:
