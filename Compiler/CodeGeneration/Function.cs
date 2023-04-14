@@ -14,7 +14,7 @@ namespace Compiler.CodeGeneration
 
         public Import? NativeImport { get; set; } // TODO init??
 
-        public IReadOnlyList<FunctionExpression.Parameter> Parameters { get; }
+        public IReadOnlyList<Parameter> Parameters { get; }
 
         public CobType ReturnType { get; set; }
 
@@ -27,7 +27,7 @@ namespace Compiler.CodeGeneration
         public Function(
             string name,
             CallingConvention callingConvention,
-            IReadOnlyList<FunctionExpression.Parameter> parameters,
+            IReadOnlyList<Parameter> parameters,
             CobType returnType
         )
         {
@@ -94,6 +94,17 @@ namespace Compiler.CodeGeneration
             return Locals.FindIndex(x => x.Name == name);
         }
 
+        public int FindParameter(string name)
+        {
+            for (int i = 0; i < Parameters.Count; ++i)
+            {
+                if (Parameters[i].Name == name)
+                    return i;
+            }
+
+            return -1;
+        }
+
         public int ResolveStackSpaceRequired()
         {
             int bytes = 0;
@@ -101,6 +112,22 @@ namespace Compiler.CodeGeneration
                 bytes += (Locals[i].Type.Size + 7) / 8;
 
             return bytes;
+        }
+
+        public sealed class Parameter
+        {
+            public string Name { get; }
+
+            public CobType Type { get; }
+
+            public bool IsSpread { get; }
+
+            public Parameter(string name, CobType type, bool isSpread)
+            {
+                Name = name;
+                Type = type;
+                IsSpread = isSpread;
+            }
         }
     }
 

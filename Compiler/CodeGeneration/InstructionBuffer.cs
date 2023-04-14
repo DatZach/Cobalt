@@ -1,4 +1,6 @@
-﻿namespace Compiler.CodeGeneration
+﻿using System;
+
+namespace Compiler.CodeGeneration
 {
     internal sealed class InstructionBuffer
     {
@@ -144,6 +146,16 @@
                 Opcode = opcode,
                 A = new Operand { Type = OperandType.Register, Size = PlatformWordWidth, Value = regA },
                 B = new Operand { Type = OperandType.Function, Size = PlatformWordWidth, Value = funB }
+            });
+        }
+
+        public void EmitRP(Opcode opcode, int regA, int parB)
+        {
+            instructions.Add(new Instruction
+            {
+                Opcode = opcode,
+                A = new Operand { Type = OperandType.Register, Size = PlatformWordWidth, Value = regA },
+                B = new Operand { Type = OperandType.Parameter, Size = PlatformWordWidth, Value = parB }
             });
         }
     }

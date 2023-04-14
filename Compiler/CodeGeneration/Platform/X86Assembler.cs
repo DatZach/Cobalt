@@ -27,6 +27,9 @@ namespace Compiler.CodeGeneration.Platform
 
         private void EmitProgram(MachineCodeBuffer buffer, ArtifactExpression artifact, string outputFilename)
         {
+            if (compiler.Exports.Count == 0)
+                throw new Exception("Program is exportless");
+
             var hasEntryPoint = compiler.Exports.TryGetValue("Main", out var entryPointName);
 
             // Preamble
@@ -49,10 +52,23 @@ namespace Compiler.CodeGeneration.Platform
             if (hasEntryPoint)
             {
                 buffer.EmitLine("start:");
-                buffer.EmitLine("        call " + entryPointName);
-                buffer.EmitLine("        push 0");
-                buffer.EmitLine("        call [ExitProcess]");
+                buffer.EmitLine("    push __UnhandledExceptionHandler");
+                buffer.EmitLine("    call [SetUnhandledExceptionFilter]");
+                buffer.EmitLine("    call " + entryPointName);
+                buffer.EmitLine("    push 0");
+                buffer.EmitLine("    call [ExitProcess]");
 
+                buffer.EmitLine("__UnhandledExceptionHandler:");
+                buffer.EmitLine("    push _msg_UnhandledException");
+                buffer.EmitLine("    call [printf]");
+                buffer.EmitLine("    mov eax, 1");
+                buffer.EmitLine("    ret");
+
+                compiler.Imports.Add(new Import
+                {
+                    Library = "kernel32",
+                    SymbolName = "SetUnhandledExceptionFilter"
+                });
                 compiler.Imports.Add(new Import
                 {
                     Library = "kernel32",
@@ -72,7 +88,8 @@ namespace Compiler.CodeGeneration.Platform
                 {
                     buffer.EmitLine("push ebp");
                     buffer.EmitLine("mov ebp, esp");
-                    buffer.EmitLine($"sub esp, {stackSpace}");
+                    if (stackSpace > 0)
+                        buffer.EmitLine($"sub esp, {stackSpace}");
                     for (var j = 3; j < 32; j++)
                     {
                         if ((f.ClobberedRegisters & (1u << j)) == 0)
@@ -96,8 +113,7 @@ namespace Compiler.CodeGeneration.Platform
                         buffer.EmitLine($"pop {GetRegisterName(j)}");
                     }
 
-                    if (stackSpace > 0)
-                        buffer.EmitLine("leave");
+                    buffer.EmitLine("leave");
 
                     buffer.EmitLine(
                         f.CallingConvention == CallingConvention.CCall
@@ -118,6 +134,8 @@ namespace Compiler.CodeGeneration.Platform
                 var value = string.Join(", ", global.Data);
                 buffer.EmitLine($"rdata_{i} db {value}");
             }
+
+            buffer.EmitLine("_msg_UnhandledException db 'UNHANDLED EXCEPTION', 0");
 
             // Imports
             buffer.EmitLine("section '.idata' data readable import");
@@ -145,14 +163,22 @@ namespace Compiler.CodeGeneration.Platform
                 buffer.EmitLine(line);
             }
 
-            foreach (var import in compiler.Imports)
+            foreach (var library in libraries)
             {
-                if (import.SymbolName == null)
-                    continue;
+                buffer.Emit($"import {library}");
+                for (var i = 0; i < compiler.Imports.Count; i++)
+                {
+                    var import = compiler.Imports[i];
+                    if (import.Library != library || import.SymbolName == null)
+                        continue;
 
-                buffer.EmitLine($"import {import.Library}, {import.SymbolName}, '{import.SymbolName}'");
+                    buffer.EmitLine(", \\");
+                    buffer.Emit($"    {import.SymbolName}, '{import.SymbolName}'");
+                }
+
+                buffer.EmitLine();
             }
-
+            
             // Exports
             if ((!hasEntryPoint && compiler.Exports.Count > 0)
             ||  (hasEntryPoint && compiler.Exports.Count > 1))
@@ -282,6 +308,7 @@ namespace Compiler.CodeGeneration.Platform
             }
         }
 
+        // TODO Support 64bit correctly
         private string GetOperandString(Operand? operand)
         {
             if (operand == null) throw new ArgumentNullException(nameof(operand));
@@ -300,6 +327,8 @@ namespace Compiler.CodeGeneration.Platform
                     return GetRegisterName((int)operand.Value);
                 case OperandType.Pointer:
                     throw new NotImplementedException();
+                case OperandType.Parameter:
+                    return $"dword [ebp + {operand.Value * 4 + 4 * 2}]";
                 case OperandType.Local: // TODO Use size
                     return $"dword [ebp - {(operand.Value + 1) * 4}]";
                 case OperandType.Global:
@@ -326,10 +355,12 @@ namespace Compiler.CodeGeneration.Platform
             }
         }
 
-        private static readonly string[] registers = { "eax", "ecx", "edx", "ebx" };
-        private static string GetRegisterName(int i)
+        private static readonly string[] registers32 = { "eax", "ecx", "edx", "ebx" };
+        private static readonly string[] registers64 = { "rax", "rcx", "rdx", "rbx", "r8",  "r9", 
+                                                         "r10", "r11", "r12", "r13", "r14", "r15" };
+        private string GetRegisterName(int i)
         {
-            return registers[i];
+            return is64Bit ? registers64[i] : registers32[i];
         }
 
         private static void Assemble(MachineCodeBuffer buffer, string outputFilename)

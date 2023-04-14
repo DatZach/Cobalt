@@ -129,7 +129,7 @@ namespace Compiler.CodeGeneration
             else
             {
                 var rhsType = expression.Expression.Accept(this);
-                if (CurrentFunction.ReturnType.Type == eCobType.None)
+                if (CurrentFunction.ReturnType == eCobType.None)
                     CurrentFunction.ReturnType = rhsType;
                 else if (CurrentFunction.ReturnType != rhsType)
                     throw new Exception("Return value does not match function return type"); // TODO
@@ -146,7 +146,7 @@ namespace Compiler.CodeGeneration
             var function = new Function(
                 "$aot_eval$",
                 CallingConvention.CCall,
-                Array.Empty<FunctionExpression.Parameter>(),
+                Array.Empty<Function.Parameter>(),
                 CobType.None
             );
 
@@ -290,6 +290,13 @@ namespace Compiler.CodeGeneration
             int idx;
 
             var reg = CurrentFunction.AllocateRegister();
+
+            // PARAMETERS
+            if ((idx = CurrentFunction.FindParameter(expression.Value)) != -1)
+            {
+                CurrentFunction.Body.EmitRP(Opcode.Move, reg, idx);
+                return CurrentFunction.Parameters[idx].Type;
+            }
 
             // LOCALS
             if ((idx = CurrentFunction.FindLocal(expression.Value)) != -1)

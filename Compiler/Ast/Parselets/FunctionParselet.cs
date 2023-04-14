@@ -8,13 +8,13 @@ namespace Compiler.Ast.Parselets
     {
         public Expression Parse(Parser parser, Token token)
         {
-            IReadOnlyList<FunctionExpression.Parameter> parameters;
+            IReadOnlyList<Function.Parameter> parameters;
 
             parser.Take(TokenType.LeftParen);
             if (!parser.Match(TokenType.RightParen))
             {
                 var hasSpread = false;
-                var lParameters = new List<FunctionExpression.Parameter>(4);
+                var lParameters = new List<Function.Parameter>(4);
                 while (!parser.Match(TokenType.RightParen))
                 {
                     var name = parser.Take(TokenType.Identifier);
@@ -22,24 +22,23 @@ namespace Compiler.Ast.Parselets
                     var isSpread = parser.MatchAndTakeToken(TokenType.Spread) != null;
                     var type = parser.Take(TokenType.Identifier);
                     parser.MatchAndTakeToken(TokenType.Comma);
-                    
+
                     if (isSpread && hasSpread)
                         throw new Exception("Function cannot define multiple spread parameters");
 
                     hasSpread = hasSpread || isSpread;
 
-                    lParameters.Add(new FunctionExpression.Parameter
-                    {
-                        Name = name.Value,
-                        Type = type.Value,
-                        IsSpread = isSpread
-                    });
+                    lParameters.Add(new Function.Parameter(
+                        name.Value,
+                        CobType.FromString(type.Value),
+                        isSpread
+                    ));
                 }
                 
                 parameters = lParameters;
             }
             else
-                parameters = Array.Empty<FunctionExpression.Parameter>();
+                parameters = Array.Empty<Function.Parameter>();
 
             parser.Take(TokenType.RightParen);
 

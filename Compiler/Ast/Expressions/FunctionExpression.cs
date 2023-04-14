@@ -13,13 +13,13 @@ namespace Compiler.Ast.Expressions
 
         public CallingConvention CallingConvention { get; }
 
-        public IReadOnlyList<Parameter> Parameters { get; }
+        public IReadOnlyList<Function.Parameter> Parameters { get; }
 
         public Expression? Body { get; }
 
         public FunctionExpression(
             Token token,
-            IReadOnlyList<Parameter> parameters,
+            IReadOnlyList<Function.Parameter> parameters,
             Expression? body,
             string returnType,
             CallingConvention callingConvention
@@ -36,15 +36,6 @@ namespace Compiler.Ast.Expressions
         public override T Accept<T>(IExpressionVisitor<T> visitor)
         {
             return visitor.Visit(this);
-        }
-
-        public sealed record Parameter
-        {
-            public string Name { get; init; }
-
-            public string Type { get; init; }
-
-            public bool IsSpread { get; init; }
         }
     }
 }

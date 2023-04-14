@@ -34,7 +34,7 @@ namespace Compiler.CodeGeneration
                 case OperandType.ImmediateFloat:
                     return BitConverter.Int64BitsToDouble(Value).ToString("F");
                 case OperandType.Register:
-                case OperandType.Pointer:
+                case OperandType.Parameter:
                 case OperandType.Local:
                 case OperandType.Global:
                 case OperandType.Function:
@@ -82,6 +82,7 @@ namespace Compiler.CodeGeneration
         ImmediateFloat,
         Register,
         Pointer,
+        Parameter,
         Local,
         Global,
         Function
