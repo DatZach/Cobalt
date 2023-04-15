@@ -285,22 +285,26 @@ namespace Compiler.CodeGeneration.Platform
                         buffer.EmitLine(GetOperandString(inst.B));
                         break;
                     case Opcode.Div:
+                        buffer.EmitLine("push eax");
                         buffer.EmitLine("push ebx");
                         buffer.EmitLine($"mov ebx, {GetOperandString(inst.B)}");
-                        buffer.EmitLine($"mov ecx, {GetOperandString(inst.A)}");
+                        buffer.EmitLine($"mov eax, {GetOperandString(inst.A)}");
                         buffer.EmitLine("cdq");
                         buffer.EmitLine("idiv ebx");
                         buffer.EmitLine($"mov {GetOperandString(inst.A)}, eax");
                         buffer.EmitLine("pop ebx");
+                        buffer.EmitLine("pop eax");
                         break;
                     case Opcode.Mod:
+                        buffer.EmitLine("push eax");
                         buffer.EmitLine("push ebx");
                         buffer.EmitLine($"mov ebx, {GetOperandString(inst.B)}");
-                        buffer.EmitLine($"mov ecx, {GetOperandString(inst.A)}");
+                        buffer.EmitLine($"mov eax, {GetOperandString(inst.A)}");
                         buffer.EmitLine("cdq");
                         buffer.EmitLine("idiv ebx");
                         buffer.EmitLine($"mov {GetOperandString(inst.A)}, edx");
                         buffer.EmitLine("pop ebx");
+                        buffer.EmitLine("pop eax");
                         break;
                     default:
                         throw new ArgumentOutOfRangeException();
