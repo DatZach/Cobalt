@@ -1,4 +1,6 @@
-﻿using System.Runtime.CompilerServices;
+﻿using System.Globalization;
+using System.Runtime.CompilerServices;
+using System.Text;
 
 namespace Compiler.Lexer
 {
@@ -11,10 +13,14 @@ namespace Compiler.Lexer
         private int currentLine;
         private int currentLineStartIndex;
 
+        private StringBuilder stringBuilder;
+
         private Tokenizer(string source)
         {
             this.source = source ?? throw new ArgumentNullException(nameof(source));
             this.length = source.Length;
+
+            stringBuilder = new StringBuilder();
         }
 
         private IReadOnlyList<Token> Tokenize()
@@ -33,21 +39,39 @@ namespace Compiler.Lexer
                 var startLine = currentLine;
                 var startIndex = index;
                 var ch = PeekChar();
+                var chNext = PeekChar(1);
 
                 // String
                 if (ch == '"')
                 {
-                    bool isEscape = false;
-                    int i = index;
+                    stringBuilder.Clear();
 
                     TakeChar();
                     while (index < length)
                     {
                         ch = TakeChar();
-                        if (ch == '"' && !isEscape)
+                        if (ch == '^')
+                        {
+                            ch = TakeChar() switch
+                            {
+                                '\'' => '\'',
+                                '"' => '\"',
+                                '0' => '\0',
+                                'a' => '\a',
+                                'b' => '\b',
+                                'n' => '\n',
+                                'r' => '\r',
+                                't' => '\t',
+                                '^' => '^',
+                                'x' => (char)Convert.ToByte("" + TakeChar() + TakeChar(), 16),
+                                'u' => (char)Convert.ToUInt16("" + TakeChar() + TakeChar() + TakeChar() + TakeChar(), 16),
+                                _ => throw new Exception("Invalid escape")
+                            };
+                        }
+                        else if (ch == '\"')
                             break;
-                        
-                        isEscape = !isEscape && ch == '\\';
+
+                        stringBuilder.Append(ch);
                     }
 
                     if (index >= length)
@@ -56,7 +80,7 @@ namespace Compiler.Lexer
                     result.Add(new Token
                     {
                         Type = TokenType.String,
-                        Value = source.Substring(i + 1, index - i - 2),
+                        Value = stringBuilder.ToString(),
                         Line = startLine,
                         Column = startIndex - currentLineStartIndex + 1
                     });
@@ -78,13 +102,15 @@ namespace Compiler.Lexer
                 }
 
                 // Number
-                if (char.IsDigit(ch))
+                if (char.IsDigit(ch)
+                ||  (ch == '-' && char.IsDigit(chNext))
+                ||  (ch == '+' && char.IsDigit(chNext)))
                 {
                     bool hasHexSpecified = false;
                     bool hasBinSpecified = false;
                     bool hasDecimal = false;
+                    bool hasSign = false;
 
-                    var chNext = PeekChar(1);
                     if (ch == '0' && chNext == 'x')
                         hasHexSpecified = true;
                     else if (ch == '0' && chNext == 'b')
@@ -94,11 +120,26 @@ namespace Compiler.Lexer
                     {
                         if (c == '_')
                             return true;
-                        
+
                         if (hasHexSpecified)
+                        {
+                            if (c == 'x' && index == startIndex + 1)
+                                return true;
                             return IsHexChar(c);
+                        }
+
                         if (hasBinSpecified)
+                        {
+                            if (c == 'b' && index == startIndex + 1)
+                                return true;
                             return IsBinChar(c);
+                        }
+
+                        if ((c == '-' || c == '+') && !hasSign)
+                        {
+                            hasSign = true;
+                            return true;
+                        }
 
                         if (c == '.' && !hasDecimal)
                         {

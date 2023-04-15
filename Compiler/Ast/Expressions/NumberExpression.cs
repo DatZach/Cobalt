@@ -1,6 +1,7 @@
 ﻿using Compiler.Lexer;
 using Compiler.Ast.Visitors;
 using System.Diagnostics;
+using Compiler.CodeGeneration;
 
 namespace Compiler.Ast.Expressions
 {
@@ -8,10 +9,16 @@ namespace Compiler.Ast.Expressions
     {
         public long LongValue { get; }
 
-        public NumberExpression(Token token, long longValue)
+        public eCobType Type { get; }
+
+        public int BitSize { get; }
+
+        public NumberExpression(Token token, long longValue, eCobType type, int bitSize)
             : base(token)
         {
             LongValue = longValue;
+            Type = type;
+            BitSize = bitSize;
         }
 
         [DebuggerStepThrough]

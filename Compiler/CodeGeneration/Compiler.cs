@@ -329,7 +329,7 @@ namespace Compiler.CodeGeneration
             var reg = CurrentFunction.AllocateRegister();
             CurrentFunction.Body.EmitRI(Opcode.Move, reg, expression.LongValue);
             
-            return new CobType(eCobType.Signed, 32);
+            return new CobType(expression.Type, expression.BitSize);
         }
 
         public CobType? Visit(StringExpression expression)
