@@ -326,10 +326,22 @@ namespace Compiler.CodeGeneration
 
         public CobType? Visit(NumberExpression expression)
         {
+            var type = new CobType(expression.Type, expression.BitSize);
             var reg = CurrentFunction.AllocateRegister();
-            CurrentFunction.Body.EmitRI(Opcode.Move, reg, expression.LongValue);
+
+            if (type == eCobType.Float)
+            {
+                var globalIdx = AllocateGlobal(new CobVariable($"float{Globals.Count}", type)
+                {
+                    Value = expression.LongValue
+                });
+
+                CurrentFunction.Body.EmitRG(Opcode.Move, reg, globalIdx);
+            }
+            else
+                CurrentFunction.Body.EmitRI(Opcode.Move, reg, expression.LongValue);
             
-            return new CobType(expression.Type, expression.BitSize);
+            return type;
         }
 
         public CobType? Visit(StringExpression expression)
@@ -364,7 +376,7 @@ namespace Compiler.CodeGeneration
         {
             return Globals.FindIndex(x => x.Name == name);
         }
-
+        
         private int AllocateGlobal(CobVariable variable)
         {
             if (variable == null) throw new ArgumentNullException(nameof(variable));

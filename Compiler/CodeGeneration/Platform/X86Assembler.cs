@@ -200,6 +200,8 @@ namespace Compiler.CodeGeneration.Platform
 
         private void EmitIntermediateInstructionBuffer(MachineCodeBuffer buffer, InstructionBuffer body)
         {
+            var regTypes = new eCobType[8];
+
             for (var i = 0; i < body.Instructions.Count; i++)
             {
                 var inst = body.Instructions[i];
@@ -223,15 +225,45 @@ namespace Compiler.CodeGeneration.Platform
                         buffer.EmitLine($"add esp, {GetOperandString(inst.A)}");
                         break;
                     case Opcode.Move:
-                        buffer.Emit("mov ");
-                        buffer.Emit(GetOperandString(inst.A));
+                    {
+                        var rhsType = inst.B.Type == OperandType.Global
+                            ? compiler.Globals[(int)inst.B.Value].Type
+                            : CobType.None; // TODO HACK
+
+                        if (rhsType == eCobType.Float)
+                        {
+                            buffer.Emit(rhsType.Size == 32 ? "movss " : "movsd "); // TODO Support diff sizes
+                            buffer.Emit(GetFloatRegisterName((int)inst.A.Value)); // TODO Need GetOperandString for other types
+                        }
+                        else
+                        {
+                            buffer.Emit("mov ");
+                            buffer.Emit(GetOperandString(inst.A));
+                        }
+
                         buffer.Emit(", ");
                         buffer.EmitLine(GetOperandString(inst.B));
+
+                        if (inst.A.Type == OperandType.Register)
+                            regTypes[(int)inst.A.Value] = rhsType.Type;
                         break;
+                    }
                     case Opcode.Push:
-                        buffer.Emit("push ");
-                        buffer.EmitLine(GetOperandString(inst.A));
+                    {
+                        if (inst.A.Type == OperandType.Register && regTypes[(int)inst.A.Value] == eCobType.Float)
+                        {
+                            var operand = GetFloatRegisterName((int)inst.A.Value);
+                            buffer.EmitLine($"cvtss2sd {operand}, {operand}");
+                            buffer.EmitLine("sub esp, 8");
+                            buffer.EmitLine($"mov dword [esp], {operand}");
+                        }
+                        else
+                        {
+                            buffer.Emit("push ");
+                            buffer.EmitLine(GetOperandString(inst.A));
+                        }
                         break;
+                    }
                     case Opcode.Pop:
                         buffer.Emit("pop ");
                         buffer.EmitLine(GetOperandString(inst.A));
@@ -365,6 +397,12 @@ namespace Compiler.CodeGeneration.Platform
         private string GetRegisterName(int i)
         {
             return is64Bit ? registers64[i] : registers32[i];
+        }
+
+        private static readonly string[] floatRegisters = { "xmm0", "xmm1", "xmm2", "xmm3" };
+        private string GetFloatRegisterName(int i)
+        {
+            return floatRegisters[i];
         }
 
         private static void Assemble(MachineCodeBuffer buffer, string outputFilename)

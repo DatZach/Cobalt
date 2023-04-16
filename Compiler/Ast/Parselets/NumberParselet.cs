@@ -57,7 +57,7 @@ namespace Compiler.Ast.Parselets
                                      CultureInfo.InvariantCulture, out floatNumber))
             {
                 integerNumber = BitConverter.DoubleToInt64Bits(floatNumber);
-                return new NumberExpression(token, integerNumber, type, bitSize);
+                return new NumberExpression(token, integerNumber, eCobType.Float, bitSize);
             }
             else
             {
