@@ -34,7 +34,10 @@ namespace Compiler.Ast.Parselets
                 hasBinSpecified = true;
             }
             else if (value.IndexOf('.') != -1)
+            {
+                bitSize = 64;
                 hasDotSpecified = true;
+            }
 
             if (value.IndexOf('_') != -1)
                 value = value.Replace("_", "");

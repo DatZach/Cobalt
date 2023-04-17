@@ -62,13 +62,13 @@ namespace Compiler.CodeGeneration
                 B = new Operand { Type = OperandType.ImmediateSigned, Size = PlatformWordWidth, Value = immB }
             });
         }
-        public void EmitRIf(Opcode opcode, int regA, long immB)
+        public void EmitRIf(Opcode opcode, int regA, long immB, int immBWidth)
         {
             instructions.Add(new Instruction
             {
                 Opcode = opcode,
-                A = new Operand { Type = OperandType.Register, Size = PlatformWordWidth, Value = regA },
-                B = new Operand { Type = OperandType.ImmediateFloat, Size = PlatformWordWidth, Value = immB }
+                A = new Operand { Type = OperandType.Register, Size = (byte)immBWidth, Value = regA },
+                B = new Operand { Type = OperandType.ImmediateFloat, Size = (byte)immBWidth, Value = immB }
             });
         }
 
@@ -100,13 +100,13 @@ namespace Compiler.CodeGeneration
             });
         }
 
-        public void EmitLR(Opcode opcode, int locA, int regB)
+        public void EmitLR(Opcode opcode, int locA, int regB, int size)
         {
             instructions.Add(new Instruction
             {
                 Opcode = opcode,
-                A = new Operand { Type = OperandType.Local, Size = PlatformWordWidth, Value = locA },
-                B = new Operand { Type = OperandType.Register, Size = PlatformWordWidth, Value = regB }
+                A = new Operand { Type = OperandType.Local, Size = (byte)size, Value = locA },
+                B = new Operand { Type = OperandType.Register, Size = (byte)size, Value = regB }
             });
         }
 
@@ -119,23 +119,23 @@ namespace Compiler.CodeGeneration
             });
         }
 
-        public void EmitRL(Opcode opcode, int regA, int locB)
+        public void EmitRL(Opcode opcode, int regA, int locB, int size)
         {
             instructions.Add(new Instruction
             {
                 Opcode = opcode,
-                A = new Operand { Type = OperandType.Register, Size = PlatformWordWidth, Value = regA },
-                B = new Operand { Type = OperandType.Local, Size = PlatformWordWidth, Value = locB }
+                A = new Operand { Type = OperandType.Register, Size = (byte)size, Value = regA },
+                B = new Operand { Type = OperandType.Local, Size = (byte)size, Value = locB }
             });
         }
 
-        public void EmitRG(Opcode opcode, int regA, int globB)
+        public void EmitRG(Opcode opcode, int regA, int globB, int size)
         {
             instructions.Add(new Instruction
             {
                 Opcode = opcode,
-                A = new Operand { Type = OperandType.Register, Size = PlatformWordWidth, Value = regA },
-                B = new Operand { Type = OperandType.Global, Size = PlatformWordWidth, Value = globB }
+                A = new Operand { Type = OperandType.Register, Size = (byte)size, Value = regA },
+                B = new Operand { Type = OperandType.Global, Size = (byte)size, Value = globB }
             });
         }
 
@@ -168,13 +168,13 @@ namespace Compiler.CodeGeneration
             });
         }
 
-        public void EmitRA(Opcode opcode, int regA, int argB)
+        public void EmitRA(Opcode opcode, int regA, int argB, int size)
         {
             instructions.Add(new Instruction
             {
                 Opcode = opcode,
-                A = new Operand { Type = OperandType.Register, Size = PlatformWordWidth, Value = regA },
-                B = new Operand { Type = OperandType.Argument, Size = PlatformWordWidth, Value = argB }
+                A = new Operand { Type = OperandType.Register, Size = (byte)size, Value = regA },
+                B = new Operand { Type = OperandType.Argument, Size = (byte)size, Value = argB }
             });
         }
     }

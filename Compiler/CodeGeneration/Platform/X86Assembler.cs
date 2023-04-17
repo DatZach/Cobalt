@@ -259,37 +259,26 @@ namespace Compiler.CodeGeneration.Platform
                     case Opcode.Call:
                     {
                         var callee = GetOperandDataType(inst.A).Function;
+                        int stackSpace = 0;
                         if (inst.C != null)
                         {
                             if (callee.CallingConvention != CallingConvention.CCall)
                             {
-                                throw new NotImplementedException();
-                                //for (int j = 0; j < inst.C.Count; ++j)
-                                //    buffer.EmitLine($"push {GetOperandString(inst.C[j])}");
+                                for (int j = 0; j < inst.C.Count; ++j)
+                                    stackSpace += EmitArgument(buffer, inst.C[j]);
                             }
                             else
                             {
                                 for (int j = inst.C.Count - 1; j >= 0; --j)
-                                {
-                                    var cType = GetOperandDataType(inst.C[j]);
-                                    var cOperand = GetOperandString(inst.C[j]);
-                                    if (cType == eCobType.Float)
-                                    {
-                                        buffer.EmitLine($"cvtss2sd {cOperand}, {cOperand}");
-                                        buffer.EmitLine("sub esp, 8");
-                                        buffer.EmitLine($"movsd qword [esp], {cOperand}");
-                                    }
-                                    else
-                                        buffer.EmitLine($"push {cOperand}");
-                                }
+                                    stackSpace += EmitArgument(buffer, inst.C[j]);
                             }
                         }
 
                         buffer.Emit("call ");
                         buffer.EmitLine(GetOperandString(inst.A));
 
-                        if (callee.CallingConvention == CallingConvention.CCall)
-                            buffer.EmitLine($"add esp, {(inst.C?.Count ?? 0) * 4}"); // TODO Determine stack space
+                        if (callee.CallingConvention == CallingConvention.CCall && stackSpace > 0)
+                            buffer.EmitLine($"add esp, {stackSpace}");
                         break;
                     }
                     case Opcode.Return:
@@ -308,18 +297,13 @@ namespace Compiler.CodeGeneration.Platform
                         var bType = GetOperandDataType(inst.B);
 
                         if (bType == eCobType.Float)
-                        {
                             buffer.Emit(bType.Size == 32 ? "movss " : "movsd "); // TODO Support diff sizes
-                            buffer.Emit(GetOperandString(inst.A, bType));
-                        }
                         else
-                        {
                             buffer.Emit("mov ");
-                            buffer.Emit(GetOperandString(inst.A, bType));
-                        }
 
+                        buffer.Emit(GetOperandString(inst.A, bType));
                         buffer.Emit(", ");
-                        buffer.EmitLine(GetOperandString(inst.B));
+                        buffer.EmitLine(GetOperandString(inst.B, bType));
 
                         SetMachineState(inst.A, inst.B);
                         break;
@@ -377,50 +361,105 @@ namespace Compiler.CodeGeneration.Platform
                     case Opcode.Add:
                     {
                         var aType = GetOperandDataType(inst.A);
-                        buffer.Emit(aType == eCobType.Float ? "addss " : "add "); // TODO Account for width
+                        if (aType == eCobType.Float)
+                            buffer.Emit(aType.Size == 32 ? "addss " : "addsd "); // TODO Account for width
+                        else
+                            buffer.Emit("add ");
                         buffer.Emit(GetOperandString(inst.A));
                         buffer.Emit(", ");
                         buffer.EmitLine(GetOperandString(inst.B));
                         break;
                     }
                     case Opcode.Sub:
-                        buffer.Emit("sub ");
+                    {
+                        var aType = GetOperandDataType(inst.A);
+                        if (aType == eCobType.Float)
+                            buffer.Emit(aType.Size == 32 ? "subss " : "subsd "); // TODO Account for width
+                        else
+                            buffer.Emit("sub ");
                         buffer.Emit(GetOperandString(inst.A));
                         buffer.Emit(", ");
                         buffer.EmitLine(GetOperandString(inst.B));
                         break;
+                    }
                     case Opcode.Mul:
-                        buffer.Emit("imul "); // TODO unsigned version too
+                    {
+                        var aType = GetOperandDataType(inst.A);
+                        if (aType == eCobType.Float)
+                            buffer.Emit(aType.Size == 32 ? "mulss " : "mulsd "); // TODO Account for width
+                        else
+                            buffer.Emit("imul ");
                         buffer.Emit(GetOperandString(inst.A));
                         buffer.Emit(", ");
                         buffer.EmitLine(GetOperandString(inst.B));
                         break;
+                    }
                     case Opcode.Div:
-                        buffer.EmitLine("push eax");
-                        buffer.EmitLine("push ebx");
-                        buffer.EmitLine($"mov ebx, {GetOperandString(inst.B)}");
-                        buffer.EmitLine($"mov eax, {GetOperandString(inst.A)}");
-                        buffer.EmitLine("cdq");
-                        buffer.EmitLine("idiv ebx");
-                        buffer.EmitLine($"mov {GetOperandString(inst.A)}, eax");
-                        buffer.EmitLine("pop ebx");
-                        buffer.EmitLine("pop eax");
+                    {
+                        var aType = GetOperandDataType(inst.A);
+                        if (aType == eCobType.Float)
+                        {
+                            buffer.Emit(aType.Size == 32 ? "divss " : "divsd ");
+                            buffer.Emit(GetOperandString(inst.A));
+                            buffer.Emit(", ");
+                            buffer.EmitLine(GetOperandString(inst.B));
+                        }
+                        else
+                        {
+                            buffer.EmitLine("push eax");
+                            buffer.EmitLine("push ebx");
+                            buffer.EmitLine($"mov ebx, {GetOperandString(inst.B)}");
+                            buffer.EmitLine($"mov eax, {GetOperandString(inst.A)}");
+                            buffer.EmitLine("cdq");
+                            buffer.EmitLine("idiv ebx");
+                            buffer.EmitLine($"mov {GetOperandString(inst.A)}, eax");
+                            buffer.EmitLine("pop ebx");
+                            buffer.EmitLine("pop eax");
+                        }
                         break;
+                    }
                     case Opcode.Mod:
-                        buffer.EmitLine("push eax");
-                        buffer.EmitLine("push ebx");
-                        buffer.EmitLine($"mov ebx, {GetOperandString(inst.B)}");
-                        buffer.EmitLine($"mov eax, {GetOperandString(inst.A)}");
-                        buffer.EmitLine("cdq");
-                        buffer.EmitLine("idiv ebx");
-                        buffer.EmitLine($"mov {GetOperandString(inst.A)}, edx");
-                        buffer.EmitLine("pop ebx");
-                        buffer.EmitLine("pop eax");
+                    {
+                        var aType = GetOperandDataType(inst.A);
+                        if (aType == eCobType.Float)
+                        {
+                            throw new NotImplementedException();
+                        }
+                        else
+                        {
+                            buffer.EmitLine("push eax");
+                            buffer.EmitLine("push ebx");
+                            buffer.EmitLine($"mov ebx, {GetOperandString(inst.B)}");
+                            buffer.EmitLine($"mov eax, {GetOperandString(inst.A)}");
+                            buffer.EmitLine("cdq");
+                            buffer.EmitLine("idiv ebx");
+                            buffer.EmitLine($"mov {GetOperandString(inst.A)}, edx");
+                            buffer.EmitLine("pop ebx");
+                            buffer.EmitLine("pop eax");
+                        }
                         break;
+                    }
                     default:
                         throw new ArgumentOutOfRangeException();
                 }
             }
+        }
+
+        private int EmitArgument(MachineCodeBuffer buffer, Operand operand)
+        {
+            var cType = GetOperandDataType(operand);
+            var cOperand = GetOperandString(operand);
+            if (cType == eCobType.Float)
+            {
+                if (cType.Size == 32)
+                    buffer.EmitLine($"cvtss2sd {cOperand}, {cOperand}");
+                buffer.EmitLine("sub esp, 8");
+                buffer.EmitLine($"movsd qword [esp], {cOperand}");
+            }
+            else
+                buffer.EmitLine($"push {cOperand}");
+
+            return cType.Size / 8;
         }
 
         private void SetMachineState(Operand operandA, Operand operandB)
@@ -482,6 +521,16 @@ namespace Compiler.CodeGeneration.Platform
         {
             if (operand == null) throw new ArgumentNullException(nameof(operand));
             
+            var describe = operand.Size switch
+            {
+                0 => is64Bit ? "qword" : "dword",
+                8 => "byte",
+                16 => "word",
+                32 => "dword",
+                64 => "qword",
+                _ => throw new DataException($"Cannot describe immediate of {operand.Size} bits")
+            };
+
             switch (operand.Type)
             {
                 case OperandType.None:
@@ -493,17 +542,17 @@ namespace Compiler.CodeGeneration.Platform
                 case OperandType.ImmediateFloat:
                 {
                     var valueName = BitConverter.Int64BitsToDouble(operand.Value).ToString("F").Replace('.', '_');
-                    var globalIdx = compiler.AllocateGlobal(new CobVariable(
-                        $"float_{valueName}",
-                        new CobType(eCobType.Float, operand.Size),
-                        operand.Value
-                    ));
-                    var describe = operand.Size switch
+                    valueName = $"real_{operand.Size}_{valueName}";
+                    var globalIdx = compiler.FindGlobal(valueName);
+                    if (globalIdx == -1)
                     {
-                        32 => "dword",
-                        64 => "qword",
-                        _ => throw new DataException($"Cannot describe immediate float of {operand.Size} bits")
-                    };
+                        globalIdx = compiler.AllocateGlobal(new CobVariable(
+                            valueName,
+                            new CobType(eCobType.Float, operand.Size),
+                            operand.Value
+                        ));
+                    }
+                    
                     return $"{describe} [rdata_{globalIdx}]";
                 }
                 case OperandType.Register:
@@ -515,9 +564,9 @@ namespace Compiler.CodeGeneration.Platform
                         return GetIntegerRegisterName((int)operand.Value);
                 }
                 case OperandType.Argument:
-                    return $"dword [ebp + {operand.Value * 4 + 4 * 2}]";
+                    return $"{describe} [ebp + {operand.Value * 4 + 4 * 2}]"; // TODO Get offset correctly
                 case OperandType.Local: // TODO Use size
-                    return $"dword [ebp - {(operand.Value + 1) * 4}]";
+                    return $"{describe} [ebp - {(operand.Value + 1) * 4}]";
                 case OperandType.Global:
                 {
                     var global = compiler.Globals[(int)operand.Value];
@@ -584,8 +633,13 @@ namespace Compiler.CodeGeneration.Platform
                 process.BeginErrorReadLine();
                 process.WaitForExit();
 
-                tmpFilename = Path.ChangeExtension(tmpFilename, "exe");
-                File.Copy(tmpFilename, outputFilename, true);
+                if (process.ExitCode == 0)
+                {
+                    tmpFilename = Path.ChangeExtension(tmpFilename, "exe");
+                    File.Copy(tmpFilename, outputFilename, true);
+                }
+                else
+                    Console.WriteLine($"Error: Assembler exited with code {process.ExitCode}");
             }
             finally
             {

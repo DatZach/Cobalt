@@ -55,7 +55,7 @@ namespace Compiler.CodeGeneration
                 {
                     var local = CurrentFunction.AllocateLocal(new CobVariable(decl.Name, rhsType));
                     var reg = CurrentFunction.FreeRegister();
-                    CurrentFunction.Body.EmitLR(Opcode.Move, local, reg);
+                    CurrentFunction.Body.EmitLR(Opcode.Move, local, reg, rhsType.Size);
                 }
                 else if (CurrentFunction == null && rhsType != null) // Global Decl
                 {
@@ -197,9 +197,9 @@ namespace Compiler.CodeGeneration
 
         public CobType? Visit(BinaryOperatorExpression expression)
         {
-            // TODO Verify types
-            expression.Left.Accept(this);
-            expression.Right.Accept(this);
+            var aType = expression.Left.Accept(this);
+            var bType = expression.Right.Accept(this);
+            var cType = aType; // TODO Verify types
 
             var opcode = expression.Operator switch
             {
@@ -223,7 +223,7 @@ namespace Compiler.CodeGeneration
             var c = CurrentFunction.AllocateRegister();
             CurrentFunction.Body.EmitRR(Opcode.Move, c, a);
 
-            return new CobType(eCobType.Signed, 32);
+            return cType;
         }
 
         public CobType? Visit(BlockExpression expression)
@@ -309,22 +309,25 @@ namespace Compiler.CodeGeneration
             // ARGUMENTS
             if ((idx = CurrentFunction.FindParameter(expression.Value)) != -1)
             {
-                CurrentFunction.Body.EmitRA(Opcode.Move, reg, idx);
-                return CurrentFunction.Parameters[idx].Type;
+                var type = CurrentFunction.Parameters[idx].Type;
+                CurrentFunction.Body.EmitRA(Opcode.Move, reg, idx, type.Size);
+                return type;
             }
 
             // LOCALS
             if ((idx = CurrentFunction.FindLocal(expression.Value)) != -1)
             {
-                CurrentFunction.Body.EmitRL(Opcode.Move, reg, idx);
-                return CurrentFunction.Locals[idx].Type;
+                var type = CurrentFunction.Locals[idx].Type;
+                CurrentFunction.Body.EmitRL(Opcode.Move, reg, idx, type.Size);
+                return type;
             }
 
             // GLOBALS
             if ((idx = FindGlobal(expression.Value)) != -1)
             {
-                CurrentFunction.Body.EmitRG(Opcode.Move, reg, idx);
-                return Globals[idx].Type;
+                var type = Globals[idx].Type;
+                CurrentFunction.Body.EmitRG(Opcode.Move, reg, idx, type.Size);
+                return type;
             }
 
             // FUCNTIONS
@@ -345,7 +348,7 @@ namespace Compiler.CodeGeneration
             var reg = CurrentFunction.AllocateRegister();
 
             if (type == eCobType.Float)
-                CurrentFunction.Body.EmitRIf(Opcode.Move, reg, expression.LongValue);
+                CurrentFunction.Body.EmitRIf(Opcode.Move, reg, expression.LongValue, type.Size);
             else
                 CurrentFunction.Body.EmitRI(Opcode.Move, reg, expression.LongValue);
             
@@ -364,7 +367,7 @@ namespace Compiler.CodeGeneration
             ) { Data = data });
 
             var reg = CurrentFunction.AllocateRegister();
-            CurrentFunction.Body.EmitRG(Opcode.Move, reg, global);
+            CurrentFunction.Body.EmitRG(Opcode.Move, reg, global, 0); // TODO Plaform dependent
 
             return CobType.String;
         }
