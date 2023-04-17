@@ -16,6 +16,7 @@ namespace Compiler.CodeGeneration.Platform
         private Function currentFunction;
         private readonly CobType[] registerTypes = new CobType[32];
         private readonly CobType[] argumentTypes = new CobType[32];
+        private CobType[] localTypes = null;
 
         private Compiler compiler;
         private bool is64Bit;
@@ -243,6 +244,9 @@ namespace Compiler.CodeGeneration.Platform
         private void EmitIntermediateInstructionBuffer(MachineCodeBuffer buffer, InstructionBuffer body)
         {
             Array.Fill(registerTypes, CobType.None);
+            Array.Fill(argumentTypes, CobType.None); // TODO Not right
+            localTypes = new CobType[currentFunction.Locals.Count];
+            Array.Fill(localTypes, CobType.None);
 
             for (var i = 0; i < body.Instructions.Count; i++)
             {
@@ -259,13 +263,25 @@ namespace Compiler.CodeGeneration.Platform
                         {
                             if (callee.CallingConvention != CallingConvention.CCall)
                             {
-                                for (int j = 0; j < inst.C.Count; ++j)
-                                    buffer.EmitLine($"push {GetOperandString(inst.C[j])}");
+                                throw new NotImplementedException();
+                                //for (int j = 0; j < inst.C.Count; ++j)
+                                //    buffer.EmitLine($"push {GetOperandString(inst.C[j])}");
                             }
                             else
                             {
                                 for (int j = inst.C.Count - 1; j >= 0; --j)
-                                    buffer.EmitLine($"push {GetOperandString(inst.C[j])}");
+                                {
+                                    var cType = GetOperandDataType(inst.C[j]);
+                                    var cOperand = GetOperandString(inst.C[j]);
+                                    if (cType == eCobType.Float)
+                                    {
+                                        buffer.EmitLine($"cvtss2sd {cOperand}, {cOperand}");
+                                        buffer.EmitLine("sub esp, 8");
+                                        buffer.EmitLine($"movsd qword [esp], {cOperand}");
+                                    }
+                                    else
+                                        buffer.EmitLine($"push {cOperand}");
+                                }
                             }
                         }
 
@@ -299,7 +315,7 @@ namespace Compiler.CodeGeneration.Platform
                         else
                         {
                             buffer.Emit("mov ");
-                            buffer.Emit(GetOperandString(inst.A));
+                            buffer.Emit(GetOperandString(inst.A, bType));
                         }
 
                         buffer.Emit(", ");
@@ -359,11 +375,14 @@ namespace Compiler.CodeGeneration.Platform
                         buffer.EmitLine(GetOperandString(inst.B));
                         break;
                     case Opcode.Add:
-                        buffer.Emit("add ");
+                    {
+                        var aType = GetOperandDataType(inst.A);
+                        buffer.Emit(aType == eCobType.Float ? "addss " : "add "); // TODO Account for width
                         buffer.Emit(GetOperandString(inst.A));
                         buffer.Emit(", ");
                         buffer.EmitLine(GetOperandString(inst.B));
                         break;
+                    }
                     case Opcode.Sub:
                         buffer.Emit("sub ");
                         buffer.Emit(GetOperandString(inst.A));
@@ -423,6 +442,7 @@ namespace Compiler.CodeGeneration.Platform
                     argumentTypes[(int)operandA.Value] = typeB;
                     break;
                 case OperandType.Local:
+                    localTypes[(int)operandA.Value] = typeB;
                     // throw new InvalidOperationException(); // ???
                     //currentFunction.Locals[(int)operandA.Value] = typeB;
                     break;
@@ -449,7 +469,7 @@ namespace Compiler.CodeGeneration.Platform
                 case OperandType.Argument:
                     return argumentTypes[operand.Value];
                 case OperandType.Local:
-                    return currentFunction.Locals[(int)operand.Value].Type;
+                    return localTypes[(int)operand.Value];
                 case OperandType.Global:
                     return compiler.Globals[(int)operand.Value].Type;
                 default:

@@ -33,6 +33,7 @@
     {
         public readonly static CobType None = eCobType.None;
         public readonly static CobType String = eCobType.String;
+        public readonly static CobType Int = new (eCobType.Signed, 32); // TODO Technically should be machine-width
 
         public eCobType Type { get; }
 
