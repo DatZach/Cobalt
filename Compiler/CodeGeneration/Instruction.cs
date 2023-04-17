@@ -9,9 +9,13 @@ namespace Compiler.CodeGeneration
 
         public Operand? B { get; init; }
 
+        public IReadOnlyList<Operand>? C { get; init; }
+
         public override string ToString()
         {
-            return $"{Opcode,-10}{A?.ToString() ?? ""} {B?.ToString() ?? ""}";
+            var cStr = C != null ? string.Join(", ", C) : null;
+
+            return $"{Opcode,-10}{A?.ToString() ?? ""} {B?.ToString() ?? ""} {cStr ?? ""}";
         }
     }   
 
@@ -34,10 +38,9 @@ namespace Compiler.CodeGeneration
                 case OperandType.ImmediateFloat:
                     return BitConverter.Int64BitsToDouble(Value).ToString("F");
                 case OperandType.Register:
-                case OperandType.Parameter:
+                case OperandType.Argument:
                 case OperandType.Local:
                 case OperandType.Global:
-                case OperandType.Function:
                     return Type.ToString()[..1].ToLowerInvariant()
                            + Value.ToString("G")
                            + "."
@@ -52,26 +55,34 @@ namespace Compiler.CodeGeneration
     {
         None,
 
+        Stash,
+        Unstash,
+        Move,
+
         Call,
         Return,
-        RestoreStack,
+        RestoreStack, // TODO Remove
         Jump,
 
-        Move,
-        Push,
-        Pop,
         
+        Push, // TODO Remove
+        Pop,  // TODO Remove
+        
+        Add,
+        Sub,
+        Mul,
+        Div,
+        Mod,
         BitShr,
         BitShl,
         BitAnd,
         BitXor,
         BitOr,
-
-        Add,
-        Sub,
-        Mul,
-        Div,
-        Mod
+        BitNot,
+        Negate,
+        LogicalNot,
+        LogicalAnd,
+        LogicalOr
     }
 
     public enum OperandType : byte
@@ -81,10 +92,8 @@ namespace Compiler.CodeGeneration
         ImmediateUnsigned,
         ImmediateFloat,
         Register,
-        Pointer,
-        Parameter,
+        Argument,
         Local,
-        Global,
-        Function
+        Global
     }
 }

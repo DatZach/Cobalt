@@ -184,7 +184,7 @@ namespace Compiler.CodeGeneration
             functionStack.Push(function);
             
             expression.Body?.Accept(this);
-            function.Body.Emit(Opcode.Return);
+            function.Body.Emit(Opcode.Return); // TODO Error if not all paths return
 
             function.ReturnLabel.Mark();
             function.Body.FixLabels();
@@ -197,6 +197,7 @@ namespace Compiler.CodeGeneration
 
         public CobType? Visit(BinaryOperatorExpression expression)
         {
+            // TODO Verify types
             expression.Left.Accept(this);
             expression.Right.Accept(this);
 
@@ -238,49 +239,63 @@ namespace Compiler.CodeGeneration
 
         public CobType? Visit(CallExpression expression)
         {
+            // FUNCTION IDENTIFIER
             var functionType = expression.FunctionExpression.Accept(this);
             var function = functionType?.Function;
             if (function == null)
                 throw new Exception($"Cannot call type '{functionType}'");
 
+            var freg = CurrentFunction.PeekRegister();
+
+            // ARGUMENTS
             var parameters = function.Parameters;
             var arguments = expression.Arguments;
-            if (arguments.Count != parameters.Count
-            && (parameters.Count == 0 || (parameters.Count > 0 && !parameters[^1].IsSpread)))
+            var hasSpreadParameter = parameters.Count > 0 && parameters[^1].IsSpread;
+            if (arguments.Count != parameters.Count && !hasSpreadParameter)
                 throw new Exception($"Expected {parameters.Count} parameters, but received {arguments.Count} instead");
 
-            if (function.CallingConvention != CallingConvention.CCall
-            && (parameters.Count > 0 && !parameters[^1].IsSpread))
-                throw new Exception("Cannot use spread parameters without ccall");
+            if (function.CallingConvention != CallingConvention.CCall && hasSpreadParameter)
+                throw new Exception("Cannot use spread parameters without ccall"); // TODO Not exactly true
 
             // TODO Calling convention?
 
-            var stackSpace = 0;
-            for (int i = arguments.Count - 1; i >= 0; --i)
+            IReadOnlyList<Operand>? operandArguments;
+            //int stackSpace = 0;
+            if (arguments.Count > 0)
             {
-                var argType = arguments[i].Accept(this);
-                // TODO
-                //if (argType != CobType.FromString(parameters[i].Type))
-                //    throw new Exception($"Expected '{parameters[i].Type}' but received '{argType}' instead");
+                var aOperandArguments = new Operand[arguments.Count];
+                for (int i = 0; i < arguments.Count; ++i)
+                {
+                    var argType = arguments[i].Accept(this);
+                    // TODO
+                    //if (argType != CobType.FromString(parameters[i].Type))
+                    //    throw new Exception($"Expected '{parameters[i].Type}' but received '{argType}' instead");
 
-                var reg = CurrentFunction.FreeRegister();
-                CurrentFunction.Body.EmitR(Opcode.Push, reg);
+                    var reg = CurrentFunction.PeekRegister();
+                    aOperandArguments[i] = new Operand { Type = OperandType.Register, Size = 32, Value = reg };
 
-                stackSpace += (argType.Size + 7) / 8;
+                    //stackSpace += (argType.Size + 7) / 8;
+                }
+
+                operandArguments = aOperandArguments;
             }
+            else
+                operandArguments = null;
             
-            var freg = CurrentFunction.FreeRegister();
-            
-            CurrentFunction.Body.EmitR(Opcode.Call, freg);
-            
+            // CALL
+            CurrentFunction.Body.EmitRA(Opcode.Call, freg, operandArguments);
+
+            // RETURN VALUE
             if (function.ReturnType != eCobType.None)
             {
                 var reg = CurrentFunction.AllocateRegister();
                 CurrentFunction.Body.EmitRR(Opcode.Move, reg, 0);
-                
-                if (function.CallingConvention == CallingConvention.CCall)
-                    CurrentFunction.Body.EmitI(Opcode.RestoreStack, stackSpace);
             }
+
+            // CLEANUP
+            CurrentFunction.FreeRegister(); // function reg
+            for (int i = 0; i < arguments.Count; ++i) // argument regs
+                CurrentFunction.FreeRegister();
             
             return function.ReturnType;
         }
@@ -291,10 +306,10 @@ namespace Compiler.CodeGeneration
 
             var reg = CurrentFunction.AllocateRegister();
 
-            // PARAMETERS
+            // ARGUMENTS
             if ((idx = CurrentFunction.FindParameter(expression.Value)) != -1)
             {
-                CurrentFunction.Body.EmitRP(Opcode.Move, reg, idx);
+                CurrentFunction.Body.EmitRA(Opcode.Move, reg, idx);
                 return CurrentFunction.Parameters[idx].Type;
             }
 
@@ -313,11 +328,11 @@ namespace Compiler.CodeGeneration
             }
 
             // FUCNTIONS
-            if ((idx = Functions.FindIndex(x => x.Name == expression.Value)) != -1)
-            {
-                CurrentFunction.Body.EmitRF(Opcode.Move, reg, idx);
-                return new CobType(eCobType.Function, 0, function: Functions[idx]);
-            }
+            //if ((idx = Functions.FindIndex(x => x.Name == expression.Value)) != -1)
+            //{
+            //    CurrentFunction.Body.EmitRF(Opcode.Move, reg, idx);
+            //    return new CobType(eCobType.Function, 0, function: Functions[idx]);
+            //}
 
             throw new Exception($"Undeclared identifier {expression.Value}");
 
@@ -330,14 +345,7 @@ namespace Compiler.CodeGeneration
             var reg = CurrentFunction.AllocateRegister();
 
             if (type == eCobType.Float)
-            {
-                var globalIdx = AllocateGlobal(new CobVariable($"float{Globals.Count}", type)
-                {
-                    Value = expression.LongValue
-                });
-
-                CurrentFunction.Body.EmitRG(Opcode.Move, reg, globalIdx);
-            }
+                CurrentFunction.Body.EmitRIf(Opcode.Move, reg, expression.LongValue);
             else
                 CurrentFunction.Body.EmitRI(Opcode.Move, reg, expression.LongValue);
             
@@ -349,22 +357,16 @@ namespace Compiler.CodeGeneration
             var byteCount = Encoding.UTF8.GetByteCount(expression.Value);
             var data = new byte[byteCount + 1];
             Encoding.UTF8.GetBytes(expression.Value, 0, expression.Value.Length, data, 0);
-
-            var type = new CobType(
-                eCobType.Array,
-                expression.Value.Length,
-                new CobType(eCobType.Unsigned, 8)
-            );
-
+            
             var global = AllocateGlobal(new CobVariable(
                 $"string{Globals.Count}",
-                type
+                CobType.String
             ) { Data = data });
 
             var reg = CurrentFunction.AllocateRegister();
             CurrentFunction.Body.EmitRG(Opcode.Move, reg, global);
 
-            return type;
+            return CobType.String;
         }
 
         public CobType? Visit(EmptyExpression expression)
@@ -377,7 +379,7 @@ namespace Compiler.CodeGeneration
             return Globals.FindIndex(x => x.Name == name);
         }
         
-        private int AllocateGlobal(CobVariable variable)
+        public int AllocateGlobal(CobVariable variable)
         {
             if (variable == null) throw new ArgumentNullException(nameof(variable));
 

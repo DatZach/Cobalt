@@ -217,14 +217,10 @@ namespace Compiler.Interpreter
                 case OperandType.Register:
                     registers[operand.Value] = value;
                     break;
-                case OperandType.Pointer:
-                    throw new InvalidOperationException();
                 case OperandType.Local:
                     currentFunction.Locals[(int)operand.Value].Value = value;
                     break;
                 case OperandType.Global:
-                    throw new InvalidOperationException();
-                case OperandType.Function:
                     throw new InvalidOperationException();
                 default:
                     throw new ArgumentOutOfRangeException();
@@ -241,9 +237,7 @@ namespace Compiler.Interpreter
                     return operand.Value;
                 case OperandType.Register:
                     return registers[operand.Value];
-                case OperandType.Pointer:
-                    throw new NotImplementedException();
-                case OperandType.Parameter:
+                case OperandType.Argument:
                     return currentParameters[(int)operand.Value];
                 case OperandType.Local:
                     return currentFunction.Locals[(int)operand.Value].Value;
@@ -251,8 +245,6 @@ namespace Compiler.Interpreter
                     // TODO Probably a garbage implementation
                     return operand.Value;
                     //throw new NotImplementedException();
-                case OperandType.Function:
-                    return operand.Value; // TODO Hacky??
                 default:
                     throw new ArgumentOutOfRangeException();
             }
@@ -281,9 +273,6 @@ namespace Compiler.Interpreter
 
                     throw new InvalidOperationException($"VM Expected function but received {global.Type} instead");
                 }
-
-                case OperandType.Function:
-                    return compiler.Functions[(int)operand.Value];
 
                 default:
                     throw new InvalidOperationException($"VM Expected function operand but received {operand.Type} instead");

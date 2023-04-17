@@ -16,6 +16,13 @@
             Type = type;
         }
 
+        public CobVariable(string name, CobType type, long value)
+        {
+            Name = name;
+            Type = type;
+            Value = value;
+        }
+
         public override string ToString()
         {
             return $"{Name,-20}{Type} = {Data}";
@@ -25,6 +32,7 @@
     internal sealed record CobType
     {
         public readonly static CobType None = eCobType.None;
+        public readonly static CobType String = eCobType.String;
 
         public eCobType Type { get; }
 

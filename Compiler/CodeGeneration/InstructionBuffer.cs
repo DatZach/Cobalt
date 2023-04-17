@@ -62,6 +62,15 @@ namespace Compiler.CodeGeneration
                 B = new Operand { Type = OperandType.ImmediateSigned, Size = PlatformWordWidth, Value = immB }
             });
         }
+        public void EmitRIf(Opcode opcode, int regA, long immB)
+        {
+            instructions.Add(new Instruction
+            {
+                Opcode = opcode,
+                A = new Operand { Type = OperandType.Register, Size = PlatformWordWidth, Value = regA },
+                B = new Operand { Type = OperandType.ImmediateFloat, Size = PlatformWordWidth, Value = immB }
+            });
+        }
 
         public void EmitI(Opcode opcode, long immA)
         {
@@ -130,32 +139,42 @@ namespace Compiler.CodeGeneration
             });
         }
 
-        public void EmitF(Opcode opcode, int funA)
-        {
-            instructions.Add(new Instruction
-            {
-                Opcode = opcode,
-                A = new Operand { Type = OperandType.Function, Size = PlatformWordWidth, Value = funA }
-            });
-        }
+        //public void EmitF(Opcode opcode, int funA)
+        //{
+        //    instructions.Add(new Instruction
+        //    {
+        //        Opcode = opcode,
+        //        A = new Operand { Type = OperandType.Function, Size = PlatformWordWidth, Value = funA }
+        //    });
+        //}
 
-        public void EmitRF(Opcode opcode, int regA, int funB)
+        //public void EmitRF(Opcode opcode, int regA, int funB)
+        //{
+        //    instructions.Add(new Instruction
+        //    {
+        //        Opcode = opcode,
+        //        A = new Operand { Type = OperandType.Register, Size = PlatformWordWidth, Value = regA },
+        //        B = new Operand { Type = OperandType.Function, Size = PlatformWordWidth, Value = funB }
+        //    });
+        //}
+
+        public void EmitRA(Opcode opcode, int regA, IReadOnlyList<Operand>? argC)
         {
             instructions.Add(new Instruction
             {
                 Opcode = opcode,
                 A = new Operand { Type = OperandType.Register, Size = PlatformWordWidth, Value = regA },
-                B = new Operand { Type = OperandType.Function, Size = PlatformWordWidth, Value = funB }
+                C = argC
             });
         }
 
-        public void EmitRP(Opcode opcode, int regA, int parB)
+        public void EmitRA(Opcode opcode, int regA, int argB)
         {
             instructions.Add(new Instruction
             {
                 Opcode = opcode,
                 A = new Operand { Type = OperandType.Register, Size = PlatformWordWidth, Value = regA },
-                B = new Operand { Type = OperandType.Parameter, Size = PlatformWordWidth, Value = parB }
+                B = new Operand { Type = OperandType.Argument, Size = PlatformWordWidth, Value = argB }
             });
         }
     }

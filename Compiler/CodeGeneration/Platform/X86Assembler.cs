@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System.Data;
+using System.Diagnostics;
 using System.Text;
 using Compiler.Ast.Expressions.Statements;
 
@@ -11,6 +12,10 @@ namespace Compiler.CodeGeneration.Platform
         public override IReadOnlyList<string> SupportedPlatforms => new[] { "x86", "x86_64" };
 
         public override string DefaultExtension => "exe";
+
+        private Function currentFunction;
+        private readonly CobType[] registerTypes = new CobType[32];
+        private readonly CobType[] argumentTypes = new CobType[32];
 
         private Compiler compiler;
         private bool is64Bit;
@@ -96,10 +101,11 @@ namespace Compiler.CodeGeneration.Platform
                             continue;
 
                         // EAX, ECX, EDX are not preserved in cdecl
-                        buffer.EmitLine($"push {GetRegisterName(j)}");
+                        buffer.EmitLine($"push {GetIntegerRegisterName(j)}");
                     }
                 }
 
+                currentFunction = f;
                 EmitIntermediateInstructionBuffer(buffer, f.Body);
 
                 buffer.EmitLine(".return:");
@@ -110,7 +116,7 @@ namespace Compiler.CodeGeneration.Platform
                         if ((f.ClobberedRegisters & (1u << j)) == 0)
                             continue;
 
-                        buffer.EmitLine($"pop {GetRegisterName(j)}");
+                        buffer.EmitLine($"pop {GetIntegerRegisterName(j)}");
                     }
 
                     buffer.EmitLine("leave");
@@ -128,11 +134,47 @@ namespace Compiler.CodeGeneration.Platform
             for (var i = 0; i < compiler.Globals.Count; i++)
             {
                 var global = compiler.Globals[i];
-                if (global.Data == null)
-                    continue;
+                switch (global.Type.Type)
+                {
+                    case eCobType.Signed:
+                    case eCobType.Unsigned:
+                    {
+                        var describe = global.Type.Size switch
+                        {
+                            64 => "dq",
+                            32 => "dd",
+                            16 => "dw",
+                            8 => "db",
+                            _ => throw new DataException($"Cannot encode {global.Type.Size} bits of data")
+                        };
+                        buffer.EmitLine($"rdata_{i} {describe} {global.Value}");
+                        break;
+                    }
+                    case eCobType.Float:
+                    {
+                        var describe = global.Type.Size switch
+                        {
+                            64 => "dq",
+                            32 => "dd",
+                            _ => throw new DataException($"Cannot encode {global.Type.Size} bits of data")
+                        };
+                        buffer.EmitLine($"rdata_{i} {describe} {BitConverter.Int64BitsToDouble(global.Value)}");
+                        break;
+                    }
+                    case eCobType.Function:
+                        buffer.EmitLine($"rdata_{i} dd {global.Type.Function.Name}");
+                        break;
+                    case eCobType.Array:
+                    case eCobType.String:
+                        if (global.Data == null)
+                            throw new DataException("Data expected for string or array type");
 
-                var value = string.Join(", ", global.Data);
-                buffer.EmitLine($"rdata_{i} db {value}");
+                        var value = string.Join(", ", global.Data);
+                        buffer.EmitLine($"rdata_{i} db {value}");
+                        break;
+                    default:
+                        throw new DataException($"Cannot encode .rdata {global.Type}");
+                }
             }
 
             buffer.EmitLine("_msg_UnhandledException db 'UNHANDLED EXCEPTION', 0");
@@ -200,7 +242,7 @@ namespace Compiler.CodeGeneration.Platform
 
         private void EmitIntermediateInstructionBuffer(MachineCodeBuffer buffer, InstructionBuffer body)
         {
-            var regTypes = new eCobType[8];
+            Array.Fill(registerTypes, CobType.None);
 
             for (var i = 0; i < body.Instructions.Count; i++)
             {
@@ -211,9 +253,29 @@ namespace Compiler.CodeGeneration.Platform
                         buffer.EmitLine("nop");
                         break;
                     case Opcode.Call:
+                    {
+                        var callee = GetOperandDataType(inst.A).Function;
+                        if (inst.C != null)
+                        {
+                            if (callee.CallingConvention != CallingConvention.CCall)
+                            {
+                                for (int j = 0; j < inst.C.Count; ++j)
+                                    buffer.EmitLine($"push {GetOperandString(inst.C[j])}");
+                            }
+                            else
+                            {
+                                for (int j = inst.C.Count - 1; j >= 0; --j)
+                                    buffer.EmitLine($"push {GetOperandString(inst.C[j])}");
+                            }
+                        }
+
                         buffer.Emit("call ");
                         buffer.EmitLine(GetOperandString(inst.A));
+
+                        if (callee.CallingConvention == CallingConvention.CCall)
+                            buffer.EmitLine($"add esp, {(inst.C?.Count ?? 0) * 4}"); // TODO Determine stack space
                         break;
+                    }
                     case Opcode.Return:
                     {
                         if (inst.A != null)
@@ -226,14 +288,13 @@ namespace Compiler.CodeGeneration.Platform
                         break;
                     case Opcode.Move:
                     {
-                        var rhsType = inst.B.Type == OperandType.Global
-                            ? compiler.Globals[(int)inst.B.Value].Type
-                            : CobType.None; // TODO HACK
+                        var aType = GetOperandDataType(inst.A);
+                        var bType = GetOperandDataType(inst.B);
 
-                        if (rhsType == eCobType.Float)
+                        if (bType == eCobType.Float)
                         {
-                            buffer.Emit(rhsType.Size == 32 ? "movss " : "movsd "); // TODO Support diff sizes
-                            buffer.Emit(GetFloatRegisterName((int)inst.A.Value)); // TODO Need GetOperandString for other types
+                            buffer.Emit(bType.Size == 32 ? "movss " : "movsd "); // TODO Support diff sizes
+                            buffer.Emit(GetOperandString(inst.A, bType));
                         }
                         else
                         {
@@ -244,30 +305,29 @@ namespace Compiler.CodeGeneration.Platform
                         buffer.Emit(", ");
                         buffer.EmitLine(GetOperandString(inst.B));
 
-                        if (inst.A.Type == OperandType.Register)
-                            regTypes[(int)inst.A.Value] = rhsType.Type;
+                        SetMachineState(inst.A, inst.B);
                         break;
                     }
-                    case Opcode.Push:
-                    {
-                        if (inst.A.Type == OperandType.Register && regTypes[(int)inst.A.Value] == eCobType.Float)
-                        {
-                            var operand = GetFloatRegisterName((int)inst.A.Value);
-                            buffer.EmitLine($"cvtss2sd {operand}, {operand}");
-                            buffer.EmitLine("sub esp, 8");
-                            buffer.EmitLine($"mov dword [esp], {operand}");
-                        }
-                        else
-                        {
-                            buffer.Emit("push ");
-                            buffer.EmitLine(GetOperandString(inst.A));
-                        }
-                        break;
-                    }
-                    case Opcode.Pop:
-                        buffer.Emit("pop ");
-                        buffer.EmitLine(GetOperandString(inst.A));
-                        break;
+                    //case Opcode.Push:
+                    //{
+                    //    if (inst.A.Type == OperandType.Register && registerTypes[(int)inst.A.Value] == eCobType.Float)
+                    //    {
+                    //        var operand = GetFloatRegisterName((int)inst.A.Value);
+                    //        buffer.EmitLine($"cvtss2sd {operand}, {operand}");
+                    //        buffer.EmitLine("sub esp, 8");
+                    //        buffer.EmitLine($"mov dword [esp], {operand}");
+                    //    }
+                    //    else
+                    //    {
+                    //        buffer.Emit("push ");
+                    //        buffer.EmitLine(GetOperandString(inst.A));
+                    //    }
+                    //    break;
+                    //}
+                    //case Opcode.Pop:
+                    //    buffer.Emit("pop ");
+                    //    buffer.EmitLine(GetOperandString(inst.A));
+                    //    break;
                     case Opcode.BitShr:
                         buffer.Emit("shr ");
                         buffer.Emit(GetOperandString(inst.A));
@@ -344,11 +404,64 @@ namespace Compiler.CodeGeneration.Platform
             }
         }
 
+        private void SetMachineState(Operand operandA, Operand operandB)
+        {
+            var typeB = GetOperandDataType(operandB);
+            switch (operandA.Type)
+            {
+                case OperandType.None:
+                case OperandType.ImmediateSigned:
+                case OperandType.ImmediateUnsigned:
+                case OperandType.ImmediateFloat:
+                    // TODO Technically an error condition?
+                    break;
+                case OperandType.Register:
+                    // NOTE xmm and **x registers share type state in VM bytecode
+                    registerTypes[(int)operandA.Value] = typeB;
+                    break;
+                case OperandType.Argument:
+                    argumentTypes[(int)operandA.Value] = typeB;
+                    break;
+                case OperandType.Local:
+                    // throw new InvalidOperationException(); // ???
+                    //currentFunction.Locals[(int)operandA.Value] = typeB;
+                    break;
+                case OperandType.Global:
+                    // ???
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+        }
+
+        private CobType GetOperandDataType(Operand operand)
+        {
+            switch (operand.Type)
+            {
+                case OperandType.ImmediateSigned:
+                    return new CobType(eCobType.Signed, operand.Size);
+                case OperandType.ImmediateUnsigned:
+                    return new CobType(eCobType.Unsigned, operand.Size);
+                case OperandType.ImmediateFloat:
+                    return new CobType(eCobType.Float, operand.Size);
+                case OperandType.Register:
+                    return registerTypes[operand.Value];
+                case OperandType.Argument:
+                    return argumentTypes[operand.Value];
+                case OperandType.Local:
+                    return currentFunction.Locals[(int)operand.Value].Type;
+                case OperandType.Global:
+                    return compiler.Globals[(int)operand.Value].Type;
+                default:
+                    return CobType.None;
+            }
+        }
+
         // TODO Support 64bit correctly
-        private string GetOperandString(Operand? operand)
+        private string GetOperandString(Operand? operand, CobType? typeOverride = null)
         {
             if (operand == null) throw new ArgumentNullException(nameof(operand));
-
+            
             switch (operand.Type)
             {
                 case OperandType.None:
@@ -358,33 +471,44 @@ namespace Compiler.CodeGeneration.Platform
                 case OperandType.ImmediateUnsigned:
                     return ((ulong)operand.Value).ToString("D");
                 case OperandType.ImmediateFloat:
-                    return BitConverter.Int64BitsToDouble(operand.Value).ToString("F");
+                {
+                    var valueName = BitConverter.Int64BitsToDouble(operand.Value).ToString("F").Replace('.', '_');
+                    var globalIdx = compiler.AllocateGlobal(new CobVariable(
+                        $"float_{valueName}",
+                        new CobType(eCobType.Float, operand.Size),
+                        operand.Value
+                    ));
+                    var describe = operand.Size switch
+                    {
+                        32 => "dword",
+                        64 => "qword",
+                        _ => throw new DataException($"Cannot describe immediate float of {operand.Size} bits")
+                    };
+                    return $"{describe} [rdata_{globalIdx}]";
+                }
                 case OperandType.Register:
-                    return GetRegisterName((int)operand.Value);
-                case OperandType.Pointer:
-                    throw new NotImplementedException();
-                case OperandType.Parameter:
+                {
+                    var type = typeOverride ?? registerTypes[operand.Value];
+                    if (type == eCobType.Float)
+                        return GetFloatRegisterName((int)operand.Value);
+                    else
+                        return GetIntegerRegisterName((int)operand.Value);
+                }
+                case OperandType.Argument:
                     return $"dword [ebp + {operand.Value * 4 + 4 * 2}]";
                 case OperandType.Local: // TODO Use size
                     return $"dword [ebp - {(operand.Value + 1) * 4}]";
                 case OperandType.Global:
                 {
-                    var fun = compiler.Globals[(int)operand.Value];
-                    if (fun.Type == eCobType.Function)
+                    var global = compiler.Globals[(int)operand.Value];
+                    if (global.Type == eCobType.Function)
                     {
-                        if (fun.Type.Function.NativeImport != null)
-                            return "[" + fun.Type.Function.Name + "]";
-                        return fun.Type.Function.Name;
+                        if (global.Type.Function.NativeImport != null)
+                            return "[" + global.Type.Function.Name + "]";
+                        return global.Type.Function.Name;
                     }
-                    return $"rdata_{operand.Value}";
-                }
-                case OperandType.Function:
-                {
-                    var functionName = compiler.Functions[(int)operand.Value].Name;
-                    if (compiler.Imports.Any(x => x.SymbolName == functionName)) // TODO Probably could improve
-                        return "[" + functionName + "]";
 
-                    return functionName;
+                    return $"rdata_{operand.Value}";
                 }
                 default:
                     throw new ArgumentOutOfRangeException();
@@ -394,7 +518,7 @@ namespace Compiler.CodeGeneration.Platform
         private static readonly string[] registers32 = { "eax", "ecx", "edx", "ebx" };
         private static readonly string[] registers64 = { "rax", "rcx", "rdx", "rbx", "r8",  "r9", 
                                                          "r10", "r11", "r12", "r13", "r14", "r15" };
-        private string GetRegisterName(int i)
+        private string GetIntegerRegisterName(int i)
         {
             return is64Bit ? registers64[i] : registers32[i];
         }

@@ -56,11 +56,16 @@ namespace Compiler.CodeGeneration
             return --registerStack;
         }
 
+        public int PeekRegister()
+        {
+            return registerStack - 1;
+        }
+
         public int PreserveRegister(int register)
         {
             if (register < registerStack)
             {
-                Body.EmitR(Opcode.Push, register);
+                Body.EmitR(Opcode.Stash, register);
                 return register;
             }
 
@@ -72,7 +77,7 @@ namespace Compiler.CodeGeneration
             if (register == -1)
                 return;
 
-            Body.EmitR(Opcode.Pop, register);
+            Body.EmitR(Opcode.Unstash, register);
         }
 
         public int AllocateLocal(CobVariable variable)
