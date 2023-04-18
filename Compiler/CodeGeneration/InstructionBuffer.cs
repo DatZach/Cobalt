@@ -53,6 +53,16 @@ namespace Compiler.CodeGeneration
             });
         }
 
+        public void EmitRsRs(Opcode opcode, int regA, int sizeA, int regB, int sizeB)
+        {
+            instructions.Add(new Instruction
+            {
+                Opcode = opcode,
+                A = new Operand { Type = OperandType.Register, Size = (byte)sizeA, Value = regA },
+                B = new Operand { Type = OperandType.Register, Size = (byte)sizeB, Value = regB }
+            });
+        }
+
         public void EmitRI(Opcode opcode, int regA, long immB)
         {
             instructions.Add(new Instruction

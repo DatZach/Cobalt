@@ -91,11 +91,11 @@
                 return None;
 
             if (typeName[0] == 's' && char.IsDigit(typeName[1]))
-                return new CobType(eCobType.Signed, int.Parse(typeName[1..3]));
+                return new CobType(eCobType.Signed, int.Parse(typeName[1..]));
             if (typeName[0] == 'u' && char.IsDigit(typeName[1]))
-                return new CobType(eCobType.Unsigned, int.Parse(typeName[1..3]));
+                return new CobType(eCobType.Unsigned, int.Parse(typeName[1..]));
             if (typeName[0] == 'f' && char.IsDigit(typeName[1]))
-                return new CobType(eCobType.Float, int.Parse(typeName[1..3]));
+                return new CobType(eCobType.Float, int.Parse(typeName[1..]));
             if (typeName[0] == 'f' && typeName[1] == 'n')
                 return new CobType(eCobType.Function, 0);
             if (typeName == "string")

@@ -239,6 +239,11 @@ namespace Compiler.CodeGeneration
 
         public CobType? Visit(CallExpression expression)
         {
+            // CAST OPERATOR
+            var castType = VisitCast(expression);
+            if (castType != null)
+                return castType;
+
             // FUNCTION IDENTIFIER
             var functionType = expression.FunctionExpression.Accept(this);
             var function = functionType?.Function;
@@ -272,6 +277,8 @@ namespace Compiler.CodeGeneration
                     //    throw new Exception($"Expected '{parameters[i].Type}' but received '{argType}' instead");
 
                     var reg = CurrentFunction.PeekRegister();
+                    if (argType.Size != 32)
+                        reg = EmitCast(reg, argType, CobType.Int);
                     aOperandArguments[i] = new Operand { Type = OperandType.Register, Size = 32, Value = reg };
 
                     //stackSpace += (argType.Size + 7) / 8;
@@ -298,6 +305,48 @@ namespace Compiler.CodeGeneration
                 CurrentFunction.FreeRegister();
             
             return function.ReturnType;
+        }
+
+        private CobType? VisitCast(CallExpression expression)
+        {
+            if (expression.FunctionExpression is not IdentifierExpression ie)
+                return null;
+
+            var castType = CobType.FromString(ie.Value);
+            if (castType == CobType.None)
+                return null;
+
+            var arguments = expression.Arguments;
+            if (arguments.Count != 1)
+                throw new Exception($"Expected 1 argument but recieved {arguments.Count} instead.");
+
+            var srcType = arguments[0].Accept(this);
+            var srcReg = CurrentFunction.PeekRegister();
+            EmitCast(srcReg, srcType, castType);
+            
+            return castType;
+        }
+
+        private int EmitCast(int srcReg, CobType srcType, CobType dstType)
+        {
+            if (srcType == eCobType.Unsigned
+            ||  srcType == eCobType.Signed
+            ||  srcType == eCobType.Float)
+            {
+                if (srcType.Size > dstType.Size)
+                    return srcReg;
+
+                //var dstReg = CurrentFunction.AllocateRegister();
+                CurrentFunction.Body.EmitRsRs(
+                    Opcode.Move,
+                    srcReg, dstType.Size,
+                    srcReg, srcType.Size
+                );
+
+                return srcReg;
+            }
+            else
+                throw new NotImplementedException();
         }
 
         public CobType? Visit(IdentifierExpression expression)

@@ -7,14 +7,16 @@ namespace Compiler.Ast.Parselets
 {
     internal sealed class NumberParselet : IPrefixExpressionParselet
     {
+        private readonly static char[] TypeSpecifiers = { 'u', 's', 'f' };
+
         public Expression Parse(Parser parser, Token token)
         {
             var value = token.Value;
             var hasHexSpecified = false;
             var hasBinSpecified = false;
             var hasDotSpecified = false;
-            var type = eCobType.Unsigned;
-            var bitSize = 32; // TODO Parse suffix
+            var type = eCobType.None;
+            var bitSize = 32;
 
             int i = 0;
             if (value[0] == '-' || value[0] == '+')
@@ -25,22 +27,48 @@ namespace Compiler.Ast.Parselets
 
             if (value.Length > 2 && value[i] == '0' && value[i + 1] == 'x')
             {
-                value = token.Value[2..];
+                value = value[2..];
+                if (type == eCobType.None)
+                    type = eCobType.Unsigned;
                 hasHexSpecified = true;
             }
             else if (value.Length > 2 && value[i] == '0' && value[i + 1] == 'b')
             {
-                value = token.Value[2..];
+                value = value[2..];
+                if (type == eCobType.None)
+                    type = eCobType.Unsigned;
                 hasBinSpecified = true;
             }
             else if (value.IndexOf('.') != -1)
             {
                 bitSize = 64;
+                type = eCobType.Float;
                 hasDotSpecified = true;
             }
 
             if (value.IndexOf('_') != -1)
                 value = value.Replace("_", "");
+
+            int typeIdx = value.IndexOfAny(TypeSpecifiers);
+            if (typeIdx != -1)
+            {
+                type = value[typeIdx] switch
+                {
+                    'u' => eCobType.Unsigned,
+                    's' => eCobType.Signed,
+                    'f' => eCobType.Float,
+                    _ => throw new ArgumentNullException("Unknown type specifier")
+                };
+
+                if (!int.TryParse(value.AsSpan(typeIdx + 1, value.Length - typeIdx - 1), NumberStyles.None,
+                        CultureInfo.InvariantCulture, out bitSize))
+                    throw new InvalidDataException("Invalid type size");
+
+                value = value[..typeIdx];
+            }
+
+            if (type == eCobType.None)
+                type = eCobType.Signed;
 
             long integerNumber;
             double floatNumber;
@@ -56,11 +84,10 @@ namespace Compiler.Ast.Parselets
                     return new NumberExpression(token, integerNumber, type, bitSize);
             }
             else if (hasDotSpecified
-                 &&  double.TryParse(value, NumberStyles.AllowDecimalPoint | NumberStyles.AllowLeadingSign,
-                                     CultureInfo.InvariantCulture, out floatNumber))
+                 &&  double.TryParse(value, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out floatNumber))
             {
                 integerNumber = BitConverter.DoubleToInt64Bits(floatNumber);
-                return new NumberExpression(token, integerNumber, eCobType.Float, bitSize);
+                return new NumberExpression(token, integerNumber, type, bitSize);
             }
             else
             {

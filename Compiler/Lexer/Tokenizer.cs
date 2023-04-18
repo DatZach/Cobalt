@@ -110,6 +110,7 @@ namespace Compiler.Lexer
                     bool hasBinSpecified = false;
                     bool hasDecimal = false;
                     bool hasSign = false;
+                    bool hasType = false;
 
                     if (ch == '0' && chNext == 'x')
                         hasHexSpecified = true;
@@ -135,15 +136,21 @@ namespace Compiler.Lexer
                             return IsBinChar(c);
                         }
 
-                        if ((c == '-' || c == '+') && !hasSign)
+                        if (!hasSign && (c == '-' || c == '+'))
                         {
                             hasSign = true;
                             return true;
                         }
 
-                        if (c == '.' && !hasDecimal)
+                        if (!hasDecimal && c == '.')
                         {
                             hasDecimal = true;
+                            return true;
+                        }
+
+                        if (!hasType && (c == 'u' || c == 's' || c == 'f'))
+                        {
+                            hasType = true;
                             return true;
                         }
 

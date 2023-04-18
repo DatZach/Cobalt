@@ -102,7 +102,7 @@ namespace Compiler.CodeGeneration.Platform
                             continue;
 
                         // EAX, ECX, EDX are not preserved in cdecl
-                        buffer.EmitLine($"push {GetIntegerRegisterName(j)}");
+                        buffer.EmitLine($"push {GetIntegerRegisterName(j, 32)}");
                     }
                 }
 
@@ -117,7 +117,7 @@ namespace Compiler.CodeGeneration.Platform
                         if ((f.ClobberedRegisters & (1u << j)) == 0)
                             continue;
 
-                        buffer.EmitLine($"pop {GetIntegerRegisterName(j)}");
+                        buffer.EmitLine($"pop {GetIntegerRegisterName(j, 32)}");
                     }
 
                     buffer.EmitLine("leave");
@@ -297,7 +297,9 @@ namespace Compiler.CodeGeneration.Platform
                         var bType = GetOperandDataType(inst.B);
 
                         if (bType == eCobType.Float)
-                            buffer.Emit(bType.Size == 32 ? "movss " : "movsd "); // TODO Support diff sizes
+                            buffer.Emit(bType.Size == 32 ? "movss " : "movsd ");
+                        else if (inst.A.Size > inst.B.Size) // TODO 0 hack
+                            buffer.Emit("movzx ");
                         else
                             buffer.Emit("mov ");
 
@@ -449,17 +451,21 @@ namespace Compiler.CodeGeneration.Platform
         {
             var cType = GetOperandDataType(operand);
             var cOperand = GetOperandString(operand);
+            int bitSize = cType.Size;
             if (cType == eCobType.Float)
             {
                 if (cType.Size == 32)
+                {
                     buffer.EmitLine($"cvtss2sd {cOperand}, {cOperand}");
+                    bitSize = 64;
+                }
                 buffer.EmitLine("sub esp, 8");
                 buffer.EmitLine($"movsd qword [esp], {cOperand}");
             }
             else
                 buffer.EmitLine($"push {cOperand}");
 
-            return cType.Size / 8;
+            return bitSize / 8;
         }
 
         private void SetMachineState(Operand operandA, Operand operandB)
@@ -561,7 +567,7 @@ namespace Compiler.CodeGeneration.Platform
                     if (type == eCobType.Float)
                         return GetFloatRegisterName((int)operand.Value);
                     else
-                        return GetIntegerRegisterName((int)operand.Value);
+                        return GetIntegerRegisterName((int)operand.Value, operand.Size);
                 }
                 case OperandType.Argument:
                     return $"{describe} [ebp + {operand.Value * 4 + 4 * 2}]"; // TODO Get offset correctly
@@ -584,12 +590,24 @@ namespace Compiler.CodeGeneration.Platform
             }
         }
 
-        private static readonly string[] registers32 = { "eax", "ecx", "edx", "ebx" };
-        private static readonly string[] registers64 = { "rax", "rcx", "rdx", "rbx", "r8",  "r9", 
-                                                         "r10", "r11", "r12", "r13", "r14", "r15" };
-        private string GetIntegerRegisterName(int i)
+        private readonly static string[,] registers =
         {
-            return is64Bit ? registers64[i] : registers32[i];
+            { null,  null,  null,  null,  null,  null  }, // 0
+            { "al",  "cl",  "dl",  "bl",  null,  null  }, // 8
+            { "ax",  "cx",  "dx",  "bx",  "di",  "si"  }, // 16
+            { "eax", "ecx", "edx", "ebx", "edi", "esi" }, // 24
+            { "eax", "ecx", "edx", "ebx", "edi", "esi" }, // 32
+            { "rax", "rcx", "rdx", "rbx", "rdi", "esi" }, // 40
+            { "rax", "rcx", "rdx", "rbx", "rdi", "esi" }, // 48
+            { "rax", "rcx", "rdx", "rbx", "rdi", "esi" }, // 56
+            { "rax", "rcx", "rdx", "rbx", "rdi", "esi" }, // 64
+        };
+
+        private string GetIntegerRegisterName(int i, int bitSize)
+        {
+            var j = (bitSize + 7) / 8;
+            if (j == 0) j = is64Bit ? 8 : 4;
+            return registers[j, i];
         }
 
         private static readonly string[] floatRegisters = { "xmm0", "xmm1", "xmm2", "xmm3" };
