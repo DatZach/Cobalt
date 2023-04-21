@@ -14,7 +14,7 @@ namespace Compiler.CodeGeneration
 
         public InstructionBuffer()
         {
-            PlatformWordWidth = 32; // TODO Don't hardcode
+            PlatformWordWidth = 64; // TODO Don't hardcode
 
             instructions = new List<Instruction>(4);
             labels = new List<Label>(4);

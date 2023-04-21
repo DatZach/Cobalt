@@ -109,16 +109,7 @@ namespace Compiler.CodeGeneration
 
             return -1;
         }
-
-        public int ResolveStackSpaceRequired()
-        {
-            int bytes = 0;
-            for (var i = 0; i < Locals.Count; ++i)
-                bytes += (Locals[i].Type.Size + 7) / 8;
-
-            return bytes;
-        }
-
+        
         public sealed class Parameter
         {
             public string Name { get; }

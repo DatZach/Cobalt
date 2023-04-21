@@ -106,13 +106,6 @@ namespace Compiler.Interpreter
                         functionStack.Pop();
                         return value;
                     }
-                    case Opcode.RestoreStack:
-                    {
-                        var size = ReadOperand(inst.A!) / 4;
-                        while (size-- > 0)
-                            localStack.Pop();
-                        break;
-                    }
                     case Opcode.Move:
                     {
                         WriteOperand(inst.A!, ReadOperand(inst.B!));

@@ -9,22 +9,21 @@ namespace Compiler.CodeGeneration.Platform
     {
         public const string DefaultFasmPath = @"C:\Tools\fasmw17330\fasm.exe";
 
-        public override IReadOnlyList<string> SupportedPlatforms => new[] { "x86", "x86_64" };
+        public override IReadOnlyList<string> SupportedPlatforms => new[] { "x86_64" };
 
         public override string DefaultExtension => "exe";
 
         private Function currentFunction;
+        private int callReserve, localReserve, nvrReserve, stackSpace;
         private readonly CobType[] registerTypes = new CobType[32];
         private readonly CobType[] argumentTypes = new CobType[32];
         private CobType[] localTypes = null;
 
         private Compiler compiler;
-        private bool is64Bit;
 
         public override void Assemble(Compiler compiler, ArtifactExpression artifact, string outputFilename)
         {
             this.compiler = compiler;
-            is64Bit = artifact.Platform == "x86_64";
 
             var buffer = new MachineCodeBuffer();
             EmitProgram(buffer, artifact, outputFilename);
@@ -41,15 +40,14 @@ namespace Compiler.CodeGeneration.Platform
             // Preamble
             buffer.Emit("format ");
             buffer.Emit(artifact.Container);
-            buffer.Emit(" ");
+            buffer.Emit("64 ");
             if (artifact.ContainerParameters.Count > 0)
                 buffer.Emit(string.Join(' ', artifact.ContainerParameters));
             else
                 buffer.Emit("console");
             buffer.EmitLine("");
-            if (hasEntryPoint) buffer.EmitLine("entry start");
-            buffer.EmitLine(is64Bit ? "use64" : "use32");
-            buffer.EmitLine("include 'include/win32a.inc'");
+            if (hasEntryPoint) buffer.EmitLine("entry EntryPoint");
+            buffer.EmitLine("include 'include/win64a.inc'");
 
             // Text
             buffer.EmitLine("section '.text' code executable");
@@ -57,17 +55,25 @@ namespace Compiler.CodeGeneration.Platform
             // Entry Point
             if (hasEntryPoint)
             {
-                buffer.EmitLine("start:");
-                buffer.EmitLine("    push __UnhandledExceptionHandler");
-                buffer.EmitLine("    call [SetUnhandledExceptionFilter]");
-                buffer.EmitLine("    call " + entryPointName);
-                buffer.EmitLine("    push 0");
-                buffer.EmitLine("    call [ExitProcess]");
+                buffer.EmitLine("EntryPoint:");
+                //buffer.EmitLine("    and     rsp, not 8");
+                buffer.EmitLine("    sub     rsp, 32");
+                buffer.EmitLine("    mov     rcx, __UnhandledExceptionHandler");
+                buffer.EmitLine("    call    [SetUnhandledExceptionFilter]");
+                buffer.EmitLine("    call    " + entryPointName);
+                buffer.EmitLine("    xor     rcx, rcx");
+                buffer.EmitLine("    call    [ExitProcess]");
+                buffer.EmitLine("    add     rsp, 32");
+                buffer.EmitLine("    xor     rax, rax");
+                buffer.EmitLine("    ret");
 
                 buffer.EmitLine("__UnhandledExceptionHandler:");
-                buffer.EmitLine("    push _msg_UnhandledException");
-                buffer.EmitLine("    call [printf]");
-                buffer.EmitLine("    mov eax, 1");
+                buffer.EmitLine("    and     rsp, not 8");
+                buffer.EmitLine("    sub     rsp, 32");
+                buffer.EmitLine("    mov     ecx, __UnhandledExceptionHandler_Message");
+                buffer.EmitLine("    call    [printf]");
+                buffer.EmitLine("    mov     rax, 1");
+                buffer.EmitLine("    add     rsp, 32");
                 buffer.EmitLine("    ret");
 
                 compiler.Imports.Add(new Import
@@ -88,21 +94,52 @@ namespace Compiler.CodeGeneration.Platform
                 if (f.NativeImport != null)
                     continue;
 
-                var stackSpace = f.ResolveStackSpaceRequired();
+                callReserve = 0;
+                var instructions = f.Body.Instructions;
+                for (int j = 0; j < instructions.Count; ++j)
+                {
+                    var inst = instructions[j];
+                    if (inst.Opcode == Opcode.Call)
+                        callReserve = Math.Max(callReserve, 4);
+                    else if (inst.Opcode == Opcode.Move && inst.A.Type == OperandType.Argument)
+                        callReserve = Math.Max(callReserve, (int)inst.A.Value);
+                }
+
+                callReserve *= 8;
+
+                localReserve = f.Locals.Count * 8;
+
+                nvrReserve = 0;
+                for (int j = 0; j < MaxRegisters; ++j)
+                {
+                    if ((f.ClobberedRegisters & (1u << j)) == 0)
+                        continue;
+
+                    var regName = GetIntegerRegisterName(j, 64);
+                    if (nonVolatileRegisters.Contains(regName))
+                        nvrReserve += 8;
+                }
+
+                stackSpace = callReserve + localReserve + nvrReserve;
+                while (stackSpace % 16 != 0) ++stackSpace; // TODO Write a better implementation lol
+                //stackSpace += 16 - (stackSpace & ~16);
+
                 buffer.EmitLine(f.Name + ":");
                 if (f.CallingConvention != CallingConvention.None)
                 {
-                    buffer.EmitLine("push ebp");
-                    buffer.EmitLine("mov ebp, esp");
                     if (stackSpace > 0)
-                        buffer.EmitLine($"sub esp, {stackSpace}");
-                    for (var j = 3; j < 32; j++)
+                        buffer.EmitLine($"sub rsp, {stackSpace}");
+                    for (int j = 0, k = 0; j < MaxRegisters; j++)
                     {
                         if ((f.ClobberedRegisters & (1u << j)) == 0)
                             continue;
 
-                        // EAX, ECX, EDX are not preserved in cdecl
-                        buffer.EmitLine($"push {GetIntegerRegisterName(j, 32)}");
+                        var regName = GetIntegerRegisterName(j, 64);
+                        if (nonVolatileRegisters.Contains(regName))
+                        {
+                            int nvrOffset = callReserve + localReserve + k * 8;
+                            buffer.EmitLine($"mov qword [rsp + {nvrOffset}], {GetIntegerRegisterName(j, 64)}");
+                        }
                     }
                 }
 
@@ -112,21 +149,22 @@ namespace Compiler.CodeGeneration.Platform
                 buffer.EmitLine(".return:");
                 if (f.CallingConvention != CallingConvention.None)
                 {
-                    for (var j = 32 - 1; j >= 3; --j)
+                    for (int j = 0, k = 0; j < MaxRegisters; j++)
                     {
                         if ((f.ClobberedRegisters & (1u << j)) == 0)
                             continue;
 
-                        buffer.EmitLine($"pop {GetIntegerRegisterName(j, 32)}");
+                        var regName = GetIntegerRegisterName(j, 64);
+                        if (nonVolatileRegisters.Contains(regName))
+                        {
+                            int nvrOffset = callReserve + localReserve + k * 8;
+                            buffer.EmitLine($"mov {GetIntegerRegisterName(j, 64)}, qword [rsp + {nvrOffset}]");
+                        }
                     }
-
-                    buffer.EmitLine("leave");
-
-                    buffer.EmitLine(
-                        f.CallingConvention == CallingConvention.CCall
-                            ? "ret"
-                            : $"ret {stackSpace}"
-                    );
+                    
+                    if (stackSpace > 0)
+                        buffer.EmitLine($"add rsp, {stackSpace}");
+                    buffer.EmitLine("ret");
                 }
             }
 
@@ -178,7 +216,7 @@ namespace Compiler.CodeGeneration.Platform
                 }
             }
 
-            buffer.EmitLine("_msg_UnhandledException db 'UNHANDLED EXCEPTION', 0");
+            buffer.EmitLine("__UnhandledExceptionHandler_Message db 'UNHANDLED EXCEPTION', 10, 0");
 
             // Imports
             buffer.EmitLine("section '.idata' data readable import");
@@ -259,38 +297,46 @@ namespace Compiler.CodeGeneration.Platform
                     case Opcode.Call:
                     {
                         var callee = GetOperandDataType(inst.A).Function;
-                        int stackSpace = 0;
                         if (inst.C != null)
                         {
-                            if (callee.CallingConvention != CallingConvention.CCall)
+                            for (int j = 0; j < inst.C.Count; ++j)
                             {
-                                for (int j = 0; j < inst.C.Count; ++j)
-                                    stackSpace += EmitArgument(buffer, inst.C[j]);
-                            }
-                            else
-                            {
-                                for (int j = inst.C.Count - 1; j >= 0; --j)
-                                    stackSpace += EmitArgument(buffer, inst.C[j]);
+                                var operand = inst.C[j];
+                                var cType = GetOperandDataType(operand);
+                                var cOperand = GetOperandString(operand);
+                                var argOperand = new Operand { Type = OperandType.Argument, Value = j, Size = operand.Size };
+                                if (cType == eCobType.Float)
+                                {
+                                    if (cType.Size == 32)
+                                        buffer.EmitLine($"cvtss2sd {cOperand}, {cOperand}");
+
+                                    buffer.EmitLine($"movsd {GetOperandString(argOperand)}, {cOperand}");
+                                }
+                                else
+                                {
+                                    if (argOperand.Size > operand.Size)
+                                        buffer.Emit("movzx ");
+                                    else
+                                        buffer.Emit("mov ");
+                                    buffer.EmitLine($"{GetOperandString(argOperand)}, {cOperand}");
+                                }
                             }
                         }
 
                         buffer.Emit("call ");
                         buffer.EmitLine(GetOperandString(inst.A));
-
-                        if (callee.CallingConvention == CallingConvention.CCall && stackSpace > 0)
-                            buffer.EmitLine($"add esp, {stackSpace}");
                         break;
                     }
                     case Opcode.Return:
                     {
+                        // TODO Support type width
                         if (inst.A != null)
-                            buffer.EmitLine($"mov eax, {GetOperandString(inst.A)}");
+                        {
+                            buffer.EmitLine($"mov rax, {GetOperandString(inst.A)}");
+                        }
                         buffer.EmitLine("jmp .return");
                         break;
                     }
-                    case Opcode.RestoreStack:
-                        buffer.EmitLine($"add esp, {GetOperandString(inst.A)}");
-                        break;
                     case Opcode.Move:
                     {
                         var aType = GetOperandDataType(inst.A);
@@ -408,15 +454,16 @@ namespace Compiler.CodeGeneration.Platform
                         }
                         else
                         {
-                            buffer.EmitLine("push eax");
-                            buffer.EmitLine("push ebx");
-                            buffer.EmitLine($"mov ebx, {GetOperandString(inst.B)}");
-                            buffer.EmitLine($"mov eax, {GetOperandString(inst.A)}");
+                            // TODO Support different int widths
+                            buffer.EmitLine("push rax");
+                            buffer.EmitLine("push rbx");
+                            buffer.EmitLine($"mov rbx, {GetOperandString(inst.B)}");
+                            buffer.EmitLine($"mov rax, {GetOperandString(inst.A)}");
                             buffer.EmitLine("cdq");
-                            buffer.EmitLine("idiv ebx");
-                            buffer.EmitLine($"mov {GetOperandString(inst.A)}, eax");
-                            buffer.EmitLine("pop ebx");
-                            buffer.EmitLine("pop eax");
+                            buffer.EmitLine("idiv rbx");
+                            buffer.EmitLine($"mov {GetOperandString(inst.A)}, rax");
+                            buffer.EmitLine("pop rbx");
+                            buffer.EmitLine("pop rax");
                         }
                         break;
                     }
@@ -429,15 +476,16 @@ namespace Compiler.CodeGeneration.Platform
                         }
                         else
                         {
-                            buffer.EmitLine("push eax");
-                            buffer.EmitLine("push ebx");
-                            buffer.EmitLine($"mov ebx, {GetOperandString(inst.B)}");
-                            buffer.EmitLine($"mov eax, {GetOperandString(inst.A)}");
+                            // TODO Support different int widths
+                            buffer.EmitLine("push rax");
+                            buffer.EmitLine("push rbx");
+                            buffer.EmitLine($"mov rbx, {GetOperandString(inst.B)}");
+                            buffer.EmitLine($"mov rax, {GetOperandString(inst.A)}");
                             buffer.EmitLine("cdq");
-                            buffer.EmitLine("idiv ebx");
-                            buffer.EmitLine($"mov {GetOperandString(inst.A)}, edx");
-                            buffer.EmitLine("pop ebx");
-                            buffer.EmitLine("pop eax");
+                            buffer.EmitLine("idiv rbx");
+                            buffer.EmitLine($"mov {GetOperandString(inst.A)}, rdx");
+                            buffer.EmitLine("pop rbx");
+                            buffer.EmitLine("pop rax");
                         }
                         break;
                     }
@@ -446,28 +494,7 @@ namespace Compiler.CodeGeneration.Platform
                 }
             }
         }
-
-        private int EmitArgument(MachineCodeBuffer buffer, Operand operand)
-        {
-            var cType = GetOperandDataType(operand);
-            var cOperand = GetOperandString(operand);
-            int bitSize = cType.Size;
-            if (cType == eCobType.Float)
-            {
-                if (cType.Size == 32)
-                {
-                    buffer.EmitLine($"cvtss2sd {cOperand}, {cOperand}");
-                    bitSize = 64;
-                }
-                buffer.EmitLine("sub esp, 8");
-                buffer.EmitLine($"movsd qword [esp], {cOperand}");
-            }
-            else
-                buffer.EmitLine($"push {cOperand}");
-
-            return bitSize / 8;
-        }
-
+        
         private void SetMachineState(Operand operandA, Operand operandB)
         {
             var typeB = GetOperandDataType(operandB);
@@ -529,7 +556,7 @@ namespace Compiler.CodeGeneration.Platform
             
             var describe = operand.Size switch
             {
-                0 => is64Bit ? "qword" : "dword",
+                0 => "qword", // TODO Error?
                 8 => "byte",
                 16 => "word",
                 32 => "dword",
@@ -570,9 +597,22 @@ namespace Compiler.CodeGeneration.Platform
                         return GetIntegerRegisterName((int)operand.Value, operand.Size);
                 }
                 case OperandType.Argument:
-                    return $"{describe} [ebp + {operand.Value * 4 + 4 * 2}]"; // TODO Get offset correctly
+                {
+                    var idx = operand.Value;
+                    if (idx < 4)
+                    {
+                        // TODO Clean this up
+                        var type = typeOverride ?? registerTypes[operand.Value];
+                        if (type == eCobType.Float)
+                            return GetFloatRegisterName((int)operand.Value);
+                        else
+                            return GetIntegerRegisterName(parameterRegisters[(int)operand.Value], operand.Size);
+                    }
+
+                    return $"{describe} [rsp + {stackSpace + operand.Value * 8 + 8}]";
+                }
                 case OperandType.Local: // TODO Use size
-                    return $"{describe} [ebp - {(operand.Value + 1) * 4}]";
+                    return $"{describe} [rsp + {callReserve + operand.Value * 8}]";
                 case OperandType.Global:
                 {
                     var global = compiler.Globals[(int)operand.Value];
@@ -590,23 +630,34 @@ namespace Compiler.CodeGeneration.Platform
             }
         }
 
+        private const int MaxRegisters = 13; // TODO Could have more
+        private readonly static int[] parameterRegisters = { 6, 5, 4, 3 }; // rcx, rdx, r8, r9
+        private readonly static HashSet<string> nonVolatileRegisters = new ()
+        {
+            "rbx", "rbp", "rdi", "rsi", "rsp", "r12", "r13", "r14", "r15",
+            "xmm6", "xmm7", "xmm8", "xmm9", "xmm10", "xmm11", "xmm12",
+            "xmm13", "xmm14", "xmm15"
+        };
+
+        // Ordered by least to most likely to need preservation operations
+        // rax r10 r11 [r9 r8 rdx rcx] (r12 r13 r14 r15 rbx rdi rsi)
         private readonly static string[,] registers =
         {
-            { null,  null,  null,  null,  null,  null  }, // 0
-            { "al",  "cl",  "dl",  "bl",  null,  null  }, // 8
-            { "ax",  "cx",  "dx",  "bx",  "di",  "si"  }, // 16
-            { "eax", "ecx", "edx", "ebx", "edi", "esi" }, // 24
-            { "eax", "ecx", "edx", "ebx", "edi", "esi" }, // 32
-            { "rax", "rcx", "rdx", "rbx", "rdi", "esi" }, // 40
-            { "rax", "rcx", "rdx", "rbx", "rdi", "esi" }, // 48
-            { "rax", "rcx", "rdx", "rbx", "rdi", "esi" }, // 56
-            { "rax", "rcx", "rdx", "rbx", "rdi", "esi" }, // 64
+            { null,  null,  null,  null, null,  null,  null, null,  null,  null,   null, null,  null  }, // 0
+            {  "al", "r10b","r11b","r9b","r8b", "dl",  "cl", "r12b","r13b","r14b", "bl", null,  null  }, // 8
+            {  "ax", "r10w","r11w","r9w","r8w", "dx",  "cx", "r12w","r13w","r14w", "bx", null,  null  }, // 16
+            { "eax", "r10d","r11d","r9d","r8d","edx", "ecx", "r12d","r13d","r14d","rbx", "rdi", "rsi" }, // 24
+            { "eax", "r10d","r11d","r9d","r8d","edx", "ecx", "r12d","r13d","r14d","rbx", "rdi", "rsi" }, // 32
+            { "rax", "r10", "r11", "r9", "r8", "rdx", "rcx", "r12", "r13", "r14", "rbx", "rdi", "rsi" }, // 40
+            { "rax", "r10", "r11", "r9", "r8", "rdx", "rcx", "r12", "r13", "r14", "rbx", "rdi", "rsi" }, // 48
+            { "rax", "r10", "r11", "r9", "r8", "rdx", "rcx", "r12", "r13", "r14", "rbx", "rdi", "rsi" }, // 56
+            { "rax", "r10", "r11", "r9", "r8", "rdx", "rcx", "r12", "r13", "r14", "rbx", "rdi", "rsi" }, // 64
         };
 
         private string GetIntegerRegisterName(int i, int bitSize)
         {
             var j = (bitSize + 7) / 8;
-            if (j == 0) j = is64Bit ? 8 : 4;
+            if (j == 0) j = 8; // TODO Error?
             return registers[j, i];
         }
 

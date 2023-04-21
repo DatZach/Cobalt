@@ -61,7 +61,6 @@ namespace Compiler.CodeGeneration
 
         Call,
         Return,
-        RestoreStack, // TODO Remove
         Jump,
 
         
