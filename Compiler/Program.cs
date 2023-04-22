@@ -22,21 +22,46 @@ namespace Compiler
 
             var t1 = Stopwatch.StartNew();
 
-            var source = File.ReadAllText(Config.EntrySourceFile);
+            var t2 = Stopwatch.StartNew();
+            var source = File.ReadAllText(Config.EntrySourceFile); // TODO Abstract to track file io better
+            t2.Stop();
+
+            var t3 = Stopwatch.StartNew();
             var tokens = Tokenizer.Tokenize(source);
+            t3.Stop();
+
+            var t4 = Stopwatch.StartNew();
             var ast = Parser.Parse(tokens);
+            t4.Stop();
+
+            var t5 = Stopwatch.StartNew();
             var compiler = new CodeGeneration.Compiler();
             ast.Accept(compiler);
+            t5.Stop();
 
-            t1.Stop(); // TODO Not the fully story
-
-            if (Config.AssemblyVerboseOutput)
-                PrintCompilerState(compiler);
-            
             if (compiler.Artifacts.Count > 0)
             {
+                var t6 = Stopwatch.StartNew();
                 ArtifactFactory.Assemble(compiler);
-                Console.WriteLine($"Compiled in {t1.ElapsedMilliseconds}ms");
+                t6.Stop();
+
+                t1.Stop();
+
+                if (Config.AssemblyVerboseOutput)
+                    PrintCompilerState(compiler);
+
+                if (Config.StatisticsVerboseOutputLevel > 0)
+                {
+                    Console.WriteLine($"Compiled in {t1.ElapsedMilliseconds}ms");
+                    if (Config.StatisticsVerboseOutputLevel > 1)
+                    {
+                        Console.WriteLine($"\tFile IO    {t2.ElapsedMilliseconds}ms");
+                        Console.WriteLine($"\tTokenize   {t3.ElapsedMilliseconds}ms");
+                        Console.WriteLine($"\tAST        {t4.ElapsedMilliseconds}ms");
+                        Console.WriteLine($"\tIM Compile {t5.ElapsedMilliseconds}ms");
+                        Console.WriteLine($"\tAssemble   {t6.ElapsedMilliseconds}ms");
+                    }
+                }
             }
             else
             {
@@ -102,6 +127,8 @@ namespace Compiler
 
         public bool AssemblyVerboseOutput { get; init; }
 
+        public int StatisticsVerboseOutputLevel { get; init; }
+
         private RuntimeConfig()
         {
             // NOTE Private ctor to enforce factory pattern
@@ -118,7 +145,8 @@ namespace Compiler
                 FasmPath = OptionalArgument<string>("--fasm"),
                 FasmVerboseOutput = OptionalArgument("--fasm-verbose", false),
                 AstVerboseOutput = OptionalArgument("--ast-verbose", false),
-                AssemblyVerboseOutput = OptionalArgument("--asm-verbose", false)
+                AssemblyVerboseOutput = OptionalArgument("--asm-verbose", false),
+                StatisticsVerboseOutputLevel = OptionalArgument("--stats-verbose", 0)
             };
 
             T? OptionalArgument<T>(string key, T? fallback = default)

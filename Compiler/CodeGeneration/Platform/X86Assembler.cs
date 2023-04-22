@@ -718,6 +718,9 @@ namespace Compiler.CodeGeneration.Platform
 
             static void Assembler_StdOutRecieved(object sender, DataReceivedEventArgs e)
             {
+                if (e.Data == null)
+                    return;
+
                 Console.WriteLine(e.Data);
             }
         }
