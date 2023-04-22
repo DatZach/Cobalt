@@ -178,7 +178,7 @@ namespace Compiler.CodeGeneration
                 expression.Name,
                 expression.CallingConvention,
                 expression.Parameters,
-                CobType.FromString(expression.ReturnType)
+                expression.ReturnType
             );
 
             functionStack.Push(function);
@@ -311,9 +311,8 @@ namespace Compiler.CodeGeneration
         {
             if (expression.FunctionExpression is not IdentifierExpression ie)
                 return null;
-
-            var castType = CobType.FromString(ie.Value);
-            if (castType == CobType.None)
+            
+            if (!CobType.TryParse(ie.Value, out var castType))
                 return null;
 
             var arguments = expression.Arguments;

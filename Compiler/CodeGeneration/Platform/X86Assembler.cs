@@ -94,6 +94,7 @@ namespace Compiler.CodeGeneration.Platform
                 if (f.NativeImport != null)
                     continue;
 
+                // TODO Clean this up
                 callReserve = 0;
                 var instructions = f.Body.Instructions;
                 for (int j = 0; j < instructions.Count; ++j)
@@ -129,7 +130,7 @@ namespace Compiler.CodeGeneration.Platform
                 {
                     if (stackSpace > 0)
                         buffer.EmitLine($"sub rsp, {stackSpace}");
-                    for (int j = 0, k = 0; j < MaxRegisters; j++)
+                    for (int j = 0, k = 0; j < MaxRegisters; j++) // TODO Clean this up
                     {
                         if ((f.ClobberedRegisters & (1u << j)) == 0)
                             continue;
@@ -149,7 +150,7 @@ namespace Compiler.CodeGeneration.Platform
                 buffer.EmitLine(".return:");
                 if (f.CallingConvention != CallingConvention.None)
                 {
-                    for (int j = 0, k = 0; j < MaxRegisters; j++)
+                    for (int j = 0, k = 0; j < MaxRegisters; j++) // TODO Clean this up
                     {
                         if ((f.ClobberedRegisters & (1u << j)) == 0)
                             continue;
@@ -459,7 +460,7 @@ namespace Compiler.CodeGeneration.Platform
                             buffer.EmitLine("push rbx");
                             buffer.EmitLine($"mov rbx, {GetOperandString(inst.B)}");
                             buffer.EmitLine($"mov rax, {GetOperandString(inst.A)}");
-                            buffer.EmitLine("cdq");
+                            buffer.EmitLine("cqo");
                             buffer.EmitLine("idiv rbx");
                             buffer.EmitLine($"mov {GetOperandString(inst.A)}, rax");
                             buffer.EmitLine("pop rbx");
@@ -481,7 +482,7 @@ namespace Compiler.CodeGeneration.Platform
                             buffer.EmitLine("push rbx");
                             buffer.EmitLine($"mov rbx, {GetOperandString(inst.B)}");
                             buffer.EmitLine($"mov rax, {GetOperandString(inst.A)}");
-                            buffer.EmitLine("cdq");
+                            buffer.EmitLine("cqo");
                             buffer.EmitLine("idiv rbx");
                             buffer.EmitLine($"mov {GetOperandString(inst.A)}, rdx");
                             buffer.EmitLine("pop rbx");

@@ -33,7 +33,8 @@
     {
         public readonly static CobType None = eCobType.None;
         public readonly static CobType String = eCobType.String;
-        public readonly static CobType Int = new (eCobType.Signed, 32); // TODO Technically should be machine-width
+        public readonly static CobType Int = new (eCobType.Signed, 64); // TODO Technically should be machine-width
+        public readonly static CobType UInt = new(eCobType.Unsigned, 64); // TODO Ditto
 
         public eCobType Type { get; }
 
@@ -87,23 +88,45 @@
 
         public static CobType FromString(string? typeName)
         {
-            if (typeName == null || typeName.Length < 2)
+            if (string.IsNullOrEmpty(typeName))
                 return None;
 
-            if (typeName[0] == 's' && char.IsDigit(typeName[1]))
-                return new CobType(eCobType.Signed, int.Parse(typeName[1..]));
-            if (typeName[0] == 'u' && char.IsDigit(typeName[1]))
-                return new CobType(eCobType.Unsigned, int.Parse(typeName[1..]));
-            if (typeName[0] == 'f' && char.IsDigit(typeName[1]))
-                return new CobType(eCobType.Float, int.Parse(typeName[1..]));
-            if (typeName[0] == 'f' && typeName[1] == 'n')
-                return new CobType(eCobType.Function, 0);
-            if (typeName == "string")
-                return new CobType(eCobType.String, 0);
+            if (typeName.Length >= 2)
+            {
+                if (typeName[0] == 's' && char.IsDigit(typeName[1]))
+                    return new CobType(eCobType.Signed, int.Parse(typeName[1..]));
+                if (typeName[0] == 'u' && char.IsDigit(typeName[1]))
+                    return new CobType(eCobType.Unsigned, int.Parse(typeName[1..]));
+                if (typeName[0] == 'f' && char.IsDigit(typeName[1]))
+                    return new CobType(eCobType.Float, int.Parse(typeName[1..]));
+                if (typeName[0] == 'f' && typeName[1] == 'n')
+                    return new CobType(eCobType.Function, 0);
+                if (typeName == "string")
+                    return String;
+                if (typeName == "int")
+                    return Int;
+                if (typeName == "uint")
+                    return UInt;
 
-            // TODO Arrays, Traits
+                // TODO Arrays, Traits
+            }
 
-            return None;
+            throw new Exception($"Illegal type definition '{typeName}'");
+        }
+
+        // TODO Wow, what a horrible implementation
+        public static bool TryParse(string typeName, out CobType result)
+        {
+            try
+            {
+                result = FromString(typeName);
+                return true;
+            }
+            catch
+            {
+                result = null!;
+                return false;
+            }
         }
 
         public override string ToString()

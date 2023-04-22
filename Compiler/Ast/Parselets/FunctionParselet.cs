@@ -48,11 +48,8 @@ namespace Compiler.Ast.Parselets
             else
                 body = null;
 
-            string returnType;
-            if (parser.Match(TokenType.Identifier))
-                returnType = parser.Take(TokenType.Identifier).Value;
-            else
-                returnType = "None"; // TODO Don't hardcode
+            var sReturnType = parser.MatchAndTakeToken(TokenType.Identifier)?.Value;
+            var returnType = CobType.FromString(sReturnType);
 
             CallingConvention callingConvention;
             if (parser.MatchAndTakeToken(TokenType.CCall) != null)

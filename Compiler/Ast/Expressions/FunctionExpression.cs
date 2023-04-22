@@ -9,7 +9,7 @@ namespace Compiler.Ast.Expressions
     {
         public string Name => $"fn_{Token.Line}_{Token.Column}";
         
-        public string ReturnType { get; }
+        public CobType ReturnType { get; }
 
         public CallingConvention CallingConvention { get; }
 
@@ -21,7 +21,7 @@ namespace Compiler.Ast.Expressions
             Token token,
             IReadOnlyList<Function.Parameter> parameters,
             Expression? body,
-            string returnType,
+            CobType returnType,
             CallingConvention callingConvention
         )
             : base(token)
