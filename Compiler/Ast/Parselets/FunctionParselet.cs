@@ -24,7 +24,7 @@ namespace Compiler.Ast.Parselets
                     parser.MatchAndTakeToken(TokenType.Comma);
 
                     if (isSpread && hasSpread)
-                        throw new Exception("Function cannot define multiple spread parameters");
+                        parser.Messages.Add(Message.ExcessiveSpreadParameters, name);
 
                     hasSpread = hasSpread || isSpread;
 

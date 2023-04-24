@@ -1,7 +1,6 @@
 ﻿using System.Diagnostics;
 using Compiler.Ast;
 using Compiler.CodeGeneration;
-using Compiler.CodeGeneration.Platform;
 using Compiler.Interpreter;
 using Compiler.Lexer;
 
@@ -22,22 +21,30 @@ namespace Compiler
 
             var t1 = Stopwatch.StartNew();
 
-            var t2 = Stopwatch.StartNew();
-            var source = File.ReadAllText(Config.EntrySourceFile); // TODO Abstract to track file io better
-            t2.Stop();
+            var messages = new MessageCollection();
 
+            var source = FileSystem.ReadAllText(Config.EntrySourceFile);
+            
             var t3 = Stopwatch.StartNew();
-            var tokens = Tokenizer.Tokenize(source);
+            var tokens = Tokenizer.Tokenize(Config.EntrySourceFile, source, messages);
             t3.Stop();
 
             var t4 = Stopwatch.StartNew();
-            var ast = Parser.Parse(tokens);
+            var ast = Parser.Parse(tokens, messages);
             t4.Stop();
 
             var t5 = Stopwatch.StartNew();
-            var compiler = new CodeGeneration.Compiler();
+            var compiler = new CodeGeneration.Compiler(messages);
             ast.Accept(compiler);
             t5.Stop();
+
+            if (messages.Count > 0)
+            {
+                messages.Print();
+
+                if (messages.HasErrors)
+                    return;
+            }
 
             if (compiler.Artifacts.Count > 0)
             {
@@ -55,7 +62,7 @@ namespace Compiler
                     Console.WriteLine($"Compiled in {t1.ElapsedMilliseconds}ms");
                     if (Config.StatisticsVerboseOutputLevel > 1)
                     {
-                        Console.WriteLine($"\tFile IO    {t2.ElapsedMilliseconds}ms");
+                        Console.WriteLine($"\tFile IO    {FileSystem.TotalIOMilliseconds}ms");
                         Console.WriteLine($"\tTokenize   {t3.ElapsedMilliseconds}ms");
                         Console.WriteLine($"\tAST        {t4.ElapsedMilliseconds}ms");
                         Console.WriteLine($"\tIM Compile {t5.ElapsedMilliseconds}ms");

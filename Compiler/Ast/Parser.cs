@@ -6,13 +6,16 @@ namespace Compiler.Ast
 {
     internal sealed partial class Parser
     {
+        public MessageCollection Messages { get; }
+
         private int readIndex;
 
         private readonly IReadOnlyList<Token> tokens;
-        
-        private Parser(IReadOnlyList<Token> tokens)
+
+        private Parser(IReadOnlyList<Token> tokens, MessageCollection messages)
         {
             this.tokens = tokens ?? throw new ArgumentNullException(nameof(tokens));
+            Messages = messages ?? throw new ArgumentNullException(nameof(messages));
         }
 
         public Expression ParseExpression(int precedence = 0, bool isConditional = false)
@@ -21,7 +24,8 @@ namespace Compiler.Ast
 
             if (!ExpressionPrefixParselets.TryGetValue(token.Type, out var prefixExpression))
             {
-                throw new Exception("Unexpected expression");
+                Messages.Add(Message.UnexpectedToken1, token, token.Type.GetDescription());
+                return new EmptyExpression(token);
             }
 
             var left = prefixExpression.Parse(this, token);
@@ -63,10 +67,8 @@ namespace Compiler.Ast
                     expressions.Add(ParseBlock());
 
                 var endToken = Take();
-                if (endToken == null || endToken.Type != TokenType.RightBrace)
-                {
-                    throw new Exception("Missing closing brace");
-                }
+                if (endToken.Type != TokenType.RightBrace)
+                    Messages.Add(Message.MissingClosingBrace, token);
 
                 return new BlockExpression(token, expressions);
             }
@@ -106,9 +108,7 @@ namespace Compiler.Ast
         {
             var token = Take();
             if (token.Type != type)
-            {
-                throw new Exception($"Expected {type} but found {token} instead.");
-            }
+                Messages.Add(Message.UnexpectedToken2, token, type.GetDescription(), token);
 
             return token;
         }
@@ -139,9 +139,9 @@ namespace Compiler.Ast
             return 0;
         }
 
-        public static ScriptExpression Parse(IReadOnlyList<Token> tokens)
+        public static ScriptExpression Parse(IReadOnlyList<Token> tokens, MessageCollection messages)
         {
-            var parser = new Parser(tokens);
+            var parser = new Parser(tokens, messages);
             return parser.ParseScript();
         }
     }

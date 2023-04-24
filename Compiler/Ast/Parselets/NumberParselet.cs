@@ -57,12 +57,18 @@ namespace Compiler.Ast.Parselets
                     'u' => eCobType.Unsigned,
                     's' => eCobType.Signed,
                     'f' => eCobType.Float,
-                    _ => throw new ArgumentNullException("Unknown type specifier")
+                    _ => eCobType.None
                 };
 
-                if (!int.TryParse(value.AsSpan(typeIdx + 1, value.Length - typeIdx - 1), NumberStyles.None,
-                        CultureInfo.InvariantCulture, out bitSize))
-                    throw new InvalidDataException("Invalid type size");
+                var isValidSize = int.TryParse(
+                    value.AsSpan(typeIdx + 1, value.Length - typeIdx - 1),
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out bitSize
+                );
+
+                if (!isValidSize || type == eCobType.None)
+                    parser.Messages.Add(Message.IllegalTypeName, token, value[typeIdx..]);
 
                 value = value[..typeIdx];
             }
@@ -95,7 +101,8 @@ namespace Compiler.Ast.Parselets
                     return new NumberExpression(token, integerNumber, type, bitSize);
             }
 
-            throw new Exception($"Invalid number '{token.Value}'");
+            parser.Messages.Add(Message.IllegalNumber, token, value);
+            return new NumberExpression(token, 0, eCobType.None, 0);
         }
 
         private static bool TryParse(string value, int fromBase, out long result)

@@ -1,4 +1,5 @@
 ﻿using System.Text;
+using Compiler.Ast;
 using Compiler.Ast.Expressions;
 using Compiler.Ast.Expressions.Statements;
 using Compiler.Ast.Visitors;
@@ -24,8 +25,9 @@ namespace Compiler.CodeGeneration
         private Function? CurrentFunction => functionStack.Count == 0 ? null : functionStack.Peek();
 
         private readonly Stack<Function> functionStack;
+        private readonly MessageCollection messages;
         
-        public Compiler()
+        public Compiler(MessageCollection messages)
         {
             Artifacts = new List<ArtifactExpression>();
             Imports = new List<Import>();
@@ -33,6 +35,8 @@ namespace Compiler.CodeGeneration
             Functions = new List<Function>();
             Globals = new List<CobVariable>();
             functionStack = new Stack<Function>();
+
+            this.messages = messages ?? throw new ArgumentNullException(nameof(messages));
         }
 
         public CobType? Visit(ScriptExpression expression)
@@ -132,8 +136,8 @@ namespace Compiler.CodeGeneration
                 if (CurrentFunction.ReturnType == eCobType.None)
                     CurrentFunction.ReturnType = rhsType;
                 else if (CurrentFunction.ReturnType != rhsType)
-                    throw new Exception("Return value does not match function return type"); // TODO
-                
+                    messages.Add(Message.ReturnTypeMismatch, expression.Token);
+
                 var reg = CurrentFunction.FreeRegister();
                 CurrentFunction.Body.EmitR(Opcode.Return, reg);
             }
@@ -153,7 +157,8 @@ namespace Compiler.CodeGeneration
             functionStack.Push(function);
             var evalType = expression.Expression.Accept(this);
             if (evalType == null || evalType == eCobType.None)
-                throw new Exception("Cannot evaluate ahead-of-time expression on void");
+                messages.Add(Message.AotCannotUseVoid, expression.Token);
+
             function.ReturnType = evalType;
             var retReg = CurrentFunction.FreeRegister();
             CurrentFunction.Body.EmitR(Opcode.Return, retReg);
@@ -248,7 +253,10 @@ namespace Compiler.CodeGeneration
             var functionType = expression.FunctionExpression.Accept(this);
             var function = functionType?.Function;
             if (function == null)
-                throw new Exception($"Cannot call type '{functionType}'");
+            {
+                messages.Add(Message.CannotCallType, expression.Token, functionType);
+                return CobType.None;
+            }
 
             var freg = CurrentFunction.PeekRegister();
 
@@ -257,10 +265,7 @@ namespace Compiler.CodeGeneration
             var arguments = expression.Arguments;
             var hasSpreadParameter = parameters.Count > 0 && parameters[^1].IsSpread;
             if (arguments.Count != parameters.Count && !hasSpreadParameter)
-                throw new Exception($"Expected {parameters.Count} parameters, but received {arguments.Count} instead");
-
-            if (function.CallingConvention != CallingConvention.CCall && hasSpreadParameter)
-                throw new Exception("Cannot use spread parameters without ccall"); // TODO Not exactly true
+                messages.Add(Message.FunctionParameterCountMismatch, expression.Token, parameters.Count, arguments.Count);
 
             // TODO Calling convention?
 
@@ -317,7 +322,10 @@ namespace Compiler.CodeGeneration
 
             var arguments = expression.Arguments;
             if (arguments.Count != 1)
-                throw new Exception($"Expected 1 argument but recieved {arguments.Count} instead.");
+            {
+                messages.Add(Message.FunctionParameterCountMismatch, expression.Token, 1, arguments.Count);
+                return CobType.None;
+            }
 
             var srcType = arguments[0].Accept(this);
             var srcReg = CurrentFunction.PeekRegister();
@@ -385,7 +393,7 @@ namespace Compiler.CodeGeneration
             //    return new CobType(eCobType.Function, 0, function: Functions[idx]);
             //}
 
-            throw new Exception($"Undeclared identifier {expression.Value}");
+            messages.Add(Message.UndeclaredIdentifier, expression.Token, expression.Value);
 
             return null;
         }

@@ -1,24 +1,28 @@
-﻿using System.Globalization;
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 using System.Text;
+using Compiler.Ast;
 
 namespace Compiler.Lexer
 {
     internal sealed partial class Tokenizer
     {
+        private readonly string filename;
         private readonly string source;
         private readonly int length;
+        private readonly MessageCollection messages;
 
         private int index;
         private int currentLine;
         private int currentLineStartIndex;
 
-        private StringBuilder stringBuilder;
+        private readonly StringBuilder stringBuilder;
 
-        private Tokenizer(string source)
+        private Tokenizer(string filename, string source, MessageCollection messages)
         {
+            this.filename = filename ?? throw new ArgumentNullException(nameof(filename));
             this.source = source ?? throw new ArgumentNullException(nameof(source));
             this.length = source.Length;
+            this.messages = messages;
 
             stringBuilder = new StringBuilder();
         }
@@ -44,7 +48,10 @@ namespace Compiler.Lexer
                 // String
                 if (ch == '"')
                 {
+                    var hasInvalidEscape = false;
                     stringBuilder.Clear();
+
+                    var column = startIndex - currentLineStartIndex;
 
                     TakeChar();
                     while (index < length)
@@ -62,11 +69,13 @@ namespace Compiler.Lexer
                                 'n' => '\n',
                                 'r' => '\r',
                                 't' => '\t',
-                                '^' => '^',
+                                '^' => '^', // TODO `
                                 'x' => (char)Convert.ToByte("" + TakeChar() + TakeChar(), 16),
                                 'u' => (char)Convert.ToUInt16("" + TakeChar() + TakeChar() + TakeChar() + TakeChar(), 16),
-                                _ => throw new Exception("Invalid escape")
+                                _ => char.MaxValue
                             };
+
+                            hasInvalidEscape = hasInvalidEscape || ch == char.MaxValue;
                         }
                         else if (ch == '\"')
                             break;
@@ -74,16 +83,21 @@ namespace Compiler.Lexer
                         stringBuilder.Append(ch);
                     }
 
-                    if (index >= length)
-                        throw new Exception("Unterminated string");
-
-                    result.Add(new Token
+                    var strToken = new Token
                     {
                         Type = TokenType.String,
                         Value = stringBuilder.ToString(),
+                        Filename = filename,
                         Line = startLine,
-                        Column = startIndex - currentLineStartIndex + 1
-                    });
+                        Column = column
+                    };
+
+                    if (index >= length)
+                        messages.Add(Message.StringUnterminated, strToken);
+                    if (hasInvalidEscape)
+                        messages.Add(Message.StringInvalidEscape, strToken);
+
+                    result.Add(strToken);
                     continue;
                 }
 
@@ -95,8 +109,9 @@ namespace Compiler.Lexer
                     {
                         Type = Keywords.TryGetValue(ident, out var keywordType) ? keywordType : TokenType.Identifier,
                         Value = ident,
+                        Filename = filename,
                         Line = currentLine,
-                        Column = startIndex - currentLineStartIndex + 1
+                        Column = startIndex - currentLineStartIndex
                     });
                     continue;
                 }
@@ -161,8 +176,9 @@ namespace Compiler.Lexer
                     {
                         Type = TokenType.Number,
                         Value = ident,
+                        Filename = filename,
                         Line = currentLine,
-                        Column = startIndex - currentLineStartIndex + 1,
+                        Column = startIndex - currentLineStartIndex
                     });
                     continue;
                 }
@@ -188,8 +204,9 @@ namespace Compiler.Lexer
                         {
                             Type = op.Item2,
                             Value = op.Item1,
+                            Filename = filename,
                             Line = currentLine,
-                            Column = startIndex - currentLineStartIndex + 1,
+                            Column = startIndex - currentLineStartIndex
                         });
                         continue;
                     }
@@ -198,13 +215,17 @@ namespace Compiler.Lexer
                 ident = TakeWhile(x => !char.IsWhiteSpace(x));
 
                 // ERROR CONDITION - UNEXPECTED TOKEN
-                result.Add(new Token
+                var errToken = new Token
                 {
                     Type = TokenType.Error,
                     Value = ident,
+                    Filename = filename,
                     Line = currentLine,
-                    Column = startIndex - currentLineStartIndex + 1
-                });
+                    Column = startIndex - currentLineStartIndex
+                };
+
+                messages.Add(Message.UnexpectedToken0, errToken);
+                //result.Add(errToken);
             }
 
             return result;
@@ -326,9 +347,9 @@ namespace Compiler.Lexer
             return index < length ? source[index] : '\0';
         }
 
-        public static IReadOnlyList<Token> Tokenize(string source)
+        public static IReadOnlyList<Token> Tokenize(string filename, string source, MessageCollection messages)
         {
-            var tokenizer = new Tokenizer(source);
+            var tokenizer = new Tokenizer(filename, source, messages);
             return tokenizer.Tokenize();
         }
     }
