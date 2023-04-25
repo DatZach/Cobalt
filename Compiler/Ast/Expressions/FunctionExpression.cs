@@ -7,7 +7,7 @@ namespace Compiler.Ast.Expressions
 {
     internal sealed class FunctionExpression : Expression
     {
-        public string Name => $"fn_{Token.Line}_{Token.Column}";
+        public string Name => $"fn_{Token.Line + 1}_{Token.Column + 1}";
         
         public CobType ReturnType { get; }
 

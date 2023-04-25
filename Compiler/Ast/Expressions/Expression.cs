@@ -8,6 +8,10 @@ namespace Compiler.Ast.Expressions
     {
         public Token Token { get; }
 
+        public virtual Token StartToken => Token;
+
+        public virtual Token EndToken => Token;
+
         protected Expression(Token token)
         {
             Token = token;

@@ -136,7 +136,7 @@ namespace Compiler.CodeGeneration
                 if (CurrentFunction.ReturnType == eCobType.None)
                     CurrentFunction.ReturnType = rhsType;
                 else if (CurrentFunction.ReturnType != rhsType)
-                    messages.Add(Message.ReturnTypeMismatch, expression.Token);
+                    messages.Add(Message.ReturnTypeMismatch, expression);
 
                 var reg = CurrentFunction.FreeRegister();
                 CurrentFunction.Body.EmitR(Opcode.Return, reg);
@@ -157,7 +157,7 @@ namespace Compiler.CodeGeneration
             functionStack.Push(function);
             var evalType = expression.Expression.Accept(this);
             if (evalType == null || evalType == eCobType.None)
-                messages.Add(Message.AotCannotUseVoid, expression.Token);
+                messages.Add(Message.AotCannotUseVoid, expression);
 
             function.ReturnType = evalType;
             var retReg = CurrentFunction.FreeRegister();
@@ -254,7 +254,7 @@ namespace Compiler.CodeGeneration
             var function = functionType?.Function;
             if (function == null)
             {
-                messages.Add(Message.CannotCallType, expression.Token, functionType);
+                messages.Add(Message.CannotCallType, expression, functionType);
                 return CobType.None;
             }
 
@@ -265,7 +265,7 @@ namespace Compiler.CodeGeneration
             var arguments = expression.Arguments;
             var hasSpreadParameter = parameters.Count > 0 && parameters[^1].IsSpread;
             if (arguments.Count != parameters.Count && !hasSpreadParameter)
-                messages.Add(Message.FunctionParameterCountMismatch, expression.Token, parameters.Count, arguments.Count);
+                messages.Add(Message.FunctionParameterCountMismatch, expression, parameters.Count, arguments.Count);
 
             // TODO Calling convention?
 
@@ -323,7 +323,7 @@ namespace Compiler.CodeGeneration
             var arguments = expression.Arguments;
             if (arguments.Count != 1)
             {
-                messages.Add(Message.FunctionParameterCountMismatch, expression.Token, 1, arguments.Count);
+                messages.Add(Message.FunctionParameterCountMismatch, expression, 1, arguments.Count);
                 return CobType.None;
             }
 
@@ -393,7 +393,7 @@ namespace Compiler.CodeGeneration
             //    return new CobType(eCobType.Function, 0, function: Functions[idx]);
             //}
 
-            messages.Add(Message.UndeclaredIdentifier, expression.Token, expression.Value);
+            messages.Add(Message.UndeclaredIdentifier, expression, expression.Value);
 
             return null;
         }

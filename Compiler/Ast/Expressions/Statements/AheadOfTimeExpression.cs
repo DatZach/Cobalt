@@ -8,6 +8,8 @@ namespace Compiler.Ast.Expressions.Statements
     {
         public Expression Expression { get; }
 
+        public override Token EndToken => Expression.EndToken;
+
         public AheadOfTimeExpression(Token token, Expression expression)
             : base(token)
         {

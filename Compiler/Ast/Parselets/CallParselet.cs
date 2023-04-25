@@ -25,9 +25,9 @@ namespace Compiler.Ast.Parselets
             else
                 arguments = Array.Empty<Expression>();
 
-            parser.Take(TokenType.RightParen);
+            var endToken = parser.Take(TokenType.RightParen);
 
-            return new CallExpression(token, left, arguments);
+            return new CallExpression(token, endToken, left, arguments);
         }
     }
 }

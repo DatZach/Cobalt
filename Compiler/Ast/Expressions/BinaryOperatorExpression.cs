@@ -12,6 +12,10 @@ namespace Compiler.Ast.Expressions
 
         public Expression Right { get; }
 
+        public override Token StartToken => Left.StartToken;
+
+        public override Token EndToken => Right.EndToken;
+
         public BinaryOperatorExpression(Token token, Expression left, Expression right)
             : base(token)
         {

@@ -10,9 +10,15 @@ namespace Compiler.Ast.Expressions
 
         public IReadOnlyList<Expression> Arguments { get; }
 
-        public CallExpression(Token token, Expression functionExpression, IReadOnlyList<Expression> arguments)
+        public override Token StartToken => FunctionExpression.StartToken;
+
+        public override Token EndToken { get; }
+
+        public CallExpression(Token token, Token endToken, Expression functionExpression,
+                              IReadOnlyList<Expression> arguments)
             : base(token)
         {
+            EndToken = endToken;
             FunctionExpression = functionExpression;
             Arguments = arguments;
         }

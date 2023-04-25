@@ -10,6 +10,8 @@ namespace Compiler.Ast.Expressions.Statements
 
         public IReadOnlyList<Declaration> Declarations { get; }
 
+        public override Token EndToken => Declarations.LastOrDefault()?.Initializer?.EndToken ?? Token;
+
         public VarExpression(Token token, IReadOnlyList<Declaration> declarations)
             : base(token)
         {

@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using Compiler.Ast.Expressions;
 using Compiler.Lexer;
 
 namespace Compiler.Ast
@@ -28,6 +29,12 @@ namespace Compiler.Ast
             messages = new List<Message>();
             directives = new List<MessageDirective>();
         }
+
+        public void Add(Message.Def definition, Expression expression) => AddInner(definition, expression.StartToken, expression.EndToken, definition.Content);
+        public void Add(Message.Def definition, Expression expression, params object[] args) => AddInner(definition, expression.StartToken, expression.EndToken, string.Format(definition.Content, args));
+        public void Add(Message.Def definition, Expression expression, object? arg0) => AddInner(definition, expression.StartToken, expression.EndToken, string.Format(definition.Content, arg0));
+        public void Add(Message.Def definition, Expression expression, object? arg0, object? arg1) => AddInner(definition, expression.StartToken, expression.EndToken, string.Format(definition.Content, arg0, arg1));
+        public void Add(Message.Def definition, Expression expression, object? arg0, object? arg1, object? arg2) => AddInner(definition, expression.StartToken, expression.EndToken, string.Format(definition.Content, arg0, arg1, arg2));
 
         public void Add(Message.Def definition, Token startToken) => AddInner(definition, startToken, null, definition.Content);
 

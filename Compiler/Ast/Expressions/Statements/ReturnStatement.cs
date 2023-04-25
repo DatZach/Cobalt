@@ -8,6 +8,8 @@ namespace Compiler.Ast.Expressions.Statements
     {
         public Expression? Expression { get; }
 
+        public override Token EndToken => Expression?.EndToken ?? Token;
+
         public ReturnStatement(Token token, Expression? expression)
             : base(token)
         {
