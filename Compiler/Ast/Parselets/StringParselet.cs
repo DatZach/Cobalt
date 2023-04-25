@@ -19,50 +19,50 @@ namespace Compiler.Ast.Parselets
             for (int i = 0; i < length; ++i)
             {
                 var ch = value[i];
-                if (ch != '`')
-                    continue;
-
-                var isIllegalEscape = false;
-                if (i + 1 < length)
+                if (ch == '`')
                 {
-                    ch = value[++i];
-                    if (ch == '\'')
-                        ch = '\'';
-                    else if (ch == '"')
-                        ch = '\"';
-                    else if (ch == '0')
-                        ch = '\0';
-                    else if (ch == 'a')
-                        ch = '\a';
-                    else if (ch == 'b')
-                        ch = '\b';
-                    else if (ch == 'n')
-                        ch = '\n';
-                    else if (ch == 'r')
-                        ch = '\r';
-                    else if (ch == 't')
-                        ch = '\t';
-                    else if (ch == EscapeCharacter)
-                        ch = EscapeCharacter;
-                    else if (ch == 'x' && i + 2 < length)
+                    var isIllegalEscape = false;
+                    if (i + 1 < length)
                     {
-                        if (!TryParseByte(value.Substring(i + 1, 2), out ch))
-                            isIllegalEscape = true;
-                    }
-                    else if (ch == 'u' && i + 4 < length)
-                    {
-                        if (!TryParseUnicode(value.Substring(i + 1, 4), out ch))
+                        ch = value[++i];
+                        if (ch == '\'')
+                            ch = '\'';
+                        else if (ch == '"')
+                            ch = '\"';
+                        else if (ch == '0')
+                            ch = '\0';
+                        else if (ch == 'a')
+                            ch = '\a';
+                        else if (ch == 'b')
+                            ch = '\b';
+                        else if (ch == 'n')
+                            ch = '\n';
+                        else if (ch == 'r')
+                            ch = '\r';
+                        else if (ch == 't')
+                            ch = '\t';
+                        else if (ch == EscapeCharacter)
+                            ch = EscapeCharacter;
+                        else if (ch == 'x' && i + 2 < length)
+                        {
+                            if (!TryParseByte(value.Substring(i + 1, 2), out ch))
+                                isIllegalEscape = true;
+                        }
+                        else if (ch == 'u' && i + 4 < length)
+                        {
+                            if (!TryParseUnicode(value.Substring(i + 1, 4), out ch))
+                                isIllegalEscape = true;
+                        }
+                        else
                             isIllegalEscape = true;
                     }
                     else
                         isIllegalEscape = true;
-                }
-                else
-                    isIllegalEscape = true;
 
-                if (isIllegalEscape)
-                    parser.Messages.Add(Message.StringIllegalEscape, token);
-                
+                    if (isIllegalEscape)
+                        parser.Messages.Add(Message.StringIllegalEscape, token);
+                }
+
                 sb.Append(ch);
             }
 

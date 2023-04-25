@@ -9,6 +9,22 @@ namespace Compiler
 
         public static long TotalIOMilliseconds => Stopwatch.ElapsedMilliseconds;
 
+        public static void WriteAllText(string path, string contents)
+        {
+            if (Cache.ContainsKey(path))
+                Cache[path] = contents;
+
+            try
+            {
+                Stopwatch.Start();
+                File.WriteAllText(path, contents);
+            }
+            finally
+            {
+                Stopwatch.Stop();
+            }
+        }
+
         public static string ReadAllText(string path)
         {
             if (Cache.TryGetValue(path, out var contents))
@@ -46,6 +62,32 @@ namespace Compiler
             }
 
             return null;
+        }
+
+        public static void Copy(string source, string destination, bool overwrite)
+        {
+            try
+            {
+                Stopwatch.Start();
+                File.Copy(source, destination, overwrite);
+            }
+            finally
+            {
+                Stopwatch.Stop();
+            }
+        }
+
+        public static void Delete(string path)
+        {
+            try
+            {
+                Stopwatch.Start();
+                File.Delete(path);
+            }
+            finally
+            {
+                Stopwatch.Stop();
+            }
         }
     }
 }

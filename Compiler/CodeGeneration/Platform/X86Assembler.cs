@@ -679,7 +679,7 @@ namespace Compiler.CodeGeneration.Platform
                 Console.WriteLine(asm);
 
             var tmpFilename = Path.Combine(Path.GetTempPath(), Path.GetTempFileName());
-            File.WriteAllText(tmpFilename, asm);
+            FileSystem.WriteAllText(tmpFilename, asm);
 
             try
             {
@@ -706,14 +706,14 @@ namespace Compiler.CodeGeneration.Platform
                 if (process.ExitCode == 0)
                 {
                     tmpFilename = Path.ChangeExtension(tmpFilename, "exe");
-                    File.Copy(tmpFilename, outputFilename, true);
+                    FileSystem.Copy(tmpFilename, outputFilename, true);
                 }
                 else
                     Console.WriteLine($"Error: Assembler exited with code {process.ExitCode}");
             }
             finally
             {
-                File.Delete(tmpFilename);
+                FileSystem.Delete(tmpFilename);
             }
 
             static void Assembler_StdOutRecieved(object sender, DataReceivedEventArgs e)
