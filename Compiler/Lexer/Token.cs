@@ -2,17 +2,15 @@
 
 namespace Compiler.Lexer
 {
-    internal sealed record Token
+    internal sealed record Token(
+        TokenType Type,
+        string Value,
+        string Filename,
+        int Line,
+        int Column
+    )
     {
-        public TokenType Type { get; init; }
-
-        public string Value { get; init; }
-
-        public string Filename { get; init; }
-
-        public int Line { get; init; }
-
-        public int Column { get; init; }
+        public readonly static Token EndOfStream = new(TokenType.EndOfStream, "", "", 0, 0);
 
         public override string ToString()
         {

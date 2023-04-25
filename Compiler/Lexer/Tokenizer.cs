@@ -10,27 +10,29 @@ namespace Compiler.Lexer
         private readonly string source;
         private readonly int length;
         private readonly MessageCollection messages;
+        private readonly List<Token> tokens;
 
         private int index;
         private int currentLine;
         private int currentLineStartIndex;
+        private int startLine;
+        private int startColumn;
 
         private readonly StringBuilder stringBuilder;
 
-        private Tokenizer(string filename, string source, MessageCollection messages)
+        private Tokenizer(string source, string filename, MessageCollection messages)
         {
             this.filename = filename ?? throw new ArgumentNullException(nameof(filename));
             this.source = source ?? throw new ArgumentNullException(nameof(source));
             this.length = source.Length;
             this.messages = messages;
 
+            tokens = new List<Token>(4);
             stringBuilder = new StringBuilder();
         }
 
         private IReadOnlyList<Token> Tokenize()
         {
-            var result = new List<Token>(4);
-            
             while (index < length)
             {
                 if (IgnoreWhitespace())
@@ -40,8 +42,8 @@ namespace Compiler.Lexer
                     continue;
 
                 string ident;
-                var startLine = currentLine;
-                var startIndex = index;
+                startLine = currentLine;
+                startColumn = index - currentLineStartIndex;
                 var ch = PeekChar();
                 var chNext = PeekChar(1);
 
@@ -51,53 +53,23 @@ namespace Compiler.Lexer
                     var hasInvalidEscape = false;
                     stringBuilder.Clear();
 
-                    var column = startIndex - currentLineStartIndex;
-
                     TakeChar();
                     while (index < length)
                     {
                         ch = TakeChar();
-                        if (ch == '^')
-                        {
-                            ch = TakeChar() switch
-                            {
-                                '\'' => '\'',
-                                '"' => '\"',
-                                '0' => '\0',
-                                'a' => '\a',
-                                'b' => '\b',
-                                'n' => '\n',
-                                'r' => '\r',
-                                't' => '\t',
-                                '^' => '^', // TODO `
-                                'x' => (char)Convert.ToByte("" + TakeChar() + TakeChar(), 16),
-                                'u' => (char)Convert.ToUInt16("" + TakeChar() + TakeChar() + TakeChar() + TakeChar(), 16),
-                                _ => char.MaxValue
-                            };
-
-                            hasInvalidEscape = hasInvalidEscape || ch == char.MaxValue;
-                        }
-                        else if (ch == '\"')
+                        if (ch == '\"')
                             break;
 
                         stringBuilder.Append(ch);
                     }
 
-                    var strToken = new Token
-                    {
-                        Type = TokenType.String,
-                        Value = stringBuilder.ToString(),
-                        Filename = filename,
-                        Line = startLine,
-                        Column = column
-                    };
+                    var strToken = YieldToken(TokenType.String, stringBuilder.ToString());
 
                     if (index >= length)
                         messages.Add(Message.StringUnterminated, strToken);
                     if (hasInvalidEscape)
-                        messages.Add(Message.StringInvalidEscape, strToken);
+                        messages.Add(Message.StringIllegalEscape, strToken);
 
-                    result.Add(strToken);
                     continue;
                 }
 
@@ -105,14 +77,10 @@ namespace Compiler.Lexer
                 if (char.IsLetter(ch) || ch == '_')
                 {
                     ident = TakeWhile(c => char.IsLetterOrDigit(c) || c == '_');
-                    result.Add(new Token
-                    {
-                        Type = Keywords.TryGetValue(ident, out var keywordType) ? keywordType : TokenType.Identifier,
-                        Value = ident,
-                        Filename = filename,
-                        Line = currentLine,
-                        Column = startIndex - currentLineStartIndex
-                    });
+                    YieldToken(
+                        Keywords.TryGetValue(ident, out var keywordType) ? keywordType : TokenType.Identifier,
+                        ident
+                    );
                     continue;
                 }
 
@@ -132,6 +100,7 @@ namespace Compiler.Lexer
                     else if (ch == '0' && chNext == 'b')
                         hasBinSpecified = true;
 
+                    var startIndex = index;
                     ident = TakeWhile(c =>
                     {
                         if (c == '_')
@@ -172,14 +141,7 @@ namespace Compiler.Lexer
                         return char.IsDigit(c);
                     });
 
-                    result.Add(new Token
-                    {
-                        Type = TokenType.Number,
-                        Value = ident,
-                        Filename = filename,
-                        Line = currentLine,
-                        Column = startIndex - currentLineStartIndex
-                    });
+                    YieldToken(TokenType.Number, ident);
                     continue;
                 }
 
@@ -200,14 +162,7 @@ namespace Compiler.Lexer
 
                     if (op != null)
                     {
-                        result.Add(new Token
-                        {
-                            Type = op.Item2,
-                            Value = op.Item1,
-                            Filename = filename,
-                            Line = currentLine,
-                            Column = startIndex - currentLineStartIndex
-                        });
+                        YieldToken(op.Item2, op.Item1);
                         continue;
                     }
                 }
@@ -215,20 +170,25 @@ namespace Compiler.Lexer
                 ident = TakeWhile(x => !char.IsWhiteSpace(x));
 
                 // ERROR CONDITION - UNEXPECTED TOKEN
-                var errToken = new Token
-                {
-                    Type = TokenType.Error,
-                    Value = ident,
-                    Filename = filename,
-                    Line = currentLine,
-                    Column = startIndex - currentLineStartIndex
-                };
-
+                var errToken = YieldToken(TokenType.Error, ident);
                 messages.Add(Message.UnexpectedToken0, errToken);
-                //result.Add(errToken);
             }
 
-            return result;
+            return tokens;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private Token YieldToken(TokenType type, string value)
+        {
+            var token = new Token(
+                type,
+                value,
+                filename,
+                startLine,
+                startColumn
+            );
+            tokens.Add(token);
+            return token;
         }
 
         private bool IgnoreWhitespace()
@@ -347,9 +307,9 @@ namespace Compiler.Lexer
             return index < length ? source[index] : '\0';
         }
 
-        public static IReadOnlyList<Token> Tokenize(string filename, string source, MessageCollection messages)
+        public static IReadOnlyList<Token> Tokenize(string source, string filename, MessageCollection messages)
         {
-            var tokenizer = new Tokenizer(filename, source, messages);
+            var tokenizer = new Tokenizer(source, filename, messages);
             return tokenizer.Tokenize();
         }
     }

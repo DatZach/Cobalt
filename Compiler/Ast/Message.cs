@@ -1,6 +1,5 @@
 ﻿using System.Collections;
 using System.Diagnostics;
-using System.Drawing;
 using System.Runtime.CompilerServices;
 using Compiler.Lexer;
 
@@ -175,7 +174,9 @@ namespace Compiler.Ast
                     Console.Write($"{indent} ' ");
                     Console.Write(new string(' ' , startToken.Column));
                     Console.ForegroundColor = color;
-                    Console.WriteLine(new string('^', Math.Min(startToken.Value.Length, line.Length)));
+                    var tokenLength = startToken.Value.Length;
+                    if (startToken.Type == TokenType.String) tokenLength += 2;
+                    Console.WriteLine(new string('^', Math.Min(tokenLength, line.Length - startToken.Column)));
                     Console.WriteLine();
                 }
             }
@@ -207,7 +208,7 @@ namespace Compiler.Ast
 
         public static Def StringUnterminated { get; } = new(MessageType.Error, "Untermined string");
 
-        public static Def StringInvalidEscape { get; } = new(MessageType.Error, "Invalid escape code");
+        public static Def StringIllegalEscape { get; } = new(MessageType.Error, "Invalid escape code");
 
         public static Def MissingClosingBrace { get; } = new(MessageType.Error, "Missing closing brace for this block");
 

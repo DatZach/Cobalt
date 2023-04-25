@@ -26,7 +26,7 @@ namespace Compiler
             var source = FileSystem.ReadAllText(Config.EntrySourceFile);
             
             var t3 = Stopwatch.StartNew();
-            var tokens = Tokenizer.Tokenize(Config.EntrySourceFile, source, messages);
+            var tokens = Tokenizer.Tokenize(source, Config.EntrySourceFile, messages);
             t3.Stop();
 
             var t4 = Stopwatch.StartNew();

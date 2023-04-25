@@ -6,12 +6,12 @@ namespace Compiler.Ast.Expressions
 {
     internal sealed class StringExpression : Expression
     {
-        public string Value => Token.Value!;
+        public string Value { get; }
 
-        public StringExpression(Token token)
+        public StringExpression(Token token, string value)
             : base(token)
         {
-
+            Value = value;
         }
 
         [DebuggerStepThrough]

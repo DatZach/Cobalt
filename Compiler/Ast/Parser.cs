@@ -124,7 +124,7 @@ namespace Compiler.Ast
         public Token Peek()
         {
             if (readIndex >= tokens.Count)
-                return new Token { Type = TokenType.EndOfStream };
+                return Token.EndOfStream;
 
             return tokens[readIndex];
         }
