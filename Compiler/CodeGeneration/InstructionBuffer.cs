@@ -20,6 +20,16 @@ namespace Compiler.CodeGeneration
             labels = new List<Label>(4);
         }
 
+        public void HACK_Optmize()
+        {
+            instructions.RemoveAll(x =>
+            {
+                return x.Opcode == Opcode.Move
+                       && x.A.Type == x.B.Type
+                       && x.A.Value == x.B.Value;
+            });
+        }
+
         public void FixLabels()
         {
             for (var i = 0; i < labels.Count; ++i)

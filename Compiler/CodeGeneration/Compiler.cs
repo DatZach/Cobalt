@@ -196,6 +196,8 @@ namespace Compiler.CodeGeneration
             
             functionStack.Pop();
             Functions.Add(function);
+
+            function.Body.HACK_Optmize();
             
             return new CobType(eCobType.Function, 0, function: function);
         }
@@ -276,15 +278,23 @@ namespace Compiler.CodeGeneration
                 var aOperandArguments = new Operand[arguments.Count];
                 for (int i = 0; i < arguments.Count; ++i)
                 {
+                    var paramType = parameters.ElementAtOrDefault(i);
                     var argType = arguments[i].Accept(this);
-                    // TODO
-                    //if (argType != CobType.FromString(parameters[i].Type))
-                    //    throw new Exception($"Expected '{parameters[i].Type}' but received '{argType}' instead");
+
+                    if (paramType != null && paramType.IsSpread) paramType = null;
+                    if (paramType != null && !CobType.IsCastable(argType, paramType.Type))
+                        messages.Add(Message.ParameterTypeMismatch, arguments[i], paramType.Type, argType);
 
                     var reg = CurrentFunction.PeekRegister();
-                    if (argType.Size != 32)
-                        reg = EmitCast(reg, argType, CobType.Int);
-                    aOperandArguments[i] = new Operand { Type = OperandType.Register, Size = 32, Value = reg };
+                    if (paramType != null && argType != paramType.Type)
+                        reg = EmitCast(reg, argType, paramType.Type);
+
+                    aOperandArguments[i] = new Operand
+                    {
+                        Type = OperandType.Register,
+                        Size = (byte)(paramType?.Type.Size ?? argType?.Size ?? 0),
+                        Value = reg
+                    };
 
                     //stackSpace += (argType.Size + 7) / 8;
                 }

@@ -46,6 +46,9 @@ namespace Compiler
                     return;
             }
 
+            if (Config.AssemblyVerboseOutput)
+                PrintCompilerState(compiler);
+
             if (compiler.Artifacts.Count > 0)
             {
                 var t6 = Stopwatch.StartNew();
@@ -53,9 +56,6 @@ namespace Compiler
                 t6.Stop();
 
                 t1.Stop();
-
-                if (Config.AssemblyVerboseOutput)
-                    PrintCompilerState(compiler);
 
                 if (Config.StatisticsVerboseOutputLevel > 0)
                 {

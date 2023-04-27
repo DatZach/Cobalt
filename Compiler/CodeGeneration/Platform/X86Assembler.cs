@@ -204,14 +204,31 @@ namespace Compiler.CodeGeneration.Platform
                     case eCobType.Function:
                         buffer.EmitLine($"rdata_{i} dd {global.Type.Function.Name}");
                         break;
-                    case eCobType.Array:
-                    case eCobType.String:
-                        if (global.Data == null)
+                    case eCobType.Array: // T[] -> Struct { Length: uint, Data: ... }
+                    {
+                        var data = global.Data;
+                        if (data == null)
                             throw new DataException("Data expected for string or array type");
 
-                        var value = string.Join(", ", global.Data);
-                        buffer.EmitLine($"rdata_{i} db {value}");
+                        buffer.Emit("rdata_");
+                        buffer.Emit(i.ToString());
+                        buffer.Emit(" db ");
+                        var length = data.LongLength;
+                        for (int j = 7; j >= 0; --j)
+                        {
+                            buffer.Emit(((length >> (j * 8)) & 0xFF).ToString());
+                            if (j != 0) buffer.Emit(", ");
+                        }
+
+                        if (length > 0) buffer.Emit(", ");
+                        for (int j = 0; j < length; ++j)
+                        {
+                            buffer.Emit(data[j].ToString());
+                            if (j < length - 1) buffer.Emit(", ");
+                        }
+                        buffer.EmitLine();
                         break;
+                    }
                     default:
                         throw new DataException($"Cannot encode .rdata {global.Type}");
                 }
@@ -624,7 +641,7 @@ namespace Compiler.CodeGeneration.Platform
                         return global.Type.Function.Name;
                     }
 
-                    return $"rdata_{operand.Value}";
+                    return $"rdata_{operand.Value} + 8"; // TODO HACK SHould not + 8 this
                 }
                 default:
                     throw new ArgumentOutOfRangeException();

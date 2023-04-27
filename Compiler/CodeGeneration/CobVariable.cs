@@ -32,9 +32,10 @@
     internal sealed record CobType
     {
         public readonly static CobType None = eCobType.None;
-        public readonly static CobType String = eCobType.String;
         public readonly static CobType Int = new (eCobType.Signed, 64); // TODO Technically should be machine-width
-        public readonly static CobType UInt = new(eCobType.Unsigned, 64); // TODO Ditto
+        public readonly static CobType UInt = new (eCobType.Unsigned, 64); // TODO Ditto
+        public readonly static CobType U8 = new (eCobType.Unsigned, 8);
+        public readonly static CobType String = new (eCobType.Array, U8);
 
         public eCobType Type { get; }
 
@@ -52,6 +53,13 @@
             Function = function;
         }
 
+        public CobType(eCobType type, CobType elementType)
+        {
+            // TODO Validate "Container" types?
+            Type = type;
+            ElementType = elementType;
+        }
+
         public static implicit operator CobType(eCobType type)
         {
             return new CobType(type, 32);
@@ -61,6 +69,11 @@
         {
             return HashCode.Combine((int)Type, Size, ElementType, Function);
         }
+
+        //public static bool operator ==(CobType left, CobType right)
+        //{
+        //    return left.Type == right.Type && left.Size == right.Size;
+        //}
 
         // TODO Needed?
         public static bool operator ==(CobType left, eCobType right)
@@ -77,11 +90,6 @@
         {
             if (left == null)
                 return false;
-
-            if (left.Type == eCobType.Array && right == eCobType.String)
-                return true;
-            if (right == eCobType.Array && left.Type == eCobType.String)
-                return true;
 
             return left.Type == right;
         }
@@ -135,6 +143,11 @@
                 return $"{Type}.{Size}[{ElementType}]";
             return $"{Type}.{Size}";
         }
+
+        public static bool IsCastable(CobType lhsType, CobType rhsType)
+        {
+            return true; // TODO Lol
+        }
     }
 
     internal enum eCobType
@@ -143,9 +156,10 @@
         Signed,
         Unsigned,
         Float,
-        Trait,
         Array,
-        Function,
-        String // TODO Eh?
+        Struct,
+        Reference,
+        Lens,
+        Function
     }
 }
