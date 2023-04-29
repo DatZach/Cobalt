@@ -8,7 +8,7 @@ using Compiler.Lexer;
 
 namespace Compiler.CodeGeneration
 {
-    internal sealed class Compiler : IExpressionVisitor<CobType?>
+    internal sealed class Compiler : IExpressionVisitor<Storage?> // TODO Nullable?
     {
         public List<ArtifactExpression> Artifacts { get; }
 
@@ -39,7 +39,7 @@ namespace Compiler.CodeGeneration
             this.messages = messages ?? throw new ArgumentNullException(nameof(messages));
         }
 
-        public CobType? Visit(ScriptExpression expression)
+        public Storage? Visit(ScriptExpression expression)
         {
             var expressions = expression.Expressions;
             for (int i = 0; i < expressions.Count; ++i)
@@ -48,35 +48,40 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
-        public CobType? Visit(VarExpression expression)
+        public Storage? Visit(VarExpression expression)
         {
             for (var i = 0; i < expression.Declarations.Count; ++i)
             {
                 var decl = expression.Declarations[i];
-                var rhsType = decl.Initializer?.Accept(this);
+                var rhs = decl.Initializer?.Accept(this);
 
-                if (CurrentFunction != null && rhsType != null) // Local Decl
+                if (CurrentFunction != null && rhs != null) // Local Decl
                 {
-                    var local = CurrentFunction.AllocateLocal(new CobVariable(decl.Name, rhsType));
-                    var reg = CurrentFunction.FreeRegister();
-                    CurrentFunction.Body.EmitLR(Opcode.Move, local, reg, rhsType.Size);
+                    var local = CurrentFunction.AllocateLocal(new CobVariable(decl.Name, rhs.Type));
+                    CurrentFunction.Body.EmitOO(
+                        Opcode.Move,
+                        new Operand { Type = OperandType.Local, Value = local, Size = (byte)rhs.Type.Size },
+                        rhs.Operand
+                    ); // TODO EmitLO
                 }
-                else if (CurrentFunction == null && rhsType != null) // Global Decl
+                else if (CurrentFunction == null && rhs != null) // Global Decl
                 {
                     //rhsType.Function.Name = decl.Name;
-                    AllocateGlobal(new CobVariable(decl.Name, rhsType));
+                    AllocateGlobal(new CobVariable(decl.Name, rhs.Type));
 
                     // TODO Throw exception if export declared outside root level
                     // TODO Throw exception if export declared on non-function?
                     if (expression.Type == TokenType.Export)
-                        Exports.Add(decl.Name, rhsType.Function.Name);
+                        Exports.Add(decl.Name, rhs.Type.Function.Name);
                 }
+
+                rhs?.Free();
             }
 
             return null;
         }
 
-        public CobType? Visit(ImportExpression expression)
+        public Storage? Visit(ImportExpression expression)
         {
             if (expression.SymbolName == null)
             {
@@ -120,32 +125,32 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
-        public CobType? Visit(ArtifactExpression expression)
+        public Storage? Visit(ArtifactExpression expression)
         {
             Artifacts.Add(expression);
             return null;
         }
 
-        public CobType? Visit(ReturnStatement expression)
+        public Storage? Visit(ReturnStatement expression)
         {
             if (expression.Expression == null)
                 CurrentFunction.Body.Emit(Opcode.Return);
             else
             {
-                var rhsType = expression.Expression.Accept(this);
+                var rhs = expression.Expression.Accept(this);
                 if (CurrentFunction.ReturnType == eCobType.None)
-                    CurrentFunction.ReturnType = rhsType;
-                else if (CurrentFunction.ReturnType != rhsType)
+                    CurrentFunction.ReturnType = rhs.Type;
+                else if (CurrentFunction.ReturnType != rhs.Type)
                     messages.Add(Message.ReturnTypeMismatch, expression);
-
-                var reg = CurrentFunction.FreeRegister();
-                CurrentFunction.Body.EmitR(Opcode.Return, reg);
+                
+                CurrentFunction.Body.EmitO(Opcode.Return, rhs.Operand);
+                rhs.Free();
             }
 
             return null;
         }
 
-        public CobType? Visit(AheadOfTimeExpression expression)
+        public Storage? Visit(AheadOfTimeExpression expression)
         {
             var function = new Function(
                 "$aot_eval$",
@@ -155,13 +160,13 @@ namespace Compiler.CodeGeneration
             );
 
             functionStack.Push(function);
-            var evalType = expression.Expression.Accept(this);
-            if (evalType == null || evalType == eCobType.None)
+            var evalStorage = expression.Expression.Accept(this);
+            if (evalStorage == null || evalStorage.Type == eCobType.None)
                 messages.Add(Message.AotCannotUseVoid, expression);
 
-            function.ReturnType = evalType;
-            var retReg = CurrentFunction.FreeRegister();
-            CurrentFunction.Body.EmitR(Opcode.Return, retReg);
+            function.ReturnType = evalStorage.Type;
+            CurrentFunction.Body.EmitO(Opcode.Return, evalStorage.Operand);
+            evalStorage.Free();
 
             function.ReturnLabel.Mark();
             function.Body.FixLabels();
@@ -171,13 +176,18 @@ namespace Compiler.CodeGeneration
             using var vm = new VirtualMachine(this);
             var result = vm.ExecuteFunction(function);
 
-            var reg = CurrentFunction.AllocateRegister();
-            CurrentFunction.Body.EmitRI(Opcode.Move, reg, result);
+            var reg = CurrentFunction.AllocateStorage(function.ReturnType);
+            // TODO EmitOI
+            CurrentFunction.Body.EmitOO(
+                Opcode.Move,
+                reg.Operand,
+                new Operand { Type = OperandType.ImmediateUnsigned, Size = (byte)64, Value = result } // TODO Not right
+            );
             
-            return evalType;
+            return evalStorage;
         }
 
-        public CobType? Visit(FunctionExpression expression)
+        public Storage? Visit(FunctionExpression expression)
         {
             var function = new Function(
                 expression.Name,
@@ -198,15 +208,19 @@ namespace Compiler.CodeGeneration
             Functions.Add(function);
 
             function.Body.HACK_Optmize();
-            
-            return new CobType(eCobType.Function, 0, function: function);
+
+            return new Storage(
+                CurrentFunction,
+                null, // TODO ???
+                new CobType(eCobType.Function, 0, function: function)
+            );
         }
 
-        public CobType? Visit(BinaryOperatorExpression expression)
+        public Storage? Visit(BinaryOperatorExpression expression)
         {
-            var aType = expression.Left.Accept(this);
-            var bType = expression.Right.Accept(this);
-            var cType = aType; // TODO Verify types
+            var a = expression.Left.Accept(this);
+            var b = expression.Right.Accept(this);
+            var cType = a.Type; // TODO Verify types
 
             var opcode = expression.Operator switch
             {
@@ -222,29 +236,29 @@ namespace Compiler.CodeGeneration
                 TokenType.BitXor => Opcode.BitXor,
                 _ => throw new ArgumentOutOfRangeException(nameof(expression))
             };
+            
+            var c = CurrentFunction.AllocateStorage(cType);
+            CurrentFunction.Body.EmitOO(Opcode.Move, c.Operand, a.Operand);
+            CurrentFunction.Body.EmitOO(opcode, c.Operand, b.Operand);
+            a.Free();
+            b.Free();
 
-            var b = CurrentFunction.FreeRegister();
-            var a = CurrentFunction.FreeRegister();
-            CurrentFunction.Body.EmitRR(opcode, a, b);
-
-            var c = CurrentFunction.AllocateRegister();
-            CurrentFunction.Body.EmitRR(Opcode.Move, c, a);
-
-            return cType;
+            return c;
         }
 
-        public CobType? Visit(BlockExpression expression)
+        public Storage? Visit(BlockExpression expression)
         {
             for (var i = 0; i < expression.Expressions.Count; i++)
             {
                 var expr = expression.Expressions[i];
-                expr.Accept(this);
+                var retStorage = expr.Accept(this);
+                retStorage?.Free();
             }
 
             return null;
         }
 
-        public CobType? Visit(CallExpression expression)
+        public Storage? Visit(CallExpression expression)
         {
             // CAST OPERATOR
             var castType = VisitCast(expression);
@@ -252,51 +266,38 @@ namespace Compiler.CodeGeneration
                 return castType;
 
             // FUNCTION IDENTIFIER
-            var functionType = expression.FunctionExpression.Accept(this);
-            var function = functionType?.Function;
+            var functionStorage = expression.FunctionExpression.Accept(this);
+            var function = functionStorage?.Type.Function;
             if (function == null)
             {
-                messages.Add(Message.CannotCallType, expression, functionType);
-                return CobType.None;
+                messages.Add(Message.CannotCallType, expression, functionStorage?.Type);
+                return null;
             }
-
-            var freg = CurrentFunction.PeekRegister();
-
+            
             // ARGUMENTS
             var parameters = function.Parameters;
             var arguments = expression.Arguments;
             var hasSpreadParameter = parameters.Count > 0 && parameters[^1].IsSpread;
             if (arguments.Count != parameters.Count && !hasSpreadParameter)
                 messages.Add(Message.FunctionParameterCountMismatch, expression, parameters.Count, arguments.Count);
-
-            // TODO Calling convention?
-
+            
             IReadOnlyList<Operand>? operandArguments;
-            //int stackSpace = 0;
             if (arguments.Count > 0)
             {
                 var aOperandArguments = new Operand[arguments.Count];
                 for (int i = 0; i < arguments.Count; ++i)
                 {
                     var paramType = parameters.ElementAtOrDefault(i);
-                    var argType = arguments[i].Accept(this);
+                    var argStorage = arguments[i].Accept(this);
 
                     if (paramType != null && paramType.IsSpread) paramType = null;
-                    if (paramType != null && !CobType.IsCastable(argType, paramType.Type))
-                        messages.Add(Message.ParameterTypeMismatch, arguments[i], paramType.Type, argType);
+                    if (paramType != null && !CobType.IsCastable(argStorage.Type, paramType.Type))
+                        messages.Add(Message.ParameterTypeMismatch, arguments[i], paramType.Type, argStorage);
+                    
+                    if (paramType != null && argStorage.Type != paramType.Type)
+                        argStorage = EmitCast(argStorage, paramType.Type);
 
-                    var reg = CurrentFunction.PeekRegister();
-                    if (paramType != null && argType != paramType.Type)
-                        reg = EmitCast(reg, argType, paramType.Type);
-
-                    aOperandArguments[i] = new Operand
-                    {
-                        Type = OperandType.Register,
-                        Size = (byte)(paramType?.Type.Size ?? argType?.Size ?? 0),
-                        Value = reg
-                    };
-
-                    //stackSpace += (argType.Size + 7) / 8;
+                    aOperandArguments[i] = argStorage.Operand;
                 }
 
                 operandArguments = aOperandArguments;
@@ -305,24 +306,33 @@ namespace Compiler.CodeGeneration
                 operandArguments = null;
             
             // CALL
-            CurrentFunction.Body.EmitRA(Opcode.Call, freg, operandArguments);
-
-            // RETURN VALUE
-            if (function.ReturnType != eCobType.None)
-            {
-                var reg = CurrentFunction.AllocateRegister();
-                CurrentFunction.Body.EmitRR(Opcode.Move, reg, 0);
-            }
+            CurrentFunction.Body.EmitOA(Opcode.Call, functionStorage.Operand, operandArguments);
 
             // CLEANUP
-            CurrentFunction.FreeRegister(); // function reg
-            for (int i = 0; i < arguments.Count; ++i) // argument regs
-                CurrentFunction.FreeRegister();
-            
-            return function.ReturnType;
+            functionStorage.Free(); // function reg
+            if (operandArguments != null)
+            {
+                for (int i = 0; i < operandArguments.Count; ++i) // argument regs
+                    CurrentFunction.FreeStorage(operandArguments[i]);
+            }
+
+            // RETURN VALUE
+            Storage? retStorage = null;
+            if (function.ReturnType != eCobType.None)
+            {
+                // TODO Can't just clobber reg 0 like this
+                retStorage = CurrentFunction.AllocateStorage(function.ReturnType);
+                CurrentFunction.Body.EmitOO(
+                    Opcode.Move,
+                    retStorage.Operand,
+                    new Operand { Type = OperandType.Register, Value = 0, Size = (byte)function.ReturnType.Size }
+                );
+            }
+
+            return retStorage;
         }
 
-        private CobType? VisitCast(CallExpression expression)
+        private Storage? VisitCast(CallExpression expression)
         {
             if (expression.FunctionExpression is not IdentifierExpression ie)
                 return null;
@@ -334,66 +344,83 @@ namespace Compiler.CodeGeneration
             if (arguments.Count != 1)
             {
                 messages.Add(Message.FunctionParameterCountMismatch, expression, 1, arguments.Count);
-                return CobType.None;
+                return null;
             }
 
-            var srcType = arguments[0].Accept(this);
-            var srcReg = CurrentFunction.PeekRegister();
-            EmitCast(srcReg, srcType, castType);
-            
-            return castType;
+            var source = arguments[0].Accept(this);
+            var target = EmitCast(source, castType);
+
+            return target;
         }
 
-        private int EmitCast(int srcReg, CobType srcType, CobType dstType)
+        private Storage EmitCast(Storage source, CobType dstType)
         {
+            var srcType = source.Type;
             if (srcType == eCobType.Unsigned
             ||  srcType == eCobType.Signed
             ||  srcType == eCobType.Float)
             {
-                if (srcType.Size > dstType.Size)
-                    return srcReg;
-
-                //var dstReg = CurrentFunction.AllocateRegister();
-                CurrentFunction.Body.EmitRsRs(
-                    Opcode.Move,
-                    srcReg, dstType.Size,
-                    srcReg, srcType.Size
-                );
-
-                return srcReg;
+                var target = CurrentFunction.AllocateStorage(dstType);
+                CurrentFunction.Body.EmitOO(Opcode.Move, target.Operand, source.Operand);
+                source.Free();
+                return target;
             }
             else
                 throw new NotImplementedException();
         }
 
-        public CobType? Visit(IdentifierExpression expression)
+        public Storage? Visit(IdentifierExpression expression)
         {
             int idx;
 
-            var reg = CurrentFunction.AllocateRegister();
-
+            // TODO AllocateStorage(Type, Value, Origin)..?
+            
             // ARGUMENTS
             if ((idx = CurrentFunction.FindParameter(expression.Value)) != -1)
             {
-                var type = CurrentFunction.Parameters[idx].Type;
-                CurrentFunction.Body.EmitRA(Opcode.Move, reg, idx, type.Size);
-                return type;
+                var type = CurrentFunction.Parameters[idx];
+                return new Storage(
+                    CurrentFunction,
+                    new Operand
+                    {
+                        Type = OperandType.Argument,
+                        Value = idx,
+                        Size = (byte)type.Type.Size
+                    },
+                    type.Type
+                );
             }
 
             // LOCALS
             if ((idx = CurrentFunction.FindLocal(expression.Value)) != -1)
             {
-                var type = CurrentFunction.Locals[idx].Type;
-                CurrentFunction.Body.EmitRL(Opcode.Move, reg, idx, type.Size);
-                return type;
+                var type = CurrentFunction.Locals[idx];
+                return new Storage(
+                    CurrentFunction,
+                    new Operand
+                    {
+                        Type = OperandType.Local,
+                        Value = idx,
+                        Size = (byte)type.Type.Size
+                    },
+                    type.Type
+                );
             }
 
             // GLOBALS
             if ((idx = FindGlobal(expression.Value)) != -1)
             {
-                var type = Globals[idx].Type;
-                CurrentFunction.Body.EmitRG(Opcode.Move, reg, idx, type.Size);
-                return type;
+                var type = Globals[idx];
+                return new Storage(
+                    CurrentFunction,
+                    new Operand
+                    {
+                        Type = OperandType.Global,
+                        Value = idx,
+                        Size = (byte)type.Type.Size
+                    },
+                    type.Type
+                );
             }
 
             // FUCNTIONS
@@ -408,20 +435,15 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
-        public CobType? Visit(NumberExpression expression)
+        public Storage? Visit(NumberExpression expression)
         {
-            var type = new CobType(expression.Type, expression.BitSize);
-            var reg = CurrentFunction.AllocateRegister();
-
-            if (type == eCobType.Float)
-                CurrentFunction.Body.EmitRIf(Opcode.Move, reg, expression.LongValue, type.Size);
-            else
-                CurrentFunction.Body.EmitRI(Opcode.Move, reg, expression.LongValue);
-            
-            return type;
+            return CurrentFunction.AllocateStorage(
+                new CobType(expression.Type, expression.BitSize),
+                expression.LongValue
+            );
         }
 
-        public CobType? Visit(StringExpression expression)
+        public Storage? Visit(StringExpression expression)
         {
             var byteCount = Encoding.UTF8.GetByteCount(expression.Value);
             var data = new byte[byteCount + 1];
@@ -431,14 +453,20 @@ namespace Compiler.CodeGeneration
                 $"string{Globals.Count}",
                 CobType.String
             ) { Data = data });
-
-            var reg = CurrentFunction.AllocateRegister();
-            CurrentFunction.Body.EmitRG(Opcode.Move, reg, global, 0); // TODO Plaform dependent
-
-            return CobType.String;
+            
+            // TODO AllocateStorage on Global "function"??
+            return new Storage(
+                CurrentFunction,
+                new Operand
+                {
+                    Type = OperandType.Global,
+                    Value = global
+                },
+                CobType.String
+            );
         }
 
-        public CobType? Visit(EmptyExpression expression)
+        public Storage? Visit(EmptyExpression expression)
         {
             return null;
         }

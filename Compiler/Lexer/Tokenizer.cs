@@ -105,6 +105,27 @@ namespace Compiler.Lexer
                     {
                         if (c == '_')
                             return true;
+                        
+                        if (!hasSign && (c == '-' || c == '+'))
+                        {
+                            hasSign = true;
+                            return true;
+                        }
+
+                        if (!hasDecimal && c == '.')
+                        {
+                            if (hasHexSpecified || hasBinSpecified)
+                                return false;
+
+                            hasDecimal = true;
+                            return true;
+                        }
+
+                        if (!hasType && (c == 'u' || c == 's' || c == 'f'))
+                        {
+                            hasType = true;
+                            return true;
+                        }
 
                         if (hasHexSpecified)
                         {
@@ -118,24 +139,6 @@ namespace Compiler.Lexer
                             if (c == 'b' && index == startIndex + 1)
                                 return true;
                             return IsBinChar(c);
-                        }
-
-                        if (!hasSign && (c == '-' || c == '+'))
-                        {
-                            hasSign = true;
-                            return true;
-                        }
-
-                        if (!hasDecimal && c == '.')
-                        {
-                            hasDecimal = true;
-                            return true;
-                        }
-
-                        if (!hasType && (c == 'u' || c == 's' || c == 'f'))
-                        {
-                            hasType = true;
-                            return true;
                         }
 
                         return char.IsDigit(c);

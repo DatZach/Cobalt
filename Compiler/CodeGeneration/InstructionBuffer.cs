@@ -44,6 +44,25 @@ namespace Compiler.CodeGeneration
             });
         }
 
+        public void EmitO(Opcode opcode, Operand oprA)
+        {
+            instructions.Add(new Instruction
+            {
+                Opcode = opcode,
+                A = oprA
+            });
+        }
+
+        public void EmitOO(Opcode opcode, Operand oprA, Operand oprB)
+        {
+            instructions.Add(new Instruction
+            {
+                Opcode = opcode,
+                A = oprA,
+                B = oprB
+            });
+        }
+
         public void EmitR(Opcode opcode, int regA)
         {
             instructions.Add(new Instruction
@@ -178,12 +197,12 @@ namespace Compiler.CodeGeneration
         //    });
         //}
 
-        public void EmitRA(Opcode opcode, int regA, IReadOnlyList<Operand>? argC)
+        public void EmitOA(Opcode opcode, Operand oprA, IReadOnlyList<Operand>? argC)
         {
             instructions.Add(new Instruction
             {
                 Opcode = opcode,
-                A = new Operand { Type = OperandType.Register, Size = PlatformWordWidth, Value = regA },
+                A = oprA,
                 C = argC
             });
         }

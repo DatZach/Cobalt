@@ -2,7 +2,7 @@
 {
     internal sealed record CobVariable
     {
-        public string Name { get; set; } // HACK set
+        public string Name { get; set; } // TODO HACK set
 
         public CobType Type { get; }
 
@@ -35,7 +35,10 @@
         public readonly static CobType Int = new (eCobType.Signed, 64); // TODO Technically should be machine-width
         public readonly static CobType UInt = new (eCobType.Unsigned, 64); // TODO Ditto
         public readonly static CobType U8 = new (eCobType.Unsigned, 8);
-        public readonly static CobType String = new (eCobType.Array, U8);
+        public readonly static CobType Char = new (eCobType.Unsigned, 8) { AliasName = "char" };
+        public readonly static CobType String = new (eCobType.Array, Char) { AliasName = "string" };
+
+        public string? AliasName { get; init; }
 
         public eCobType Type { get; }
 
@@ -99,6 +102,13 @@
             if (string.IsNullOrEmpty(typeName))
                 return None;
 
+            var isArray = typeName.EndsWith("[]");
+            if (isArray)
+            {
+                var elementType = FromString(typeName[..^2]);
+                return new CobType(eCobType.Array, elementType);
+            }
+            
             if (typeName.Length >= 2)
             {
                 if (typeName[0] == 's' && char.IsDigit(typeName[1]))
@@ -109,14 +119,12 @@
                     return new CobType(eCobType.Float, int.Parse(typeName[1..]));
                 if (typeName[0] == 'f' && typeName[1] == 'n')
                     return new CobType(eCobType.Function, 0);
-                if (typeName == "string")
-                    return String;
-                if (typeName == "int")
+                if (typeName.StartsWith("int"))
                     return Int;
-                if (typeName == "uint")
+                if (typeName.StartsWith("uint"))
                     return UInt;
-
-                // TODO Arrays, Traits
+                if (Aliases.TryGetValue(typeName, out var aliasType))
+                    return aliasType;
             }
 
             throw new Exception($"Illegal type definition '{typeName}'");
@@ -139,14 +147,47 @@
 
         public override string ToString()
         {
+            if (AliasName != null)
+                return AliasName;
+            
             if (ElementType != null)
-                return $"{Type}.{Size}[{ElementType}]";
+                return $"{Type}[{ElementType}]";
+
             return $"{Type}.{Size}";
         }
 
         public static bool IsCastable(CobType lhsType, CobType rhsType)
         {
-            return true; // TODO Lol
+            if (lhsType == rhsType)
+                return true;
+
+            if (lhsType.Type is eCobType.Unsigned or eCobType.Signed or eCobType.Float
+            &&  rhsType.Type is eCobType.Unsigned or eCobType.Signed or eCobType.Float)
+            {
+                return true;
+            }
+
+            // TODO Distant aliases
+            // NOTE Immediate aliases should be functional as their type is directly encoded
+
+            return false;
+        }
+
+        private readonly static Dictionary<string, CobType> Aliases = new();
+
+        public static bool TryAddAlias(string name, CobType type)
+        {
+            if (Aliases.ContainsKey(name))
+                return false;
+
+            Aliases.Add(name, type);
+            return true;
+        }
+
+        static CobType()
+        {
+            TryAddAlias("char", Char);
+            TryAddAlias("string", String);
         }
     }
 

@@ -1,4 +1,6 @@
-﻿using Compiler.Ast.Expressions;
+﻿using System.Runtime.InteropServices;
+using Compiler.Ast.Expressions;
+using Microsoft.Win32;
 
 namespace Compiler.CodeGeneration
 {
@@ -22,7 +24,8 @@ namespace Compiler.CodeGeneration
 
         public Label ReturnLabel { get; }
 
-        private int registerStack;
+        private int freeRegisterIndex;
+        private int registers;
 
         public Function(
             string name,
@@ -40,45 +43,108 @@ namespace Compiler.CodeGeneration
             Body = new InstructionBuffer();
             ReturnLabel = new Label(Body);
 
-            registerStack = 0;
+            freeRegisterIndex = 0;
+            registers = 0;
         }
 
-        public int AllocateRegister()
+        public Storage AllocateStorage(CobType type, long value)
         {
-            var register = registerStack++;
-            ClobberedRegisters |= 1u << register;
-
-            return register;
-        }
-
-        public int FreeRegister()
-        {
-            return --registerStack;
-        }
-
-        public int PeekRegister()
-        {
-            return registerStack - 1;
-        }
-
-        public int PreserveRegister(int register)
-        {
-            if (register < registerStack)
+            // TODO Pool
+            var operandType = type.Type switch // TODO ???
             {
-                Body.EmitR(Opcode.Stash, register);
-                return register;
-            }
+                eCobType.Signed => OperandType.ImmediateSigned,
+                eCobType.Unsigned => OperandType.ImmediateUnsigned,
+                eCobType.Float => OperandType.ImmediateFloat,
+                _ => throw new NotSupportedException()
+            };
 
-            return -1;
+            var operand = new Operand
+            {
+                Type = operandType,
+                Value = value,
+                Size = (byte)type.Size
+            };
+
+            return new Storage(this, operand, type);
         }
 
-        public void RestoreRegister(int register)
+        public Storage AllocateStorage(CobType type)
         {
-            if (register == -1)
-                return;
+            // TODO Pool
+            var register = type.Type switch // TODO ???
+            {
+                eCobType.Signed => AllocateRegister(),
+                eCobType.Unsigned => AllocateRegister(),
+                eCobType.Float => AllocateRegister(),
+                _ => throw new NotSupportedException()
+            };
 
-            Body.EmitR(Opcode.Unstash, register);
+            var operand = new Operand
+            {
+                Type = OperandType.Register,
+                Value = register,
+                Size = (byte)type.Size
+            };
+
+            return new Storage(this, operand, type);
         }
+
+        public void FreeStorage(Operand storage)
+        {
+            switch (storage.Type)
+            {
+                case OperandType.Register:
+                    FreeRegister((int)storage.Value);
+                    break;
+
+                default:
+                    // NOTE Nothing to do?
+                    break;
+            }
+        }
+
+        private int AllocateRegister()
+        {
+            const int MaxRegisters = 32;
+
+            var i = freeRegisterIndex;
+            while ((registers & (1 << i)) != 0 && i < MaxRegisters)
+                ++i;
+
+            if (i >= MaxRegisters)
+                throw new InvalidOperationException("Exhausted registers!");
+
+            registers |= (1 << i);
+            freeRegisterIndex = i + 1;
+            ClobberedRegisters |= 1u << i;
+
+            return i;
+        }
+
+        private void FreeRegister(int register)
+        {
+            registers &= ~(1 << register);
+            freeRegisterIndex = register;
+        }
+        
+        //public int PreserveRegister(int register)
+        //{
+        //    if (register < freeRegisterIndex)
+        //    {
+        //        Body.EmitR(Opcode.Stash, register);
+        //        return register;
+        //    }
+
+        //    return -1;
+        //}
+
+        //public void RestoreRegister(int register)
+        //{
+        //    if (register == -1)
+        //        return;
+
+        //    Body.EmitR(Opcode.Unstash, register);
+        //}
 
         public int AllocateLocal(CobVariable variable)
         {
@@ -132,5 +198,13 @@ namespace Compiler.CodeGeneration
         None,
         CCall,
         Stdcall
+    }
+
+    internal sealed record Storage(Function Parent, Operand Operand, CobType Type)
+    {
+        public void Free()
+        {
+            Parent?.FreeStorage(Operand);
+        }
     }
 }

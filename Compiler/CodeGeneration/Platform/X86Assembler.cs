@@ -475,6 +475,7 @@ namespace Compiler.CodeGeneration.Platform
                             // TODO Support different int widths
                             buffer.EmitLine("push rax");
                             buffer.EmitLine("push rbx");
+                            //if (inst.B)
                             buffer.EmitLine($"mov rbx, {GetOperandString(inst.B)}");
                             buffer.EmitLine($"mov rax, {GetOperandString(inst.A)}");
                             buffer.EmitLine("cqo");
