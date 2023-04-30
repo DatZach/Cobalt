@@ -32,8 +32,9 @@
     internal sealed record CobType
     {
         public readonly static CobType None = eCobType.None;
-        public readonly static CobType Int = new (eCobType.Signed, 64); // TODO Technically should be machine-width
-        public readonly static CobType UInt = new (eCobType.Unsigned, 64); // TODO Ditto
+        public readonly static CobType Any = eCobType.Any;
+        public readonly static CobType Int = new (eCobType.Signed, -1);
+        public readonly static CobType UInt = new (eCobType.Unsigned, -1);
         public readonly static CobType U8 = new (eCobType.Unsigned, 8);
         public readonly static CobType Char = new (eCobType.Unsigned, 8) { AliasName = "char" };
         public readonly static CobType String = new (eCobType.Array, Char) { AliasName = "string" };
@@ -61,11 +62,12 @@
             // TODO Validate "Container" types?
             Type = type;
             ElementType = elementType;
+            Size = -1;
         }
 
         public static implicit operator CobType(eCobType type)
         {
-            return new CobType(type, 32);
+            return new CobType(type, -1);
         }
         
         public override int GetHashCode()
@@ -118,11 +120,13 @@
                 if (typeName[0] == 'f' && char.IsDigit(typeName[1]))
                     return new CobType(eCobType.Float, int.Parse(typeName[1..]));
                 if (typeName[0] == 'f' && typeName[1] == 'n')
-                    return new CobType(eCobType.Function, 0);
-                if (typeName.StartsWith("int"))
+                    return new CobType(eCobType.Function, -1);
+                if (typeName == "int")
                     return Int;
-                if (typeName.StartsWith("uint"))
+                if (typeName == "uint")
                     return UInt;
+                if (typeName == "any")
+                    return Any;
                 if (Aliases.TryGetValue(typeName, out var aliasType))
                     return aliasType;
             }
@@ -156,13 +160,17 @@
             return $"{Type}.{Size}";
         }
 
-        public static bool IsCastable(CobType lhsType, CobType rhsType)
+        public static bool IsCastable(CobType srcType, CobType dstType)
         {
-            if (lhsType == rhsType)
+            if (srcType == dstType)
                 return true;
 
-            if (lhsType.Type is eCobType.Unsigned or eCobType.Signed or eCobType.Float
-            &&  rhsType.Type is eCobType.Unsigned or eCobType.Signed or eCobType.Float)
+            // NOTE any -> discrete requires runtime
+            if (dstType == eCobType.Any || srcType == eCobType.Any)
+                return true;
+
+            if (srcType.Type is eCobType.Unsigned or eCobType.Signed or eCobType.Float
+            &&  dstType.Type is eCobType.Unsigned or eCobType.Signed or eCobType.Float)
             {
                 return true;
             }
@@ -194,6 +202,7 @@
     internal enum eCobType
     {
         None,
+        Any,
         Signed,
         Unsigned,
         Float,

@@ -9,6 +9,8 @@ namespace Compiler.CodeGeneration.Platform
     {
         public const string DefaultFasmPath = @"C:\Tools\fasmw17330\fasm.exe";
 
+        private const int BusWidth = 64;
+
         public override IReadOnlyList<string> SupportedPlatforms => new[] { "x86_64" };
 
         public override string DefaultExtension => "exe";
@@ -116,7 +118,7 @@ namespace Compiler.CodeGeneration.Platform
                     if ((f.ClobberedRegisters & (1u << j)) == 0)
                         continue;
 
-                    var regName = GetIntegerRegisterName(j, 64);
+                    var regName = GetIntegerRegisterName(j, BusWidth);
                     if (nonVolatileRegisters.Contains(regName))
                         nvrReserve += 8;
                 }
@@ -135,11 +137,11 @@ namespace Compiler.CodeGeneration.Platform
                         if ((f.ClobberedRegisters & (1u << j)) == 0)
                             continue;
 
-                        var regName = GetIntegerRegisterName(j, 64);
+                        var regName = GetIntegerRegisterName(j, BusWidth);
                         if (nonVolatileRegisters.Contains(regName))
                         {
                             int nvrOffset = callReserve + localReserve + k * 8;
-                            buffer.EmitLine($"mov qword [rsp + {nvrOffset}], {GetIntegerRegisterName(j, 64)}");
+                            buffer.EmitLine($"mov qword [rsp + {nvrOffset}], {GetIntegerRegisterName(j, BusWidth)}");
                         }
                     }
                 }
@@ -155,11 +157,11 @@ namespace Compiler.CodeGeneration.Platform
                         if ((f.ClobberedRegisters & (1u << j)) == 0)
                             continue;
 
-                        var regName = GetIntegerRegisterName(j, 64);
+                        var regName = GetIntegerRegisterName(j, BusWidth);
                         if (nonVolatileRegisters.Contains(regName))
                         {
                             int nvrOffset = callReserve + localReserve + k * 8;
-                            buffer.EmitLine($"mov {GetIntegerRegisterName(j, 64)}, qword [rsp + {nvrOffset}]");
+                            buffer.EmitLine($"mov {GetIntegerRegisterName(j, BusWidth)}, qword [rsp + {nvrOffset}]");
                         }
                     }
                     
@@ -314,30 +316,16 @@ namespace Compiler.CodeGeneration.Platform
                         break;
                     case Opcode.Call:
                     {
-                        var callee = GetOperandDataType(inst.A).Function;
                         if (inst.C != null)
                         {
                             for (int j = 0; j < inst.C.Count; ++j)
                             {
                                 var operand = inst.C[j];
-                                var cType = GetOperandDataType(operand);
-                                var cOperand = GetOperandString(operand);
-                                var argOperand = new Operand { Type = OperandType.Argument, Value = j, Size = operand.Size };
-                                if (cType == eCobType.Float)
-                                {
-                                    if (cType.Size == 32)
-                                        buffer.EmitLine($"cvtss2sd {cOperand}, {cOperand}");
-
-                                    buffer.EmitLine($"movsd {GetOperandString(argOperand)}, {cOperand}");
-                                }
-                                else
-                                {
-                                    if (argOperand.Size > operand.Size)
-                                        buffer.Emit("movzx ");
-                                    else
-                                        buffer.Emit("mov ");
-                                    buffer.EmitLine($"{GetOperandString(argOperand)}, {cOperand}");
-                                }
+                                EmitMove(
+                                    buffer,
+                                    new Operand { Type = OperandType.Argument, Value = j, Size = BusWidth },
+                                    operand
+                                );
                             }
                         }
 
@@ -357,21 +345,7 @@ namespace Compiler.CodeGeneration.Platform
                     }
                     case Opcode.Move:
                     {
-                        var aType = GetOperandDataType(inst.A);
-                        var bType = GetOperandDataType(inst.B);
-
-                        if (bType == eCobType.Float)
-                            buffer.Emit(bType.Size == 32 ? "movss " : "movsd ");
-                        else if (inst.A.Size > inst.B.Size) // TODO 0 hack
-                            buffer.Emit("movzx ");
-                        else
-                            buffer.Emit("mov ");
-
-                        buffer.Emit(GetOperandString(inst.A, bType));
-                        buffer.Emit(", ");
-                        buffer.EmitLine(GetOperandString(inst.B, bType));
-
-                        SetMachineState(inst.A, inst.B);
+                        EmitMove(buffer, inst.A!, inst.B!);
                         break;
                     }
                     //case Opcode.Push:
@@ -513,7 +487,102 @@ namespace Compiler.CodeGeneration.Platform
                 }
             }
         }
-        
+
+        private void EmitMove(MachineCodeBuffer buffer, Operand a, Operand b)
+        {
+            var aType = GetOperandDataType(a);
+            var bType = GetOperandDataType(b);
+            var aSize = a.Size == -1 ? BusWidth : a.Size;
+            var bSize = b.Size == -1 ? BusWidth : b.Size;
+
+            var aIsMemory = a.Type is OperandType.Local or OperandType.Global or OperandType.Argument or OperandType.ImmediateFloat;
+            var bIsMemory = b.Type is OperandType.Local or OperandType.Global or OperandType.Argument or OperandType.ImmediateFloat;
+            var bIsImmediate = b.Type is OperandType.ImmediateUnsigned or OperandType.ImmediateSigned;
+
+            if (a.Type == OperandType.Register) aType = bType; // Register types are volatile
+            var aOperandString = GetOperandString(a, aType);
+            var bOperandString = GetOperandString(b, bType);
+
+            string movInst1, movInst2, scratchReg;
+            if (aType == eCobType.Float && bType == eCobType.Float)
+            {
+                movInst1 = ((aSize << 8) | bSize) switch
+                {
+                    0x4040 => "movsd",
+                    0x4020 => "cvtss2sd",
+                    0x2040 => "cvtsd2ss",
+                    0x2020 => "movss",
+                    _ => throw new InvalidOperationException($"Cannot move float from {bSize} to {aSize} width register")
+                };
+                movInst2 = bSize switch
+                {
+                    64 => "movsd",
+                    32 => "movss",
+                    _ => throw new InvalidOperationException()
+                };
+                scratchReg = "xmm5";
+            }
+            else if (aType == eCobType.Float)
+            {
+                movInst1 = aSize switch
+                {
+                    64 => "cvtsi2sd",
+                    32 => "cvtsi2ss",
+                    _ => throw new InvalidOperationException($"Cannot move float to {bSize} width register")
+                };
+                movInst2 = bSize switch
+                {
+                    64 => "movsd",
+                    32 => "movss",
+                    _ => throw new InvalidOperationException()
+                };
+                scratchReg = "xmm5";
+            }
+            else if (bType == eCobType.Float)
+            {
+                movInst1 = bSize switch
+                {
+                    64 => "cvtsd2si",
+                    32 => "cvtss2si",
+                    _ => throw new InvalidOperationException($"Cannot move float to {bSize} width register")
+                };
+                movInst2 = bSize switch
+                {
+                    64 => "mov", // ss?
+                    32 => "mov", // sd?
+                    _ => throw new InvalidOperationException()
+                };
+
+                scratchReg = "r11";
+            }
+            else
+            {
+                movInst1 = aSize > bSize && !bIsImmediate ? "movzx" : "mov";
+                movInst2 = "mov";
+                scratchReg = bSize switch
+                {
+                    8 => "r11b",
+                    16 => "r11w",
+                    32 => "r11d",
+                    64 => "r11",
+                    -1 => "r11",
+                    _ => throw new InvalidOperationException()
+                };
+            }
+
+            if (aIsMemory && bIsMemory)
+            {
+                buffer.EmitLine($"{movInst1} {scratchReg}, {bOperandString}");
+                buffer.EmitLine($"{movInst2} {aOperandString}, {scratchReg}");
+            }
+            else
+            {
+                buffer.EmitLine($"{movInst1} {aOperandString}, {bOperandString}");
+            }
+            
+            SetMachineState(a, b);
+        }
+
         private void SetMachineState(Operand operandA, Operand operandB)
         {
             var typeB = GetOperandDataType(operandB);
@@ -568,21 +637,23 @@ namespace Compiler.CodeGeneration.Platform
             }
         }
 
-        // TODO Support 64bit correctly
+        private string GetWidthName(int size)
+        {
+            return size switch
+            {
+                8  => "byte",
+                16 => "word",
+                32 => "dword",
+                64 => "qword",
+                -1 => "qword",
+                _  => throw new DataException($"Cannot describe {size} bits")
+            };
+        }
+        
         private string GetOperandString(Operand? operand, CobType? typeOverride = null)
         {
             if (operand == null) throw new ArgumentNullException(nameof(operand));
             
-            var describe = operand.Size switch
-            {
-                0 => "qword", // TODO Error?
-                8 => "byte",
-                16 => "word",
-                32 => "dword",
-                64 => "qword",
-                _ => throw new DataException($"Cannot describe immediate of {operand.Size} bits")
-            };
-
             switch (operand.Type)
             {
                 case OperandType.None:
@@ -604,8 +675,10 @@ namespace Compiler.CodeGeneration.Platform
                             operand.Value
                         ));
                     }
+
+                    var type = compiler.Globals[globalIdx].Type;
                     
-                    return $"{describe} [rdata_{globalIdx}]";
+                    return $"{GetWidthName(type.Size)} [rdata_{globalIdx}]";
                 }
                 case OperandType.Register:
                 {
@@ -628,10 +701,10 @@ namespace Compiler.CodeGeneration.Platform
                             return GetIntegerRegisterName(parameterRegisters[(int)operand.Value], operand.Size);
                     }
 
-                    return $"{describe} [rsp + {stackSpace + operand.Value * 8 + 8}]";
+                    return $"{GetWidthName(argumentTypes[idx].Size)} [rsp + {stackSpace + operand.Value * 8 + 8}]";
                 }
-                case OperandType.Local: // TODO Use size
-                    return $"{describe} [rsp + {callReserve + operand.Value * 8}]";
+                case OperandType.Local:
+                    return $"{GetWidthName(localTypes[operand.Value].Size)} [rsp + {callReserve + operand.Value * 8}]";
                 case OperandType.Global:
                 {
                     var global = compiler.Globals[(int)operand.Value];
@@ -649,8 +722,8 @@ namespace Compiler.CodeGeneration.Platform
             }
         }
 
-        private const int MaxRegisters = 13; // TODO Could have more
-        private readonly static int[] parameterRegisters = { 6, 5, 4, 3 }; // rcx, rdx, r8, r9
+        private const int MaxRegisters = 12;
+        private readonly static int[] parameterRegisters = { 5, 4, 3, 2 }; // rcx, rdx, r8, r9
         private readonly static HashSet<string> nonVolatileRegisters = new ()
         {
             "rbx", "rbp", "rdi", "rsi", "rsp", "r12", "r13", "r14", "r15",
@@ -658,25 +731,28 @@ namespace Compiler.CodeGeneration.Platform
             "xmm13", "xmm14", "xmm15"
         };
 
+        // TODO Preserve registers if needed, correctly
         // Ordered by least to most likely to need preservation operations
-        // rax r10 r11 [r9 r8 rdx rcx] (r12 r13 r14 r15 rbx rdi rsi)
+        // rax r10 [r9 r8 rdx rcx] (r12 r13 r14 r15 rbx rdi rsi)
+        // r11 is reserved for scratch
         private readonly static string[,] registers =
         {
-            { null,  null,  null,  null, null,  null,  null, null,  null,  null,   null, null,  null  }, // 0
-            {  "al", "r10b","r11b","r9b","r8b", "dl",  "cl", "r12b","r13b","r14b", "bl", null,  null  }, // 8
-            {  "ax", "r10w","r11w","r9w","r8w", "dx",  "cx", "r12w","r13w","r14w", "bx", null,  null  }, // 16
-            { "eax", "r10d","r11d","r9d","r8d","edx", "ecx", "r12d","r13d","r14d","rbx", "rdi", "rsi" }, // 24
-            { "eax", "r10d","r11d","r9d","r8d","edx", "ecx", "r12d","r13d","r14d","rbx", "rdi", "rsi" }, // 32
-            { "rax", "r10", "r11", "r9", "r8", "rdx", "rcx", "r12", "r13", "r14", "rbx", "rdi", "rsi" }, // 40
-            { "rax", "r10", "r11", "r9", "r8", "rdx", "rcx", "r12", "r13", "r14", "rbx", "rdi", "rsi" }, // 48
-            { "rax", "r10", "r11", "r9", "r8", "rdx", "rcx", "r12", "r13", "r14", "rbx", "rdi", "rsi" }, // 56
-            { "rax", "r10", "r11", "r9", "r8", "rdx", "rcx", "r12", "r13", "r14", "rbx", "rdi", "rsi" }, // 64
+            { null,  null,  null, null,  null,  null, null,  null,  null,   null, null,  null  }, // 0
+            {  "al", "r10b","r9b","r8b", "dl",  "cl", "r12b","r13b","r14b", "bl", null,  null  }, // 8
+            {  "ax", "r10w","r9w","r8w", "dx",  "cx", "r12w","r13w","r14w", "bx", null,  null  }, // 16
+            { "eax", "r10d","r9d","r8d","edx", "ecx", "r12d","r13d","r14d","rbx", "rdi", "rsi" }, // 24
+            { "eax", "r10d","r9d","r8d","edx", "ecx", "r12d","r13d","r14d","rbx", "rdi", "rsi" }, // 32
+            { "rax", "r10", "r9", "r8", "rdx", "rcx", "r12", "r13", "r14", "rbx", "rdi", "rsi" }, // 40
+            { "rax", "r10", "r9", "r8", "rdx", "rcx", "r12", "r13", "r14", "rbx", "rdi", "rsi" }, // 48
+            { "rax", "r10", "r9", "r8", "rdx", "rcx", "r12", "r13", "r14", "rbx", "rdi", "rsi" }, // 56
+            { "rax", "r10", "r9", "r8", "rdx", "rcx", "r12", "r13", "r14", "rbx", "rdi", "rsi" }, // 64
         };
 
         private string GetIntegerRegisterName(int i, int bitSize)
         {
+            if (bitSize == 0) throw new Exception("Cannot use register of bitwidth 0");
+            if (bitSize == -1) bitSize = BusWidth;
             var j = (bitSize + 7) / 8;
-            if (j == 0) j = 8; // TODO Error?
             return registers[j, i];
         }
 

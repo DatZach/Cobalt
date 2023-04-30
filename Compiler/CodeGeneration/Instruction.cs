@@ -23,7 +23,7 @@ namespace Compiler.CodeGeneration
     {
         public OperandType Type { get; init; }
 
-        public byte Size { get; init; }
+        public int Size { get; init; }
 
         public long Value { get; init; }
 
