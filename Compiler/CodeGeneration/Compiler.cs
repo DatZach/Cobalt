@@ -361,7 +361,11 @@ namespace Compiler.CodeGeneration
             ||  srcType == eCobType.Float)
             {
                 var target = CurrentFunction.AllocateStorage(dstType);
-                CurrentFunction.Body.EmitOO(Opcode.Move, target.Operand, source.Operand);
+                CurrentFunction.Body.EmitOO(
+                    Opcode.Move,
+                    target.Operand,
+                    new Operand { Type = source.Operand.Type, Value = source.Operand.Value, Size = target.Operand.Size }//source.Operand
+                );
                 source.Free();
                 return target;
             }

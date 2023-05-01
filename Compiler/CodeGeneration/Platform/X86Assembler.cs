@@ -495,13 +495,14 @@ namespace Compiler.CodeGeneration.Platform
             var aSize = a.Size == -1 ? BusWidth : a.Size;
             var bSize = b.Size == -1 ? BusWidth : b.Size;
 
-            var aIsMemory = a.Type is OperandType.Local or OperandType.Global or OperandType.Argument or OperandType.ImmediateFloat;
-            var bIsMemory = b.Type is OperandType.Local or OperandType.Global or OperandType.Argument or OperandType.ImmediateFloat;
-            var bIsImmediate = b.Type is OperandType.ImmediateUnsigned or OperandType.ImmediateSigned;
-
-            if (a.Type == OperandType.Register) aType = bType; // Register types are volatile
-            var aOperandString = GetOperandString(a, aType);
-            var bOperandString = GetOperandString(b, bType);
+            var aIsMemory = (a.Type is OperandType.Local or OperandType.Global or OperandType.ImmediateFloat)
+                         || (a.Type == OperandType.Argument && a.Value > parameterRegisters.Length);
+            var bIsMemory = (b.Type is OperandType.Local or OperandType.Global or OperandType.ImmediateFloat)
+                         || (b.Type == OperandType.Argument && b.Value > parameterRegisters.Length)
+                         || (b.Type is OperandType.ImmediateSigned or OperandType.ImmediateUnsigned && b.Value > uint.MaxValue);
+            
+            var aOperandString = GetOperandString(a);
+            var bOperandString = GetOperandString(b);
 
             string movInst1, movInst2, scratchReg;
             if (aType == eCobType.Float && bType == eCobType.Float)
@@ -557,8 +558,28 @@ namespace Compiler.CodeGeneration.Platform
             }
             else
             {
-                movInst1 = aSize > bSize && !bIsImmediate ? "movzx" : "mov";
-                movInst2 = "mov";
+                movInst1 = ((aSize << 8) | bSize) switch
+                {
+                    0x4020 => "movzx",
+                    0x4010 => "movzx",
+                    0x4008 => "movzx",
+                    0x2010 => "movzx",
+                    0x2008 => "movzx",
+                    0x1008 => "movzx",
+                    _ => "mov"
+                };
+                movInst2 = ((aSize << 8) | bSize) switch
+                {
+                    0x1008 => "movsx",
+                    0x2008 => "movsx",
+                    0x4008 => "movsx",
+                    0x2010 => "movsx",
+                    0x4010 => "movsx",
+                    0x1010 => "movsxd",
+                    0x2020 => "movsxd",
+                    0x4020 => "movsxd",
+                    _ => "mov"
+                };
                 scratchReg = bSize switch
                 {
                     8 => "r11b",
@@ -568,6 +589,13 @@ namespace Compiler.CodeGeneration.Platform
                     -1 => "r11",
                     _ => throw new InvalidOperationException()
                 };
+
+                if (movInst1 == "movzx")
+                {
+                    aOperandString = GetOperandString(new Operand { Type = a.Type, Value = a.Value, Size = 32 });
+                    if (bSize == 32)
+                        movInst1 = "mov";
+                }
             }
 
             if (aIsMemory && bIsMemory)
@@ -625,11 +653,11 @@ namespace Compiler.CodeGeneration.Platform
                 case OperandType.ImmediateFloat:
                     return new CobType(eCobType.Float, operand.Size);
                 case OperandType.Register:
-                    return registerTypes[operand.Value];
+                    return registerTypes[operand.Value]; //new CobType(eCobType.Unsigned, operand.Size);
                 case OperandType.Argument:
                     return argumentTypes[operand.Value];
                 case OperandType.Local:
-                    return localTypes[(int)operand.Value];
+                    return localTypes[operand.Value];
                 case OperandType.Global:
                     return compiler.Globals[(int)operand.Value].Type;
                 default:
@@ -701,10 +729,10 @@ namespace Compiler.CodeGeneration.Platform
                             return GetIntegerRegisterName(parameterRegisters[(int)operand.Value], operand.Size);
                     }
 
-                    return $"{GetWidthName(argumentTypes[idx].Size)} [rsp + {stackSpace + operand.Value * 8 + 8}]";
+                    return $"{GetWidthName(operand.Size)} [rsp + {stackSpace + operand.Value * 8 + 8}]";
                 }
                 case OperandType.Local:
-                    return $"{GetWidthName(localTypes[operand.Value].Size)} [rsp + {callReserve + operand.Value * 8}]";
+                    return $"{GetWidthName(operand.Size)} [rsp + {callReserve + operand.Value * 8}]";
                 case OperandType.Global:
                 {
                     var global = compiler.Globals[(int)operand.Value];
