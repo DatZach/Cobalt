@@ -568,18 +568,7 @@ namespace Compiler.CodeGeneration.Platform
                     0x1008 => "movzx",
                     _ => "mov"
                 };
-                movInst2 = ((aSize << 8) | bSize) switch
-                {
-                    0x1008 => "movsx",
-                    0x2008 => "movsx",
-                    0x4008 => "movsx",
-                    0x2010 => "movsx",
-                    0x4010 => "movsx",
-                    0x1010 => "movsxd",
-                    0x2020 => "movsxd",
-                    0x4020 => "movsxd",
-                    _ => "mov"
-                };
+                movInst2 = "mov";
                 scratchReg = bSize switch
                 {
                     8 => "r11b",
@@ -590,9 +579,11 @@ namespace Compiler.CodeGeneration.Platform
                     _ => throw new InvalidOperationException()
                 };
 
+                if (bSize > aSize)
+                    bOperandString = GetOperandString(b with { Size = aSize });
                 if (movInst1 == "movzx")
                 {
-                    aOperandString = GetOperandString(new Operand { Type = a.Type, Value = a.Value, Size = 32 });
+                    aOperandString = GetOperandString(a with { Size = 32 });
                     if (bSize == 32)
                         movInst1 = "mov";
                 }

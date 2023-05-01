@@ -356,6 +356,9 @@ namespace Compiler.CodeGeneration
         private Storage EmitCast(Storage source, CobType dstType)
         {
             var srcType = source.Type;
+            if (srcType == dstType)
+                return source;
+
             if (srcType == eCobType.Unsigned
             ||  srcType == eCobType.Signed
             ||  srcType == eCobType.Float)
@@ -364,7 +367,7 @@ namespace Compiler.CodeGeneration
                 CurrentFunction.Body.EmitOO(
                     Opcode.Move,
                     target.Operand,
-                    new Operand { Type = source.Operand.Type, Value = source.Operand.Value, Size = target.Operand.Size }//source.Operand
+                    source.Operand
                 );
                 source.Free();
                 return target;
