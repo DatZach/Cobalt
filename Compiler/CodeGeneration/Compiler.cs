@@ -358,19 +358,12 @@ namespace Compiler.CodeGeneration
             var srcType = source.Type;
             if (srcType == dstType)
                 return source;
-
+            
             if (srcType == eCobType.Unsigned
             ||  srcType == eCobType.Signed
             ||  srcType == eCobType.Float)
             {
-                var target = CurrentFunction.AllocateStorage(dstType);
-                CurrentFunction.Body.EmitOO(
-                    Opcode.Move,
-                    target.Operand,
-                    source.Operand
-                );
-                source.Free();
-                return target;
+                return source with { Type = dstType };
             }
             else
                 throw new NotImplementedException();

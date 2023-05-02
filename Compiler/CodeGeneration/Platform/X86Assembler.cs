@@ -504,7 +504,7 @@ namespace Compiler.CodeGeneration.Platform
             var aOperandString = GetOperandString(a);
             var bOperandString = GetOperandString(b);
 
-            string movInst1, movInst2, scratchReg;
+            string movInst1, movInst2, aScratch, bScratch;
             if (aType == eCobType.Float && bType == eCobType.Float)
             {
                 movInst1 = ((aSize << 8) | bSize) switch
@@ -521,7 +521,8 @@ namespace Compiler.CodeGeneration.Platform
                     32 => "movss",
                     _ => throw new InvalidOperationException()
                 };
-                scratchReg = "xmm5";
+                aScratch = "xmm5";
+                bScratch = "xmm5";
             }
             else if (aType == eCobType.Float)
             {
@@ -537,7 +538,8 @@ namespace Compiler.CodeGeneration.Platform
                     32 => "movss",
                     _ => throw new InvalidOperationException()
                 };
-                scratchReg = "xmm5";
+                aScratch = "xmm5";
+                bScratch = "xmm5";
             }
             else if (bType == eCobType.Float)
             {
@@ -554,22 +556,73 @@ namespace Compiler.CodeGeneration.Platform
                     _ => throw new InvalidOperationException()
                 };
 
-                scratchReg = "r11";
+                aScratch = "r11";
+                bScratch = "r11";
             }
             else
             {
-                movInst1 = ((aSize << 8) | bSize) switch
+                int aScratchSize = aSize;
+                int bScratchSize = aSize;
+                if (aIsMemory && bIsMemory)
                 {
-                    0x4020 => "movzx",
-                    0x4010 => "movzx",
-                    0x4008 => "movzx",
-                    0x2010 => "movzx",
-                    0x2008 => "movzx",
-                    0x1008 => "movzx",
-                    _ => "mov"
-                };
+                    if (bSize > aSize)
+                    {
+                        bSize = Math.Min(aSize, bSize);
+                        //aScratchSize = bSize;
+                        bOperandString = GetOperandString(b with { Size = bSize });
+                    }
+
+                    if (aSize == 64 && bSize < 64)
+                    {
+                        bScratchSize = 32;
+                    }
+
+                    movInst1 = ((bScratchSize << 8) | bSize) switch
+                    {
+                        0x4010 => "movzx",
+                        0x4008 => "movzx",
+                        0x2010 => "movzx",
+                        0x2008 => "movzx",
+                        0x1008 => "movzx",
+                        _ => "mov"
+                    };
+                }
+                else
+                {
+                    if (bSize > aSize)
+                    {
+                        bSize = Math.Min(aSize, bSize);
+                        bScratchSize = bSize;
+                        bOperandString = GetOperandString(b with { Size = bSize });
+                    }
+
+                    if (aSize == 64 && bSize < 64)
+                    {
+                        // NOTE Seems insane, but x86 r->r clears upper 32bits and in fact doesn't let you set
+                        //      64bit registers directly with movzx. However r->m requires exact size
+                        //if (aIsMemory)
+                        //    aScratchSize = 32;
+                        //else
+                        //{
+                        aSize = 32;
+                        aScratchSize = aSize;
+                        aOperandString = GetOperandString(a with { Size = aSize });
+                        //}
+                    }
+
+                    movInst1 = ((aSize << 8) | bSize) switch
+                    {
+                        0x4010 => "movzx",
+                        0x4008 => "movzx",
+                        0x2010 => "movzx",
+                        0x2008 => "movzx",
+                        0x1008 => "movzx",
+                        _ => "mov"
+                    };
+                }
+                
                 movInst2 = "mov";
-                scratchReg = bSize switch
+                aScratch = aScratchSize switch
                 {
                     8 => "r11b",
                     16 => "r11w",
@@ -578,21 +631,21 @@ namespace Compiler.CodeGeneration.Platform
                     -1 => "r11",
                     _ => throw new InvalidOperationException()
                 };
-
-                if (bSize > aSize)
-                    bOperandString = GetOperandString(b with { Size = aSize });
-                if (movInst1 == "movzx")
+                bScratch = bScratchSize switch
                 {
-                    aOperandString = GetOperandString(a with { Size = 32 });
-                    if (bSize == 32)
-                        movInst1 = "mov";
-                }
+                    8 => "r11b",
+                    16 => "r11w",
+                    32 => "r11d",
+                    64 => "r11",
+                    -1 => "r11",
+                    _ => throw new InvalidOperationException()
+                };
             }
 
             if (aIsMemory && bIsMemory)
             {
-                buffer.EmitLine($"{movInst1} {scratchReg}, {bOperandString}");
-                buffer.EmitLine($"{movInst2} {aOperandString}, {scratchReg}");
+                buffer.EmitLine($"{movInst1} {bScratch}, {bOperandString}");
+                buffer.EmitLine($"{movInst2} {aOperandString}, {aScratch}");
             }
             else
             {
