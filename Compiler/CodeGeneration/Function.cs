@@ -62,7 +62,7 @@ namespace Compiler.CodeGeneration
             {
                 Type = operandType,
                 Value = value,
-                Size = (byte)type.Size
+                Size = type.Size
             };
 
             return new Storage(this, operand, type);
@@ -83,7 +83,7 @@ namespace Compiler.CodeGeneration
             {
                 Type = OperandType.Register,
                 Value = register,
-                Size = (byte)type.Size
+                Size = type.Size
             };
 
             return new Storage(this, operand, type);

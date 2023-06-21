@@ -60,7 +60,7 @@ namespace Compiler.CodeGeneration
                     var local = CurrentFunction.AllocateLocal(new CobVariable(decl.Name, rhs.Type));
                     CurrentFunction.Body.EmitOO(
                         Opcode.Move,
-                        new Operand { Type = OperandType.Local, Value = local, Size = (byte)rhs.Type.Size },
+                        new Operand { Type = OperandType.Local, Value = local, Size = rhs.Type.Size },
                         rhs.Operand
                     ); // TODO EmitLO
                 }
@@ -117,7 +117,7 @@ namespace Compiler.CodeGeneration
                     function.NativeImport = import;
                     AllocateGlobal(new CobVariable(
                         expression.SymbolName,
-                        new CobType(eCobType.Function, 0, function: function)
+                        new CobType(eCobType.Function, -1, function: function)
                     ));
                 }
             }
@@ -181,7 +181,7 @@ namespace Compiler.CodeGeneration
             CurrentFunction.Body.EmitOO(
                 Opcode.Move,
                 reg.Operand,
-                new Operand { Type = OperandType.ImmediateUnsigned, Size = (byte)64, Value = result } // TODO Not right
+                new Operand { Type = OperandType.ImmediateUnsigned, Size = -1, Value = result } // TODO Not right
             );
             
             return evalStorage;
@@ -212,7 +212,7 @@ namespace Compiler.CodeGeneration
             return new Storage(
                 CurrentFunction,
                 null, // TODO ???
-                new CobType(eCobType.Function, 0, function: function)
+                new CobType(eCobType.Function, -1, function: function)
             );
         }
 
@@ -325,7 +325,7 @@ namespace Compiler.CodeGeneration
                 CurrentFunction.Body.EmitOO(
                     Opcode.Move,
                     retStorage.Operand,
-                    new Operand { Type = OperandType.Register, Value = 0, Size = (byte)function.ReturnType.Size }
+                    new Operand { Type = OperandType.Register, Value = 0, Size = function.ReturnType.Size }
                 );
             }
 
@@ -356,14 +356,14 @@ namespace Compiler.CodeGeneration
         private Storage EmitCast(Storage source, CobType dstType)
         {
             var srcType = source.Type;
+            if (srcType == dstType)
+                return source;
+            
             if (srcType == eCobType.Unsigned
             ||  srcType == eCobType.Signed
             ||  srcType == eCobType.Float)
             {
-                var target = CurrentFunction.AllocateStorage(dstType);
-                CurrentFunction.Body.EmitOO(Opcode.Move, target.Operand, source.Operand);
-                source.Free();
-                return target;
+                return source with { Type = dstType };
             }
             else
                 throw new NotImplementedException();
@@ -385,7 +385,7 @@ namespace Compiler.CodeGeneration
                     {
                         Type = OperandType.Argument,
                         Value = idx,
-                        Size = (byte)type.Type.Size
+                        Size = type.Type.Size
                     },
                     type.Type
                 );
@@ -401,7 +401,7 @@ namespace Compiler.CodeGeneration
                     {
                         Type = OperandType.Local,
                         Value = idx,
-                        Size = (byte)type.Type.Size
+                        Size = type.Type.Size
                     },
                     type.Type
                 );
@@ -417,7 +417,7 @@ namespace Compiler.CodeGeneration
                     {
                         Type = OperandType.Global,
                         Value = idx,
-                        Size = (byte)type.Type.Size
+                        Size = type.Type.Size
                     },
                     type.Type
                 );
@@ -460,7 +460,8 @@ namespace Compiler.CodeGeneration
                 new Operand
                 {
                     Type = OperandType.Global,
-                    Value = global
+                    Value = global,
+                    Size = -1
                 },
                 CobType.String
             );
