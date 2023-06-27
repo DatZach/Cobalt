@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.InteropServices;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Diagnostics;
 
 namespace Emulator
 {
@@ -13,15 +8,15 @@ namespace Emulator
 
         private int mci;
 
-        public Register r0, r1, r2, r3, sp, ss, cs, ms, ta, tb, ip, flags, instruction, operand;
-
+        private readonly Register r0, r1, r2, r3, sp, ss, cs, ds, ta, tb, ip, flags, instruction, operand;
         private readonly Machine machine;
-
         private readonly ControlWord[] microcode;
 
-        public CPU(Machine machine)
+        public CPU(Machine machine, ControlWord[] microcode)
         {
             this.machine = machine ?? throw new ArgumentNullException(nameof(machine));
+            this.microcode = microcode;
+
             r0 = new Register();
             r1 = new Register();
             r2 = new Register();
@@ -29,7 +24,7 @@ namespace Emulator
             sp = new Register();
             ss = new Register();
             cs = new Register();
-            ms = new Register();
+            ds = new Register();
             ta = new Register();
             tb = new Register();
             ip = new Register();
@@ -37,8 +32,6 @@ namespace Emulator
             instruction = new Register();
             operand = new Register();
             mci = 0;
-
-            microcode = LoadMicrocode();
         }
 
         public void Tick()
@@ -64,35 +57,39 @@ namespace Emulator
             var cword = microcode[iaddr];
             mci = (mci + 1) & 0x0F;
 
-            if ((cword & ControlWord.RTN) != 0)
+            var isALUOperation = (cword & ControlWord.MASK_ALU) != 0;
+            var isAddr = (cword & ControlWord.ADDR) != 0;
+
+            // IP Reg
+            if ((cword & ControlWord.MASK_IP) == ControlWord.IPC1)
+                ip.Word += 1;
+            else if ((cword & ControlWord.MASK_IP) == ControlWord.IPC2)
+                ip.Word += 2;
+            else if ((cword & ControlWord.MASK_IP) == ControlWord.IPO)
+            {
+                if (isALUOperation)
+                    throw new InvalidOperationException();
+                else if (isAddr)
+                    abusWord = ip.Word;
+                else
+                    dbusWord = ip.Word;
+            }
+            else if ((cword & ControlWord.MASK_IP) == ControlWord.HLT)
+                IsHalted = true;
+            else if ((cword & ControlWord.MASK_IP) == ControlWord.RTN)
             {
                 mci = 0;
                 return;
             }
-
-            // IP Reg
-            //if ((cword & ControlWord.IPO) != 0)
-            //{
-            //    abusWord = ip.Word;
-            //}
-
-            //if ((cword & ControlWord.IPC) != 0)
-            //    ip.Word += 1;
-            //else if ((cword & ControlWord.IPC2) != 0)
-            //    ip.Word += 2;
-
-            //if ((cword & ControlWord.JMP) != 0)
-            //{
-            //    ip.Word = dbusWord;
-            //}
-
+            
             // Register Output
-            var isALUOperation = (cword & ControlWord.ADD) != 0;
             if ((cword & ControlWord.RSO1) != 0)
             {
                 var reg = SelectRegister(instruction.Word & 0x000F);
                 if (isALUOperation)
                     aluaWord = reg.Word;
+                else if (isAddr)
+                    abusWord = reg.Word;
                 else
                     dbusWord = reg.Word;
             }
@@ -102,63 +99,107 @@ namespace Emulator
                 var reg = SelectRegister(operand.Word & 0x000F);
                 if (isALUOperation)
                     alubWord = reg.Word;
+                else if (isAddr)
+                    abusWord = reg.Word;
                 else
                     dbusWord = reg.Word;
             }
 
             if ((cword & ControlWord.TAO) != 0)
             {
-                dbusWord = ta.Word;
+                if (isALUOperation)
+                    throw new InvalidOperationException();
+                else if (isAddr)
+                    abusWord = ta.Word;
+                else
+                    dbusWord = ta.Word;
+            }
+
+            if ((cword & ControlWord.TBO) != 0)
+            {
+                if (isALUOperation)
+                    throw new InvalidOperationException();
+                else if (isAddr)
+                    abusWord = tb.Word;
+                else
+                    dbusWord = tb.Word;
             }
 
             // ALU
-            if ((cword & ControlWord.ADD) != 0)
+            int zf = 0, cf = 0, sf = 0;
+            if (isALUOperation)
             {
-                dbusWord = (ushort)(aluaWord + alubWord);
+                int alucWord = 0;
+                if ((cword & ControlWord.MASK_ALU) == ControlWord.ADD)
+                    alucWord = aluaWord + alubWord;
+                else if ((cword & ControlWord.MASK_ALU) == ControlWord.SUB)
+                    alucWord = aluaWord - alubWord;
+                else if ((cword & ControlWord.MASK_ALU) == ControlWord.OR)
+                    alucWord = aluaWord | alubWord;
+                else if ((cword & ControlWord.MASK_ALU) == ControlWord.XOR)
+                    alucWord = aluaWord ^ alubWord;
+                else if ((cword & ControlWord.MASK_ALU) == ControlWord.AND)
+                    alucWord = aluaWord & alubWord;
+                else if ((cword & ControlWord.MASK_ALU) == ControlWord.SHL)
+                    alucWord = aluaWord << alubWord;
+                else if ((cword & ControlWord.MASK_ALU) == ControlWord.SHR)
+                    alucWord = aluaWord >> alubWord;
+
+                zf = alucWord == 0 ? 0x04 : 0;
+                cf = (alucWord & 0x10000) != 0 ? 0x02 : 0;
+                sf = (alucWord & 0x8000) != 0 ? 0x01 : 0;
+                dbusWord = (ushort)alucWord;
             }
 
             // RAM
-            if ((cword & ControlWord.R) != 0) // Read
+            var isRead = (cword & ControlWord.R) != 0;
+            var isWrite = (cword & ControlWord.W) != 0;
+            if (isRead || isWrite)
             {
-                if ((cword & ControlWord.WORD) != 0) // 16-bit
-                    dbusWord = machine.RAM.ReadWord(ms.Word, abusWord);
-                else
-                    dbusWord = machine.RAM.ReadByte(ms.Word, abusWord);
-            }
-            else if ((cword & ControlWord.W) != 0) // Write
-            {
-                if ((cword & ControlWord.WORD) != 0) // 16-bit
-                    machine.RAM.WriteWord(ms.Word, abusWord, dbusWord);
-                else
-                    machine.RAM.WriteByte(ms.Word, abusWord, (byte)(dbusWord & 0xFF));
+                ushort seg = (cword & ControlWord.MASK_SEG) switch
+                {
+                    ControlWord.CS => cs.Word,
+                    ControlWord.SS => cs.Word,
+                    ControlWord.DS => ds.Word,
+                    _ => 0
+                };
+
+                if (isRead) // Read
+                {
+                    if ((cword & ControlWord.WORD) != 0) // 16-bit
+                        dbusWord = machine.RAM.ReadWord(seg, abusWord);
+                    else
+                        dbusWord = machine.RAM.ReadByte(seg, abusWord);
+                }
+                else if (isWrite) // Write
+                {
+                    if ((cword & ControlWord.WORD) != 0) // 16-bit
+                        machine.RAM.WriteWord(seg, abusWord, dbusWord);
+                    else
+                        machine.RAM.WriteByte(seg, abusWord, (byte)(dbusWord & 0xFF));
+                }
             }
 
             // Register Inputs
-            if ((cword & ControlWord.II) != 0)
-            {
+            if ((cword & ControlWord.MASK_IR) == ControlWord.II)
                 instruction.Word = dbusWord;
-            }
-
-            if ((cword & ControlWord.OI) != 0)
-            {
+            else if ((cword & ControlWord.MASK_IR) == ControlWord.OI)
                 operand.Word = dbusWord;
-            }
+            else if ((cword & ControlWord.MASK_IR) == ControlWord.FI)
+                flags.Word = (ushort)(zf | cf | sf);
 
-            if ((cword & ControlWord.RSI1) != 0)
+            if ((cword & ControlWord.MASK_RI) == ControlWord.RSI1)
             {
                 var reg = SelectRegister(instruction.Word & 0x000F);
                 reg.Word = dbusWord;
             }
-            
-            if ((cword & ControlWord.TAI) != 0)
-            {
+            else if ((cword & ControlWord.MASK_RI) == ControlWord.TAI)
                 ta.Word = dbusWord;
-            }
-
-            if ((cword & ControlWord.HLT) != 0)
-            {
-                IsHalted = true;
-            }
+            else if ((cword & ControlWord.MASK_RI) == ControlWord.TBI)
+                tb.Word = dbusWord;
+            
+            if ((cword & ControlWord.JMP) != 0)
+                ip.Word = dbusWord;
         }
 
         private Register SelectRegister(int index)
@@ -172,56 +213,21 @@ namespace Emulator
                 4 => sp,
                 5 => ss,
                 6 => cs,
-                7 => ms,
+                7 => ds,
                 _ => throw new NotImplementedException()
             };
         }
 
-        private static ControlWord[] LoadMicrocode()
+        public override string ToString()
         {
-            return null;
+            return $"r0 = {r0} r1 = {r1} r2 = {r2} r3 = {r3}\n" +
+                   $"sp = {sp} ss = {ss} cs = {cs} ds = {ds}\n" +
+                   $"ip = {ip} flags = {flags}";
         }
     }
 
-    [Flags]
-    internal enum ControlWord : uint
-    {
-        None,
-        IPC1    = 0x01,
-        IPC2    = 0x02,
-        IPO     = 0x03,
-        II      = 0x04,
-        OI      = 0x08,
-        FI      = 0x0C,
-        RTN     = 0x10,
-        RSO1    = 0x20,
-        RSO2    = 0x40,
-        TAO     = 0x80,
-        TBO     = 0x100,
-        RSI1    = 0x200,
-        TAI     = 0x400,
-        TBI     = 0x600,
-        R       = 0x800,
-        W       = 0x1000,
-        BYTE    = 0,
-        WORD    = 0x2000,
-        ADD     = 0x4000,
-        SUB     = 0x8000,
-        OR      = 0xC000,
-        XOR     = 0x10000,
-        AND     = 0x14000,
-        SHL     = 0x18000,
-        SHR     = 0x1C000,
-        DATA    = 0,
-        ADDR    = 0x20000,
-        CS      = 0x40000,
-        SS      = 0x80000,
-        DS      = 0xC0000,
-        HLT     = 0x100000,
-        JMP     = 0x200000,
-    }
-
-    internal class Register
+    [DebuggerDisplay("{Word:X4}")]
+    internal sealed class Register
     {
         public ushort Word { get; set; }
 
@@ -235,6 +241,11 @@ namespace Emulator
         {
             get => (byte)((Word >> 8) & 0xFF);
             set => Word = (ushort)((value << 8) | LoByte);
+        }
+
+        public override string ToString()
+        {
+            return Word.ToString("X4");
         }
     }
 }

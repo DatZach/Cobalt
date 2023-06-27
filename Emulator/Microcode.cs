@@ -1,17 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace Emulator
+﻿namespace Emulator
 {
-    internal static class MicrocodeAssembler
+    public static class Microcode
     {
-        public const int InstructionWidth = 16;
-        public const int ControlWordWidth = 24;
-
-        public static void CompileFile(string path, string outputPath)
+        public const int MaxControlWordCount = 0xFFFF; // 16 microcode instructions per opcode
+        public const int BytesPerControlWord = 3;
+        
+        public static byte[] AssembleRom(string path)
         {
             var macros = new Dictionary<string, Procedure>();
             var opcodes = new Dictionary<int, Procedure>();
@@ -132,7 +126,7 @@ namespace Emulator
                             {
                                 var k = current.CodeLength++;
                                 if (k >= Procedure.MaxMicrocodeCount)
-                                    throw new AssemblyException(k, $"Microcode exceeds {Procedure.MaxMicrocodeCount} words");
+                                    throw new AssemblyException(i, $"Microcode exceeds {Procedure.MaxMicrocodeCount} words");
                                 
                                 current.Code[k] = macroCode[j];
                             }
@@ -150,8 +144,11 @@ namespace Emulator
                                 word |= ControlWord.ADDR;
                             }
 
-                            // TODO Validate word
-                            word |= Enum.Parse<ControlWord>(subPart);
+                            var cwPart = Enum.Parse<ControlWord>(subPart);
+                            if ((word & cwPart) != 0)
+                                throw new AssemblyException(i, $"Control signal {subPart} conflicts with another in this word");
+
+                            word |= cwPart;
                         }
                     }
 
@@ -161,13 +158,12 @@ namespace Emulator
                     var l = current.CodeLength++;
                     if (l >= Procedure.MaxMicrocodeCount)
                         throw new AssemblyException(l, $"Microcode exceeds {Procedure.MaxMicrocodeCount} words");
-                                
+                    
                     current.Code[l] = word;
                 }
             }
-
-            //var result = new byte[(int)Math.Pow(2, InstructionWidth) * ControlWordWidth];
-            var result = new byte[0xFFFF * 3];
+            
+            var result = new byte[MaxControlWordCount * BytesPerControlWord];
             foreach (var opcode in opcodes)
             {
                 var addr = opcode.Key;
@@ -176,18 +172,28 @@ namespace Emulator
                 for (int i = 0; i < codeLength; ++i)
                 {
                     var romAddr = (addr | i) * 3;
-                    result[romAddr + 0] = (byte)((int)code[i] & 0xFF);
+                    result[romAddr + 2] = (byte)((int)code[i] & 0xFF);
                     result[romAddr + 1] = (byte)(((int)code[i] >> 8) & 0xFF);
-                    result[romAddr + 2] = (byte)(((int)code[i] >> 16) & 0xFF);
-
-                    //var romAddr = (addr | i);
-                    //result[romAddr + 0x00000] = (byte)((int)code[i] & 0xFF);
-                    //result[romAddr + 0x0FFFF] = (byte)(((int)code[i] >> 8) & 0xFF);
-                    //result[romAddr + 0x1FFFE] = (byte)(((int)code[i] >> 16) & 0xFF);
+                    result[romAddr + 0] = (byte)(((int)code[i] >> 16) & 0xFF);
                 }
             }
 
-            File.WriteAllBytes(outputPath, result);
+            return result;
+        }
+
+        public static ControlWord[] ControlWordsFromRomBinary(byte[] rom)
+        {
+            if (rom == null) throw new ArgumentNullException(nameof(rom));
+            if (rom.Length != MaxControlWordCount * BytesPerControlWord)
+                throw new InvalidDataException($"Expected ROM of {MaxControlWordCount * BytesPerControlWord} bytes, got {rom.Length} instead");
+
+            var result = new ControlWord[MaxControlWordCount];
+            for (int i = 0; i < MaxControlWordCount; ++i)
+            {
+                result[i] = (ControlWord)((rom[i] << 24) | (rom[i + 1] << 8) | rom[i + 2]);
+            }
+
+            return result;
         }
 
         private static Operand ParseOperand(string value, int line)
@@ -231,6 +237,60 @@ namespace Emulator
                 CodeLength = 0;
             }
         }
+    }
+
+    [Flags]
+    public enum ControlWord : uint
+    {
+        None,
+
+        IPC1    = 0x01,
+        IPC2    = 0x02,
+        //IPC4    = 0x03,
+        //XX     = 0x04,
+        IPO     = 0x05,
+        HLT     = 0x06,
+        RTN     = 0x07,
+        MASK_IP = 0x07,
+        
+        II      = 0x08,
+        OI      = 0x10,
+        FI      = 0x18,
+        MASK_IR = 0x18,
+        
+        RSO1    = 0x20,
+        RSO2    = 0x40,
+        TAO     = 0x80,
+        TBO     = 0x100,
+        
+        RSI1    = 0x200,
+        TAI     = 0x400,
+        TBI     = 0x600,
+        MASK_RI = 0x600,
+        
+        R       = 0x800,
+        W       = 0x1000,
+        BYTE    = 0,
+        WORD    = 0x2000,
+
+        ADD     = 0x4000,
+        SUB     = 0x8000,
+        OR      = 0xC000,
+        XOR     = 0x10000,
+        AND     = 0x14000,
+        SHL     = 0x18000,
+        SHR     = 0x1C000,
+        MASK_ALU= 0x1C000,
+        
+        DATA    = 0,
+        ADDR    = 0x20000,
+
+        CS      = 0x40000,
+        SS      = 0x80000,
+        DS      = 0xC0000,
+        MASK_SEG= 0xC0000,
+
+        JMP     = 0x100000,
     }
 
     public sealed class AssemblyException : Exception

@@ -4,19 +4,21 @@
     {
         public static void Main(string[] args)
         {
-            MicrocodeAssembler.CompileFile(
-                "C:\\Users\\zreedy\\Dropbox\\Cobalt\\Microcode.cmc",
-                "C:\\Temp\\Cobalt.bin"
-            );
-
-            return;
-
-            var machine = new Machine();
-
-            while (machine.IsPowered)
+            ControlWord[] microcode;
+            try
             {
-                machine.Tick();
+                var microcodeRom = Microcode.AssembleRom("Microcode.cmc");
+                microcode = Microcode.ControlWordsFromRomBinary(microcodeRom);
+                File.WriteAllBytes(@"C:\\Temp\\Cobalt.bin", microcodeRom);
             }
+            catch (AssemblyException ex)
+            {
+                Console.WriteLine($"Line {ex.Line}: {ex.Message}");
+                return;
+            }
+
+            var machine = new Machine(microcode);
+            machine.Run();
         }
     }
 }
