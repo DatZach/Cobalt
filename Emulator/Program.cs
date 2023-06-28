@@ -4,12 +4,12 @@
     {
         public static void Main(string[] args)
         {
-            ControlWord[] microcode;
+            MicrocodeRom microcodeRom;
             try
             {
-                var microcodeRom = Microcode.AssembleRom("Microcode.cmc");
-                microcode = Microcode.ControlWordsFromRomBinary(microcodeRom);
-                File.WriteAllBytes(@"C:\\Temp\\Cobalt.bin", microcodeRom);
+                microcodeRom = Microcode.AssembleRom("Microcode.cmc");
+                var data = MicrocodeRom.ToRomBinary(microcodeRom);
+                File.WriteAllBytes(@"C:\\Temp\\Cobalt.bin", data);
             }
             catch (AssemblyException ex)
             {
@@ -17,7 +17,7 @@
                 return;
             }
 
-            var machine = new Machine(microcode);
+            var machine = new Machine(microcodeRom);
             machine.Run();
         }
     }

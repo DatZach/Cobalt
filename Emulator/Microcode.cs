@@ -1,16 +1,19 @@
-﻿namespace Emulator
+﻿using System.Reflection.Emit;
+using System.Reflection.PortableExecutable;
+using DiskUtil;
+
+namespace Emulator
 {
     public static class Microcode
     {
-        public const int MaxControlWordCount = 0xFFFF; // 16 microcode instructions per opcode
-        public const int BytesPerControlWord = 3;
-        
-        public static byte[] AssembleRom(string path)
+        public static MicrocodeRom AssembleRom(string microcodeFilePath)
         {
             var macros = new Dictionary<string, Procedure>();
             var opcodes = new Dictionary<int, Procedure>();
+            var opcodesMetadata = new Dictionary<string, MicrocodeRom.Opcode>();
+            int revision = -1;
 
-            var lines = File.ReadAllLines(path);
+            var lines = File.ReadAllLines(microcodeFilePath);
             Procedure? current = null;
 
             for (var i = 0; i < lines.Length; i++)
@@ -41,12 +44,20 @@
                         continue;
                     }
 
+                    // REVISION
+                    if (parts[0] == "revision")
+                    {
+                        revision = int.Parse(parts[1]);
+                        continue;
+                    }
+
                     // OPCODE DECLARATION
                     int opcode = 0;
 
                     var operandCount = int.Parse(parts[0]);
                     var opcodeIndex = Convert.ToInt32(parts[1], 2) & 0x1F;
                     var opcodeName = parts[2];
+                    var operandCombination = 0;
                     var isWildcard = false;
 
                     opcode |= opcodeIndex << 10;
@@ -67,6 +78,8 @@
                             opcode |= hasCF;
                             opcode |= hasSF;
                         }
+
+                        operandCombination = ((byte)operand1 << 4);
                     }
                     else if (operandCount == 2)
                     {
@@ -75,11 +88,27 @@
 
                         opcode |= (int)operand1 << 7;
                         opcode |= (int)operand2 << 4;
+
+                        operandCombination = ((byte)operand1 << 4) | (byte)operand2;
                     }
                     else if (operandCount != 0)
                         throw new AssemblyException(i, $"Illegal operand count {operandCount}");
 
                     current = new Procedure(opcodeName, isWildcard);
+
+                    if (!opcodesMetadata.TryGetValue(opcodeName, out var opcodeMetadata))
+                    {
+                        opcodeMetadata = new MicrocodeRom.Opcode
+                        {
+                            Name = opcodeName,
+                            Index = opcodeIndex,
+                            OperandCount = operandCount,
+                            OperandCombinations = new List<byte>()
+                        };
+                        opcodesMetadata.Add(opcodeName, opcodeMetadata);
+                    }
+
+                    opcodeMetadata.OperandCombinations.Add((byte)operandCombination);
 
                     if (isWildcard)
                     {
@@ -162,8 +191,8 @@
                     current.Code[l] = word;
                 }
             }
-            
-            var result = new byte[MaxControlWordCount * BytesPerControlWord];
+
+            var microcode = new ControlWord[MicrocodeRom.MaxControlWordCount];
             foreach (var opcode in opcodes)
             {
                 var addr = opcode.Key;
@@ -171,29 +200,19 @@
                 var codeLength = opcode.Value.CodeLength;
                 for (int i = 0; i < codeLength; ++i)
                 {
-                    var romAddr = (addr | i) * 3;
-                    result[romAddr + 2] = (byte)((int)code[i] & 0xFF);
-                    result[romAddr + 1] = (byte)(((int)code[i] >> 8) & 0xFF);
-                    result[romAddr + 0] = (byte)(((int)code[i] >> 16) & 0xFF);
+                    var romAddr = (addr | i);
+                    microcode[romAddr] = code[i];
                 }
             }
 
-            return result;
-        }
-
-        public static ControlWord[] ControlWordsFromRomBinary(byte[] rom)
-        {
-            if (rom == null) throw new ArgumentNullException(nameof(rom));
-            if (rom.Length != MaxControlWordCount * BytesPerControlWord)
-                throw new InvalidDataException($"Expected ROM of {MaxControlWordCount * BytesPerControlWord} bytes, got {rom.Length} instead");
-
-            var result = new ControlWord[MaxControlWordCount];
-            for (int i = 0; i < MaxControlWordCount; ++i)
+            return new MicrocodeRom
             {
-                result[i] = (ControlWord)((rom[i] << 24) | (rom[i + 1] << 8) | rom[i + 2]);
-            }
-
-            return result;
+                FileVersion = MicrocodeRom.CurrentFileVersion,
+                Revision = revision,
+                RevisionTs = DateTime.UtcNow,
+                Microcode = microcode,
+                OpcodeMetadata = opcodesMetadata
+            };
         }
 
         private static Operand ParseOperand(string value, int line)
@@ -236,6 +255,134 @@
                 Code = new ControlWord[MaxMicrocodeCount];
                 CodeLength = 0;
             }
+        }
+    }
+
+    public sealed class MicrocodeRom
+    {
+        public const int Magic = 0x52434D43;
+        public const int CurrentFileVersion = 1;
+        public const int MaxControlWordCount = 0xFFFF; // 16 microcode instructions per opcode
+        public const int BytesPerControlWord = 3;
+
+        public int FileVersion { get; init; }
+
+        public int Revision { get; init; }
+
+        public DateTime RevisionTs { get; init; }
+
+        public ControlWord[] Microcode { get; init; }
+
+        public Dictionary<string, Opcode> OpcodeMetadata { get; init; }
+
+        public static byte[] ToRomBinary(MicrocodeRom rom)
+        {
+            if (rom == null) throw new ArgumentNullException(nameof(rom));
+
+            using var stream = new MemoryStream();
+            using var writer = new BinaryWriter(stream);
+
+            writer.Write(Magic);
+            writer.Write((byte)CurrentFileVersion);
+            writer.Write((short)rom.Revision);
+            writer.Write((int)rom.RevisionTs.ToCobaltTime());
+            writer.Write((short)rom.OpcodeMetadata.Count);
+            writer.Write((byte)BytesPerControlWord);
+            writer.Write((int)MaxControlWordCount);
+            writer.BaseStream.Position += 14;
+
+            var result = new byte[MaxControlWordCount * BytesPerControlWord];
+            for (int i = 0; i < rom.Microcode.Length; ++i)
+            {
+                var microcode = rom.Microcode[i];
+                var romAddr = i * 3;
+                result[romAddr + 2] = (byte)((int)microcode & 0xFF);
+                result[romAddr + 1] = (byte)(((int)microcode >> 8) & 0xFF);
+                result[romAddr + 0] = (byte)(((int)microcode >> 16) & 0xFF);
+            }
+
+            writer.Write(result);
+
+            foreach (var opcodeMetadata in rom.OpcodeMetadata.Values)
+            {
+                writer.Write(opcodeMetadata.Name);
+                writer.Write((byte)opcodeMetadata.Index);
+                writer.Write((byte)opcodeMetadata.OperandCount);
+                writer.Write((byte)opcodeMetadata.OperandCombinations.Count);
+                foreach (var operandCombination in opcodeMetadata.OperandCombinations)
+                    writer.Write((byte)operandCombination);
+            }
+
+            return stream.ToArray();
+        }
+
+        public static MicrocodeRom? FromRomBinary(byte[] rom)
+        {
+            if (rom == null) throw new ArgumentNullException(nameof(rom));
+            
+            using var stream = new MemoryStream(rom);
+            using var reader = new BinaryReader(stream);
+
+            if (reader.ReadInt32() != Magic)
+                return null;
+
+            var fileVersion = reader.ReadByte();
+            var revision = reader.ReadInt16();
+            var revisionTs = reader.ReadInt32().FromCobaltTime();
+            var opcodeCount = reader.ReadInt16();
+            var bankCount = reader.ReadByte();
+            var bytesPerBank = reader.ReadInt32();
+            reader.BaseStream.Position += 14;
+
+            var microcodeBytes = new byte[bytesPerBank * bankCount];
+            int i = 0;
+            while (i < microcodeBytes.Length)
+                i += reader.Read(microcodeBytes, i, microcodeBytes.Length - i);
+
+            // TODO Technically, should not be hardcoded to read 3 bytes
+            var microcode = new ControlWord[bytesPerBank];
+            for (i = 0; i < MaxControlWordCount; ++i)
+                microcode[i] = (ControlWord)((microcodeBytes[i] << 24) | (rom[i + 1] << 8) | rom[i + 2]);
+
+            var opcodeMetadata = new Dictionary<string, Opcode>();
+            for (i = 0; i < opcodeCount; ++i)
+            {
+                var opcodeName = reader.ReadString();
+                var opcodeIndex = reader.ReadByte();
+                var operandCount = reader.ReadByte();
+                var combinationCount = reader.ReadByte();
+                var operandCombinations = new List<byte>();
+                for (int j = 0; j < combinationCount; ++j)
+                    operandCombinations[j] = reader.ReadByte();
+
+                opcodeMetadata[opcodeName] = new Opcode
+                {
+                    Name = opcodeName,
+                    Index = opcodeIndex,
+                    OperandCount = operandCount,
+                    OperandCombinations = operandCombinations
+                };
+            }
+
+            return new MicrocodeRom
+            {
+                FileVersion = fileVersion,
+                Revision = revision,
+                RevisionTs = revisionTs,
+                Microcode = microcode,
+                OpcodeMetadata = opcodeMetadata
+            };
+        }
+
+        public sealed class Opcode
+        {
+            public string Name { get; init; }
+
+            public int Index { get; init; }
+
+            public int OperandCount { get; init; }
+
+            public List<byte> OperandCombinations { get; init; }
         }
     }
 

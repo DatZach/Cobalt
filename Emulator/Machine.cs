@@ -10,7 +10,7 @@ namespace Emulator
 
         public RAM RAM { get; }
 
-        public Machine(ControlWord[] microcode)
+        public Machine(MicrocodeRom microcode)
         {
             CPU = new CPU(this, microcode);
             RAM = new RAM(16 * 1024 * 1024);

@@ -12,10 +12,10 @@ namespace Emulator
         private readonly Machine machine;
         private readonly ControlWord[] microcode;
 
-        public CPU(Machine machine, ControlWord[] microcode)
+        public CPU(Machine machine, MicrocodeRom microcodeRom)
         {
             this.machine = machine ?? throw new ArgumentNullException(nameof(machine));
-            this.microcode = microcode;
+            this.microcode = microcodeRom.Microcode;
 
             r0 = new Register();
             r1 = new Register();

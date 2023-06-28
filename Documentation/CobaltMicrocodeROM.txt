@@ -1,0 +1,23 @@
+4b		Magic			CMCR	Cobalt MicroCode ROM
+1b		FileVersion		1
+2b		Revision		Incremented 
+4b		RevisionTs		Cobalt TS
+2b		OpcodeCount
+1b		BankCount		3
+4b		BytesPerBank	FFFFh
+14b		Reserved
+
+2FFFDb	Microcode
+		3 x FFFFh Banks
+		Each control word stored in <HI:8><MID:8><LO:8>
+
+for OpcodeCount {
+	?b	NameLength		7-bit encoded integer
+	?b	Name			ASCII Of given NameLength, no null terminator
+	1b	Index			Opcode Index
+	1b	OperandCount
+	1b	CombinationCount
+	for CombinationCount {
+		1b	XAAAXBBB	Bit Pattern, operand types
+	}
+}

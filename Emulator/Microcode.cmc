@@ -1,4 +1,10 @@
 ;
+;	Cobalt CPU Microcode
+;
+
+revision 1
+
+;
 ;	Macros
 ;
 
