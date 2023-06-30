@@ -51,11 +51,13 @@ namespace Emulator
             else if ((iword & 0x0300) != 0)
                 iaddr = iword & 0xFFF0;
             else
-                iaddr = (iword & 0xFC00) >> 8;
+                iaddr = iword & 0xFC00;
             iaddr |= mci;
 
             var cword = microcode[iaddr];
             mci = (mci + 1) & 0x0F;
+
+            Console.WriteLine($"{ip.Word:X4} {iword:X4} {cword}");
 
             var isALUOperation = (cword & ControlWord.MASK_ALU) != 0;
             var isAddr = (cword & ControlWord.ADDR) != 0;

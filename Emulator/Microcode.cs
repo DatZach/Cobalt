@@ -1,6 +1,4 @@
-﻿using System.Reflection.Emit;
-using System.Reflection.PortableExecutable;
-using DiskUtil;
+﻿using DiskUtil;
 
 namespace Emulator
 {
@@ -56,7 +54,7 @@ namespace Emulator
 
                     var operandCount = int.Parse(parts[0]);
                     var opcodeIndex = Convert.ToInt32(parts[1], 2) & 0x1F;
-                    var opcodeName = parts[2];
+                    var opcodeName = parts[2].ToUpperInvariant();
                     var operandCombination = 0;
                     var isWildcard = false;
 
@@ -181,7 +179,7 @@ namespace Emulator
                         }
                     }
 
-                    if (current == null)
+                    if (current == null || word == ControlWord.None)
                         continue; // END
 
                     var l = current.CodeLength++;
@@ -227,15 +225,6 @@ namespace Emulator
             };
         }
 
-        private enum Operand
-        {
-            None,
-            Reg = 2,
-            Imm16,
-            DerefRegPlusImm16,
-            DerefImm16
-        }
-
         private sealed class Procedure
         {
             public const int MaxMicrocodeCount = 16;
@@ -256,6 +245,15 @@ namespace Emulator
                 CodeLength = 0;
             }
         }
+    }
+
+    public enum Operand
+    {
+        None,
+        Reg = 2,
+        Imm16,
+        DerefRegPlusImm16,
+        DerefImm16
     }
 
     public sealed class MicrocodeRom
