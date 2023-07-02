@@ -55,6 +55,7 @@ namespace Emulator
                     var operandCount = int.Parse(parts[0]);
                     var opcodeIndex = Convert.ToInt32(parts[1], 2) & 0x1F;
                     var opcodeName = parts[2].ToUpperInvariant();
+                    var operandOrder = 0; // AB
                     var operandCombination = 0;
                     var isWildcard = false;
 
@@ -81,8 +82,17 @@ namespace Emulator
                     }
                     else if (operandCount == 2)
                     {
-                        var operand1 = ParseOperand(parts[3], i);
-                        var operand2 = ParseOperand(parts[4], i);
+                        int k = 3;
+                        if (parts[3] == "BA")
+                        {
+                            operandOrder = 1;
+                            ++k;
+                        }
+                        else if (parts[3] == "AB")
+                            ++k;
+
+                        var operand1 = ParseOperand(parts[k++], i);
+                        var operand2 = ParseOperand(parts[k++], i);
 
                         opcode |= (int)operand1 << 7;
                         opcode |= (int)operand2 << 4;
@@ -100,6 +110,7 @@ namespace Emulator
                         {
                             Name = opcodeName,
                             Index = opcodeIndex,
+                            OperandOrder = operandOrder,
                             OperandCount = operandCount,
                             OperandCombinations = new List<byte>()
                         };
@@ -175,6 +186,8 @@ namespace Emulator
                             if ((word & cwPart) != 0)
                                 throw new AssemblyException(i, $"Control signal {subPart} conflicts with another in this word");
 
+                            // TODO Validate that multiple bus OUTs aren't in a single word
+
                             word |= cwPart;
                         }
                     }
@@ -213,14 +226,14 @@ namespace Emulator
             };
         }
 
-        private static Operand ParseOperand(string value, int line)
+        private static OperandType ParseOperand(string value, int line)
         {
             return value switch
             {
-                "REG" => Operand.Reg,
-                "IMM16" => Operand.Imm16,
-                "[REG+IMM16]" => Operand.DerefRegPlusImm16,
-                "[IMM16]" => Operand.DerefImm16,
+                "REG" => OperandType.Reg,
+                "IMM16" => OperandType.Imm16,
+                "[REG+IMM16]" => OperandType.DerefRegPlusImm16,
+                "[IMM16]" => OperandType.DerefImm16,
                 _ => throw new AssemblyException(line, $"Illegal operand: {value}")
             };
         }
@@ -247,7 +260,7 @@ namespace Emulator
         }
     }
 
-    public enum Operand
+    public enum OperandType
     {
         None,
         Reg = 2,
@@ -305,6 +318,7 @@ namespace Emulator
             {
                 writer.Write(opcodeMetadata.Name);
                 writer.Write((byte)opcodeMetadata.Index);
+                writer.Write((byte)opcodeMetadata.OperandOrder);
                 writer.Write((byte)opcodeMetadata.OperandCount);
                 writer.Write((byte)opcodeMetadata.OperandCombinations.Count);
                 foreach (var operandCombination in opcodeMetadata.OperandCombinations)
@@ -347,6 +361,7 @@ namespace Emulator
             {
                 var opcodeName = reader.ReadString();
                 var opcodeIndex = reader.ReadByte();
+                var operandOrder = reader.ReadByte();
                 var operandCount = reader.ReadByte();
                 var combinationCount = reader.ReadByte();
                 var operandCombinations = new List<byte>();
@@ -357,6 +372,7 @@ namespace Emulator
                 {
                     Name = opcodeName,
                     Index = opcodeIndex,
+                    OperandOrder = operandOrder,
                     OperandCount = operandCount,
                     OperandCombinations = operandCombinations
                 };
@@ -378,6 +394,8 @@ namespace Emulator
 
             public int Index { get; init; }
 
+            public int OperandOrder { get; init; }
+
             public int OperandCount { get; init; }
 
             public List<byte> OperandCombinations { get; init; }
@@ -391,13 +409,10 @@ namespace Emulator
 
         IPC1    = 0x01,
         IPC2    = 0x02,
-        //IPC4    = 0x03,
-        //XX     = 0x04,
-        IPO     = 0x05,
-        HLT     = 0x06,
-        RTN     = 0x07,
-        MASK_IP = 0x07,
-        
+        IPC4    = 0x03,
+        MASK_IPC= 0x03,
+        JMP     = 0x04,
+
         II      = 0x08,
         OI      = 0x10,
         FI      = 0x18,
@@ -434,8 +449,11 @@ namespace Emulator
         SS      = 0x80000,
         DS      = 0xC0000,
         MASK_SEG= 0xC0000,
-
-        JMP     = 0x100000,
+        
+        IPO     = 0x100000,
+        HLT     = 0x200000,
+        RTN     = 0x300000,
+        MASK_IP = 0x300000
     }
 
     public sealed class AssemblyException : Exception

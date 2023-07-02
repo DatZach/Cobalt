@@ -15,6 +15,7 @@ for OpcodeCount {
 	?b	NameLength		7-bit encoded integer
 	?b	Name			ASCII Of given NameLength, no null terminator
 	1b	Index			Opcode Index
+	1b	OperandOrder	0 =	AB, 1 = BA
 	1b	OperandCount
 	1b	CombinationCount
 	for CombinationCount {

@@ -30,7 +30,7 @@
 
                 string? operand1String = null;
                 string? operand2String = null;
-                var opcodeString = string.Join("", line.TakeWhile(char.IsLetter));
+                var opcodeString = string.Join("", line.TakeWhile(char.IsLetter)).ToUpperInvariant();
                 int j = opcodeString.Length;
                 while (j < line.Length && char.IsWhiteSpace(line[j]))
                     ++j;
@@ -57,54 +57,96 @@
                 if (operand1String.Length == 0)
                     operandCount = 0;
 
-                var operand1 = ParseOperandType(j, operand1String);
-                var operand2 = ParseOperandType(j, operand2String);
+                var operand1 = ParseOperand(j, operand1String);
+                var operand2 = ParseOperand(j, operand2String);
+                
+                if (!opcodeMetadata.TryGetValue(opcodeString, out var metadata))
+                    throw new AssemblyException(j, $"Unknonw opcode '{opcodeString}'");
 
-                var opcode = ParseOpcode(j, opcodeString, operandCount, operand1, operand2);
-                if (operandCount == 0)
+                var opcode = ParseOpcode(j, metadata, operandCount, operand1.Type, operand2.Type);
+
+                Operand? operandB, operandA;
+                if (operandCount == 2)
                 {
-                    writer.Write((byte)(opcode >> 8));
-                    continue;
+                    if (metadata.OperandOrder == 0)
+                    {
+                        operandA = operand1;
+                        operandB = operand2;
+                    }
+                    else if (metadata.OperandOrder == 1)
+                    {
+                        operandA = operand2;
+                        operandB = operand1;
+                    }
+                    else
+                        throw new AssemblyException(j, $"Illegal operand direction specified in metadata '{opcodeString}'");
+                }
+                else if (operandCount == 1)
+                {
+                    operandA = operand1;
+                    operandB = null;
+                }
+                else
+                {
+                    operandA = null;
+                    operandB = null;
                 }
 
-                if (operandCount >= 1)
+                if (operandA != null)
                 {
-                    if (operand1 == Operand.Reg)
-                        opcode |= (ushort)(ParseRegisterIndex(operand1String) & 0x000F);
+                    if (operandA.Type == OperandType.Reg || operandA.Type == OperandType.DerefRegPlusImm16)
+                        opcode |= (ushort)(operandA.Data1 & 0x000F);
+                }
 
-                    writer.Write((byte)(opcode >> 8));
+                writer.Write((byte)(opcode >> 8));
+                if (operandCount > 0)
                     writer.Write((byte)(opcode & 0xFF));
-                    switch (operand1)
+
+                if (operandA != null)
+                {
+                    switch (operandA.Type)
                     {
-                        case Operand.Imm16:
-                            var imm16 = (ushort)int.Parse(operand1String);
+                        case OperandType.Imm16:
+                        case OperandType.DerefImm16:
+                        {
+                            var imm16 = (ushort)operandA.Data1;
                             writer.Write((byte)(imm16 >> 8));
                             writer.Write((byte)(imm16 & 0xFF));
                             break;
-                        case Operand.DerefRegPlusImm16:
-                            throw new NotImplementedException();
-                        case Operand.DerefImm16:
-                            throw new NotImplementedException();
+                        }
+                        case OperandType.DerefRegPlusImm16:
+                        {
+                            var imm16 = (ushort)operandA.Data2;
+                            writer.Write((byte)(imm16 >> 8));
+                            writer.Write((byte)(imm16 & 0xFF));
+                            break;
+                        }
                     }
                 }
 
-                if (operandCount >= 2)
+                if (operandB != null)
                 {
-                    switch (operand2)
+                    switch (operandB.Type)
                     {
-                        case Operand.Reg:
-                            var reg2 = (byte)(ParseRegisterIndex(operand2String) & 0x000F);
-                            writer.Write(reg2);
+                        case OperandType.Reg:
+                            writer.Write((byte)operandB.Data1);
                             break;
-                        case Operand.Imm16:
-                            var imm16 = (ushort)int.Parse(operand2String);
+                        case OperandType.Imm16:
+                        case OperandType.DerefImm16:
+                        {
+                            var imm16 = (ushort)operandB.Data1;
                             writer.Write((byte)(imm16 >> 8));
                             writer.Write((byte)(imm16 & 0xFF));
                             break;
-                        case Operand.DerefRegPlusImm16:
-                            throw new NotImplementedException();
-                        case Operand.DerefImm16:
-                            throw new NotImplementedException();
+                        }
+                        case OperandType.DerefRegPlusImm16:
+                        {
+                            writer.Write((byte)operandB.Data1);
+                            var imm16 = (ushort)operandB.Data2;
+                            writer.Write((byte)(imm16 >> 8));
+                            writer.Write((byte)(imm16 & 0xFF));
+                            break;
+                        }
                     }
                 }
             }
@@ -112,11 +154,8 @@
             return stream.ToArray();
         }
 
-        private ushort ParseOpcode(int line, string opcode, int operandCount, Operand operand1, Operand operand2)
+        private ushort ParseOpcode(int line, MicrocodeRom.Opcode metadata, int operandCount, OperandType operand1, OperandType operand2)
         {
-            opcode = opcode.ToUpperInvariant();
-            if (!opcodeMetadata.TryGetValue(opcode, out var metadata))
-                throw new AssemblyException(line, $"Unknonw opcode '{opcode}'");
             if (metadata.OperandCount != operandCount)
                 throw new AssemblyException(line, $"Opcode expected {metadata.OperandCount} operands, received {operandCount} instead");
             var operandCombination = (byte)(((byte)operand1 << 4) | (byte)operand2);
@@ -137,14 +176,39 @@
             return (ushort)result;
         }
 
-        private Operand ParseOperandType(int line, string? operand)
+        private Operand ParseOperand(int line, string? operand)
         {
+            short data1;
             if (string.IsNullOrEmpty(operand))
-                return Operand.None;
-            if (ParseRegisterIndex(operand) != -1)
-                return Operand.Reg;
+                return new Operand(OperandType.None);
+            if ((data1 = ParseRegisterIndex(operand)) != -1)
+                return new Operand(OperandType.Reg, data1);
             if (operand.All(char.IsDigit))
-                return Operand.Imm16;
+                return new Operand(OperandType.Imm16, short.Parse(operand));
+            if (operand[0] == '[' && operand[^1] == ']')
+            {
+                int signIdx = operand.IndexOf('+');
+                if (signIdx == -1) signIdx = operand.IndexOf('-');
+                var indOperand = operand.Substring(1, operand.Length - 2);
+                var regOperand = operand.Substring(1, signIdx != -1 ? signIdx - 1 : operand.Length - 2);
+                if ((data1 = ParseRegisterIndex(regOperand)) != -1)
+                {
+                    short data2;
+                    if ((signIdx = indOperand.IndexOf('+')) != -1)
+                        data2 = (short)-short.Parse(indOperand.Substring(signIdx + 1, indOperand.Length - signIdx - 1));
+                    else if ((signIdx = indOperand.IndexOf('-')) != -1)
+                        data2 = short.Parse(indOperand.Substring(signIdx + 1, indOperand.Length - signIdx - 1));
+                    else
+                        data2 = 0;
+                    return new Operand(OperandType.DerefRegPlusImm16, data1, data2);
+                }
+
+                if (indOperand.All(char.IsDigit))
+                {
+                    data1 = short.Parse(indOperand);
+                    return new Operand(OperandType.DerefImm16, data1);
+                }
+            }
 
             throw new AssemblyException(line, $"Illegal operand '{operand}'");
         }
@@ -154,9 +218,11 @@
             "R0", "R1", "R2", "R3", "SP", "SS", "CS", "DS",
             "R0H", "R0L", "R1H", "R1L", "R2H", "R2L", "R3H", "R3L"
         };
-        private int ParseRegisterIndex(string registerName)
+        private short ParseRegisterIndex(string registerName)
         {
-            return Array.IndexOf(Registers, registerName);
+            return (short)Array.IndexOf(Registers, registerName);
         }
+
+        private sealed record Operand(OperandType Type, short Data1 = 0, short Data2 = 0);
     }
 }

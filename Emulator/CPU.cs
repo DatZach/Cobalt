@@ -44,6 +44,7 @@ namespace Emulator
             ushort aluaWord = 0;
             ushort alubWord = 0;
 
+            // BUG II and RTN "immediately" modify the cword and are evaluated regardless of clock signals
             var iword = instruction.Word;
             int iaddr;
             if ((iword & 0x8000) != 0)
@@ -62,12 +63,9 @@ namespace Emulator
             var isALUOperation = (cword & ControlWord.MASK_ALU) != 0;
             var isAddr = (cword & ControlWord.ADDR) != 0;
 
+            // CLOCK RISING EDGE
             // IP Reg
-            if ((cword & ControlWord.MASK_IP) == ControlWord.IPC1)
-                ip.Word += 1;
-            else if ((cword & ControlWord.MASK_IP) == ControlWord.IPC2)
-                ip.Word += 2;
-            else if ((cword & ControlWord.MASK_IP) == ControlWord.IPO)
+            if ((cword & ControlWord.MASK_IP) == ControlWord.IPO)
             {
                 if (isALUOperation)
                     throw new InvalidOperationException();
@@ -101,8 +99,6 @@ namespace Emulator
                 var reg = SelectRegister(operand.Word & 0x000F);
                 if (isALUOperation)
                     alubWord = reg.Word;
-                else if (isAddr)
-                    abusWord = reg.Word;
                 else
                     dbusWord = reg.Word;
             }
@@ -110,7 +106,7 @@ namespace Emulator
             if ((cword & ControlWord.TAO) != 0)
             {
                 if (isALUOperation)
-                    throw new InvalidOperationException();
+                    aluaWord = ta.Word;
                 else if (isAddr)
                     abusWord = ta.Word;
                 else
@@ -120,9 +116,7 @@ namespace Emulator
             if ((cword & ControlWord.TBO) != 0)
             {
                 if (isALUOperation)
-                    throw new InvalidOperationException();
-                else if (isAddr)
-                    abusWord = tb.Word;
+                    alubWord = tb.Word;
                 else
                     dbusWord = tb.Word;
             }
@@ -202,6 +196,14 @@ namespace Emulator
             
             if ((cword & ControlWord.JMP) != 0)
                 ip.Word = dbusWord;
+
+            // CLOCK FALLING EDGE
+            if ((cword & ControlWord.MASK_IPC) == ControlWord.IPC1)
+                ip.Word += 1;
+            else if ((cword & ControlWord.MASK_IPC) == ControlWord.IPC2)
+                ip.Word += 2;
+            else if ((cword & ControlWord.MASK_IPC) == ControlWord.IPC4)
+                ip.Word += 4;
         }
 
         private Register SelectRegister(int index)

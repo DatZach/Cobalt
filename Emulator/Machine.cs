@@ -28,6 +28,22 @@ namespace Emulator
             {
                 Console.WriteLine("CPU Halted!");
                 Console.WriteLine(CPU);
+
+                Console.Write("     ");
+                for (int j = 0; j < 16; ++j)
+                    Console.Write($"{j:X2} ");
+                Console.WriteLine();
+
+                for (int i = 0; i < 16; ++i)
+                {
+                    Console.Write($"{(i * 16):X4} ");
+                    for (int j = 0; j < 16; ++j)
+                    {
+                        Console.Write($"{RAM.ReadByte(0, (ushort)(i * 16 + j)):X2} ");
+                    }
+
+                    Console.WriteLine();
+                }
             }
         }
 
