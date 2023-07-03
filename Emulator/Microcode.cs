@@ -55,7 +55,6 @@ namespace Emulator
                     var operandCount = int.Parse(parts[0]);
                     var opcodeIndex = Convert.ToInt32(parts[1], 2) & 0x1F;
                     var opcodeName = parts[2].ToUpperInvariant();
-                    var operandOrder = 0; // AB
                     var operandCombination = 0;
                     var isWildcard = false;
 
@@ -83,9 +82,10 @@ namespace Emulator
                     else if (operandCount == 2)
                     {
                         int k = 3;
+                        var operandOrder = 0; // AB
                         if (parts[3] == "BA")
                         {
-                            operandOrder = 1;
+                            operandOrder = 0x80;
                             ++k;
                         }
                         else if (parts[3] == "AB")
@@ -97,7 +97,7 @@ namespace Emulator
                         opcode |= (int)operand1 << 7;
                         opcode |= (int)operand2 << 4;
 
-                        operandCombination = ((byte)operand1 << 4) | (byte)operand2;
+                        operandCombination = (byte)operandOrder | ((byte)operand1 << 4) | (byte)operand2;
                     }
                     else if (operandCount != 0)
                         throw new AssemblyException(i, $"Illegal operand count {operandCount}");
@@ -110,7 +110,6 @@ namespace Emulator
                         {
                             Name = opcodeName,
                             Index = opcodeIndex,
-                            OperandOrder = operandOrder,
                             OperandCount = operandCount,
                             OperandCombinations = new List<byte>()
                         };
@@ -318,7 +317,6 @@ namespace Emulator
             {
                 writer.Write(opcodeMetadata.Name);
                 writer.Write((byte)opcodeMetadata.Index);
-                writer.Write((byte)opcodeMetadata.OperandOrder);
                 writer.Write((byte)opcodeMetadata.OperandCount);
                 writer.Write((byte)opcodeMetadata.OperandCombinations.Count);
                 foreach (var operandCombination in opcodeMetadata.OperandCombinations)
@@ -372,7 +370,6 @@ namespace Emulator
                 {
                     Name = opcodeName,
                     Index = opcodeIndex,
-                    OperandOrder = operandOrder,
                     OperandCount = operandCount,
                     OperandCombinations = operandCombinations
                 };
@@ -393,9 +390,7 @@ namespace Emulator
             public string Name { get; init; }
 
             public int Index { get; init; }
-
-            public int OperandOrder { get; init; }
-
+            
             public int OperandCount { get; init; }
 
             public List<byte> OperandCombinations { get; init; }

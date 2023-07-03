@@ -1,4 +1,6 @@
-﻿namespace Emulator
+﻿using System.Security.Cryptography.X509Certificates;
+
+namespace Emulator
 {
     public sealed class Assembler
     {
@@ -63,17 +65,17 @@
                 if (!opcodeMetadata.TryGetValue(opcodeString, out var metadata))
                     throw new AssemblyException(j, $"Unknonw opcode '{opcodeString}'");
 
-                var opcode = ParseOpcode(j, metadata, operandCount, operand1.Type, operand2.Type);
+                var (opcode, operandOrder) = ParseOpcode(j, metadata, operandCount, operand1.Type, operand2.Type);
 
                 Operand? operandB, operandA;
                 if (operandCount == 2)
                 {
-                    if (metadata.OperandOrder == 0)
+                    if (!operandOrder)
                     {
                         operandA = operand1;
                         operandB = operand2;
                     }
-                    else if (metadata.OperandOrder == 1)
+                    else if (operandOrder)
                     {
                         operandA = operand2;
                         operandB = operand1;
@@ -154,12 +156,13 @@
             return stream.ToArray();
         }
 
-        private ushort ParseOpcode(int line, MicrocodeRom.Opcode metadata, int operandCount, OperandType operand1, OperandType operand2)
+        private (ushort, bool) ParseOpcode(int line, MicrocodeRom.Opcode metadata, int operandCount, OperandType operand1, OperandType operand2)
         {
             if (metadata.OperandCount != operandCount)
                 throw new AssemblyException(line, $"Opcode expected {metadata.OperandCount} operands, received {operandCount} instead");
             var operandCombination = (byte)(((byte)operand1 << 4) | (byte)operand2);
-            if (!metadata.OperandCombinations.Contains(operandCombination))
+            var operandCombinationIdx = metadata.OperandCombinations.FindIndex(x => (x & 0x7F) == operandCombination);
+            if (operandCombinationIdx == -1)
                 throw new AssemblyException(line, $"Opcode does not support the operand combination {operand1}, {operand2}");
 
             int result = 0;
@@ -173,7 +176,7 @@
             else if (operandCount == 0)
                 result &= 0xFC00;
             
-            return (ushort)result;
+            return ((ushort)result, (metadata.OperandCombinations[operandCombinationIdx] & 0x80) != 0);
         }
 
         private Operand ParseOperand(int line, string? operand)

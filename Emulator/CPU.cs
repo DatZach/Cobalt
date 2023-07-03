@@ -39,26 +39,15 @@ namespace Emulator
             if (IsHalted)
                 return;
 
+            DoTick:
             ushort dbusWord = 0;
             ushort abusWord = 0;
             ushort aluaWord = 0;
             ushort alubWord = 0;
+            
+            var cword = ResolveControlWord();
 
-            // BUG II and RTN "immediately" modify the cword and are evaluated regardless of clock signals
-            var iword = instruction.Word;
-            int iaddr;
-            if ((iword & 0x8000) != 0)
-                iaddr = (iword & 0xFF80) | ((flags.LoByte & 0x07) << 4);
-            else if ((iword & 0x0300) != 0)
-                iaddr = iword & 0xFFF0;
-            else
-                iaddr = iword & 0xFC00;
-            iaddr |= mci;
-
-            var cword = microcode[iaddr];
-            mci = (mci + 1) & 0x0F;
-
-            Console.WriteLine($"{ip.Word:X4} {iword:X4} {cword}");
+            Console.WriteLine($"{ip.Word:X4} {instruction.Word:X4} {cword}");
 
             var isALUOperation = (cword & ControlWord.MASK_ALU) != 0;
             var isAddr = (cword & ControlWord.ADDR) != 0;
@@ -78,8 +67,10 @@ namespace Emulator
                 IsHalted = true;
             else if ((cword & ControlWord.MASK_IP) == ControlWord.RTN)
             {
+                // NOTE RTN Doesn't "tick", it immediately resets the MCI and 0th
+                //      control word executes again
                 mci = 0;
-                return;
+                goto DoTick;
             }
             
             // Register Output
@@ -178,7 +169,14 @@ namespace Emulator
 
             // Register Inputs
             if ((cword & ControlWord.MASK_IR) == ControlWord.II)
+            {
+                // NOTE Not entirely sure if the cword immediately re-resolving after the IR
+                //      is updated is accurate. Emulation of a single cycle fetch requires
+                //      that the cword be accurate for the IPC* to execute on the falling edge
+                //      correctly however... needs verification in real hardware
                 instruction.Word = dbusWord;
+                cword = ResolveControlWord();
+            }
             else if ((cword & ControlWord.MASK_IR) == ControlWord.OI)
                 operand.Word = dbusWord;
             else if ((cword & ControlWord.MASK_IR) == ControlWord.FI)
@@ -197,6 +195,9 @@ namespace Emulator
             if ((cword & ControlWord.JMP) != 0)
                 ip.Word = dbusWord;
 
+            // CLOCK
+            mci = (mci + 1) & 0x0F;
+
             // CLOCK FALLING EDGE
             if ((cword & ControlWord.MASK_IPC) == ControlWord.IPC1)
                 ip.Word += 1;
@@ -204,6 +205,21 @@ namespace Emulator
                 ip.Word += 2;
             else if ((cword & ControlWord.MASK_IPC) == ControlWord.IPC4)
                 ip.Word += 4;
+        }
+
+        private ControlWord ResolveControlWord()
+        {
+            var iword = instruction.Word;
+            int iaddr;
+            if ((iword & 0x8000) != 0)
+                iaddr = (iword & 0xFF80) | ((flags.LoByte & 0x07) << 4);
+            else if ((iword & 0x0300) != 0)
+                iaddr = iword & 0xFFF0;
+            else
+                iaddr = iword & 0xFC00;
+            iaddr |= mci;
+
+            return microcode[iaddr];
         }
 
         private Register SelectRegister(int index)

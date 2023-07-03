@@ -11,18 +11,15 @@ revision 1
 ; NOTE If instructions were always encoded at least 2-bytes then
 ;	   the prefetch could also be 1 cycle
 # FETCH1
-	R WORD CS:$IPO II
-	IPC1
+	R WORD CS:$IPO II IPC1
 END
 	
 # FETCH2
-	R WORD CS:$IPO II
-	IPC2
+	R WORD CS:$IPO II IPC2
 END
 
 # FETCH4
-	R WORD CS:$IPO II
-	IPC4
+	R WORD CS:$IPO II IPC4
 END
 
 ;
@@ -128,7 +125,6 @@ END
 	R WORD CS:$IPO TAI IPC2
 	R WORD DS:$TAO TBI
 	R WORD CS:$IPO TAI IPC2
-	R WORD DS:$TAO TAI			; HACK? Possibly insane on real hardware
 	W WORD DS:$TAO TBO
 	RTN
 END
