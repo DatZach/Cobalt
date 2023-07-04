@@ -2,7 +2,7 @@
 
 namespace Emulator
 {
-    internal sealed class CPU
+    public sealed class CPU
     {
         public bool IsHalted { get; private set; }
 
@@ -247,7 +247,7 @@ namespace Emulator
     }
 
     [DebuggerDisplay("{Word:X4}")]
-    internal sealed class Register
+    public sealed class Register
     {
         public ushort Word { get; set; }
 

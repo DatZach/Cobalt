@@ -1,6 +1,6 @@
 ﻿namespace Emulator
 {
-    internal sealed class RAM
+    public sealed class RAM
     {
         public int Size => data.Length;
 

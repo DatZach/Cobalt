@@ -1,10 +1,10 @@
-﻿using System.Reflection.PortableExecutable;
-
-namespace Emulator
+﻿namespace Emulator
 {
-    internal sealed class Machine
+    public sealed class Machine
     {
         public bool IsPowered { get; private set; }
+
+        public bool ShutdownWhenHalted { get; set; }
 
         public CPU CPU { get; }
 
@@ -26,6 +26,9 @@ namespace Emulator
 
             if (!isCpuHalted && CPU.IsHalted)
             {
+                if (ShutdownWhenHalted)
+                    IsPowered = false;
+
                 Console.WriteLine("CPU Halted!");
                 Console.WriteLine(CPU);
 
