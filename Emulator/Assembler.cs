@@ -179,6 +179,7 @@
 
         private Operand ParseOperand(int line, string? operand)
         {
+            // TODO Support hex in [REG+IMM16]
             short data1;
             if (string.IsNullOrEmpty(operand))
                 return new Operand(OperandType.None);
@@ -186,6 +187,12 @@
                 return new Operand(OperandType.Reg, data1);
             if (operand.All(char.IsDigit))
                 return new Operand(OperandType.Imm16, short.Parse(operand));
+            if (operand.Length >= 3 && operand[0] == '0' && operand[1] == 'X'
+            &&  operand.Skip(2).All(IsHexDigit))
+            {
+                data1 = Convert.ToInt16(string.Join("", operand.Skip(2)), 16);
+                return new Operand(OperandType.Imm16, data1);
+            }
             if (operand[0] == '[' && operand[^1] == ']')
             {
                 int signIdx = operand.IndexOf('+');
@@ -209,6 +216,12 @@
                     data1 = short.Parse(indOperand);
                     return new Operand(OperandType.DerefImm16, data1);
                 }
+                if (indOperand.Length >= 3 && indOperand[0] == '0' && indOperand[1] == 'X'
+                &&  indOperand.Skip(2).All(IsHexDigit))
+                {
+                    data1 = Convert.ToInt16(string.Join("", indOperand.Skip(2)), 16);
+                    return new Operand(OperandType.DerefImm16, data1);
+                }
             }
 
             throw new AssemblyException(line, $"Illegal operand '{operand}'");
@@ -222,6 +235,13 @@
         private short ParseRegisterIndex(string registerName)
         {
             return (short)Array.IndexOf(Registers, registerName);
+        }
+
+        private static bool IsHexDigit(char ch)
+        {
+            return char.IsDigit(ch)
+                || (ch >= 'A' && ch <= 'F')
+                || (ch >= 'a' && ch <= 'f');
         }
 
         private sealed record Operand(OperandType Type, short Data1 = 0, short Data2 = 0);

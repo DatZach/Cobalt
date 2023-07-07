@@ -22,7 +22,7 @@
             var assembler = new Assembler(microcodeRom);
             var program = assembler.AssembleSource(
                 "nop\n" +
-                //"mov r0, 4660\n" +
+                "mov r0, 0x1234\n" +
                 //"mov r1, r0\n" +
                 //"mov r2, 50\n" +
                 //"mov [64], r0\n" +

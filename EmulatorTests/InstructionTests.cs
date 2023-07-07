@@ -17,12 +17,12 @@ namespace EmulatorTests
         {
             AssertState(
                 @"
-                mov r0, 4660
+                mov r0, 0x1234
                 mov r1, r0
                 ",
                 new CpuState
                 {
-                    r0 = 0x125,
+                    r0 = 0x1234,
                     r1 = 0x1234
                 }
             );
