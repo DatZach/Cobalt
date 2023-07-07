@@ -62,8 +62,9 @@ END
 	#FETCH2
 	R BYTE CS:$IPO OI IPC1
 	R WORD CS:$IPO TAI IPC2
-	RSO2 TAO SUB TBI
-	TBO TAI						; Annoying, only tA can output on ADDR
+	;RSO2 TAO SUB TBI
+	;TBO TAI						; Annoying, only tA can output on ADDR
+	RSO2 TAO SUB TAI			; TODO Check if possible on real hardware
 	R WORD DS:$TAO RSI1
 	RTN
 END

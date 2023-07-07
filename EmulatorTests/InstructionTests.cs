@@ -15,20 +15,20 @@ namespace EmulatorTests
         [TestMethod]
         public void MOV_REG_REG()
         {
-            RunMachine(
+            AssertState(
                 @"
                 mov r0, 4660
                 mov r1, r0
                 ",
-                new MachineState
+                new CpuState
                 {
-                    r0 = new Register { Word = 0x1234 },
-                    r1 = new Register { Word = 0x1234 }
+                    r0 = 0x125,
+                    r1 = 0x1234
                 }
             );
         }
 
-        private void RunMachine(string source, MachineState expected)
+        private void AssertState(string source, MachineState expectedState)
         {
             var machine = new Machine(microcodeRom) { ShutdownWhenHalted = true };
 
@@ -39,23 +39,9 @@ namespace EmulatorTests
 
             machine.Run();
 
-            var stateString = machine.CPU.ToString(); // HACK TODO No
-            var expectedString = expected.ToString();
-
-            if (!stateString.StartsWith(expectedString))
-                Assert.Fail($"EXPECTED\n{expectedString}\n\nACTUAL\n{stateString}");
-        }
-    }
-
-    public sealed record MachineState
-    {
-        public Register r0 { get; init; }
-
-        public Register r1 { get; init; }
-
-        public override string ToString()
-        {
-            return $"r0 = {r0} r1 = {r1}";
+            var actualState = machine.CaptureState();
+            if (!actualState.IsEqual(expectedState))
+                Assert.Fail($"\nEXPECTED\n{expectedState}\n\nACTUAL\n{actualState}");
         }
     }
 }

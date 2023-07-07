@@ -1,6 +1,4 @@
-﻿using System.Security.Cryptography.X509Certificates;
-
-namespace Emulator
+﻿namespace Emulator
 {
     public sealed class Assembler
     {

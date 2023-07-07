@@ -17,7 +17,7 @@
                 return;
             }
 
-            var machine = new Machine(microcodeRom);
+            var machine = new Machine(microcodeRom) { DebugOutput = true };
 
             var assembler = new Assembler(microcodeRom);
             var program = assembler.AssembleSource(

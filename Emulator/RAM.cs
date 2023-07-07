@@ -1,4 +1,6 @@
-﻿namespace Emulator
+﻿using System.Text;
+
+namespace Emulator
 {
     public sealed class RAM
     {
@@ -29,6 +31,60 @@
         private static long ToCanonicalAddress(ushort segment, ushort offset)
         {
             return ((long)segment << 16) | offset;
+        }
+
+        public RAM CaptureState()
+        {
+            var capture = new RAM(Size);
+            Array.Copy(data, capture.data, Size);
+
+            return capture;
+        }
+
+        public string ToString(int offset, int length)
+        {
+            var sb = new StringBuilder();
+
+            sb.Append("     ");
+            for (int j = 0; j < 16; ++j)
+                sb.Append($"{j:X2} ");
+            sb.AppendLine();
+
+            var rows = length / 16;
+            for (int i = 0; i < rows; ++i)
+            {
+                sb.Append($"{(i * 16):X4} ");
+                for (int j = 0; j < 16; ++j)
+                {
+                    var idx = i * 16 + j;
+                    if (idx >= length)
+                        break;
+
+                    sb.Append($"{ReadByte(0, (ushort)(offset + idx)):X2} ");
+                }
+
+                //sb.Append("\t");
+
+                //for (int j = 0; j < 16; ++j)
+                //{
+                //    var idx = i * 16 + j;
+                //    if (idx >= length)
+                //        break;
+
+                //    char ch = (char)ReadByte(0, (ushort)(offset + idx));
+                //    if (!char.IsAscii(ch) || char.IsControl(ch)) ch = '.';
+                //    sb.Append($"{ch}");
+                //}
+
+                sb.AppendLine();
+            }
+
+            return sb.ToString();
+        }
+
+        public override string ToString()
+        {
+            return ToString(0, Size);
         }
     }
 }

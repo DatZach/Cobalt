@@ -1,10 +1,14 @@
-﻿namespace Emulator
+﻿using System.Text;
+
+namespace Emulator
 {
     public sealed class Machine
     {
-        public bool IsPowered { get; private set; }
-
         public bool ShutdownWhenHalted { get; set; }
+
+        public bool DebugOutput { get; set; }
+
+        public bool IsPowered { get; private set; }
 
         public CPU CPU { get; }
 
@@ -29,23 +33,10 @@
                 if (ShutdownWhenHalted)
                     IsPowered = false;
 
-                Console.WriteLine("CPU Halted!");
-                Console.WriteLine(CPU);
-
-                Console.Write("     ");
-                for (int j = 0; j < 16; ++j)
-                    Console.Write($"{j:X2} ");
-                Console.WriteLine();
-
-                for (int i = 0; i < 16; ++i)
+                if (DebugOutput)
                 {
-                    Console.Write($"{(i * 16):X4} ");
-                    for (int j = 0; j < 16; ++j)
-                    {
-                        Console.Write($"{RAM.ReadByte(0, (ushort)(i * 16 + j)):X2} ");
-                    }
-
-                    Console.WriteLine();
+                    Console.WriteLine("CPU Halted!");
+                    Console.WriteLine(CaptureState());
                 }
             }
         }
@@ -57,6 +48,77 @@
             {
                 Tick();
             }
+        }
+
+        public MachineState CaptureState()
+        {
+            return new MachineState
+            {
+                CPU = CPU.CaptureState(),
+                RAM = RAM.CaptureState()
+            };
+        }
+    }
+
+    public sealed record MachineState
+    {
+        public CpuState? CPU { get; init; }
+
+        public RAM? RAM { get; init; }
+
+        public bool IsEqual(MachineState? other)
+        {
+            if (other == null)
+                return false;
+
+            if (CPU != null && other.CPU != null)
+            {
+                var isEqual = true;
+                isEqual = isEqual && (other.CPU.r0 == null || CPU.r0 == other.CPU.r0);
+                isEqual = isEqual && (other.CPU.r1 == null || CPU.r1 == other.CPU.r1);
+                isEqual = isEqual && (other.CPU.r2 == null || CPU.r2 == other.CPU.r2);
+                isEqual = isEqual && (other.CPU.r3 == null || CPU.r3 == other.CPU.r3);
+                isEqual = isEqual && (other.CPU.sp == null || CPU.sp == other.CPU.sp);
+                isEqual = isEqual && (other.CPU.ss == null || CPU.ss == other.CPU.ss);
+                isEqual = isEqual && (other.CPU.cs == null || CPU.cs == other.CPU.cs);
+                isEqual = isEqual && (other.CPU.ds == null || CPU.ds == other.CPU.ds);
+                isEqual = isEqual && (other.CPU.ip == null || CPU.ip == other.CPU.ip);
+                isEqual = isEqual && (other.CPU.flags == null || CPU.flags == other.CPU.flags);
+                if (!isEqual)
+                    return false;
+            }
+
+            if (RAM != null && other.RAM != null)
+            {
+                // TODO
+            }
+
+            return true;
+        }
+
+        public static implicit operator MachineState(CpuState cpu)
+        {
+            return new MachineState
+            {
+                CPU = cpu
+            };
+        }
+
+        public override string ToString()
+        {
+            var sb = new StringBuilder();
+
+            if (CPU != null)
+            {
+                sb.Append(CPU.ToString());
+                if (RAM != null)
+                    sb.AppendLine();
+            }
+
+            if (RAM != null)
+                sb.Append(RAM.ToString(0, 256));
+
+            return sb.ToString();
         }
     }
 }

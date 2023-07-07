@@ -1,4 +1,5 @@
-﻿using DiskUtil;
+﻿using System.Text;
+using DiskUtil;
 
 namespace Emulator
 {
@@ -359,7 +360,6 @@ namespace Emulator
             {
                 var opcodeName = reader.ReadString();
                 var opcodeIndex = reader.ReadByte();
-                var operandOrder = reader.ReadByte();
                 var operandCount = reader.ReadByte();
                 var combinationCount = reader.ReadByte();
                 var operandCombinations = new List<byte>();
@@ -449,6 +449,95 @@ namespace Emulator
         HLT     = 0x200000,
         RTN     = 0x300000,
         MASK_IP = 0x300000
+    }
+
+    public static class MicrocodeUtility
+    {
+        public static string Disassemble(this ControlWord cw)
+        {
+            var sb = new StringBuilder();
+
+            var isRead = (cw & ControlWord.R) != 0;
+            var isWrite = (cw & ControlWord.W) != 0;
+            if (isRead)
+                sb.Append("R ");
+            if (isWrite)
+                sb.Append("W ");
+            if (isRead || isWrite)
+            {
+                if ((cw & ControlWord.WORD) != 0)
+                    sb.Append("WORD ");
+                else
+                    sb.Append("BYTE ");
+            }
+
+            if ((cw & ControlWord.MASK_SEG) == ControlWord.CS)
+                sb.Append("CS:");
+            else if ((cw & ControlWord.MASK_SEG) == ControlWord.SS)
+                sb.Append("SS:");
+            else if ((cw & ControlWord.MASK_SEG) == ControlWord.DS)
+                sb.Append("DS:");
+
+            if ((cw & ControlWord.ADDR) != 0)
+                sb.Append("$");
+
+            if ((cw & ControlWord.MASK_IP) == ControlWord.IPO)
+                sb.Append("IPO ");
+            if ((cw & ControlWord.MASK_IP) == ControlWord.HLT)
+                sb.Append("HLT ");
+            else if ((cw & ControlWord.MASK_IP) == ControlWord.RTN)
+                sb.Append("RTN ");
+
+            if ((cw & ControlWord.RSO1) != 0)
+                sb.Append("RSO1 ");
+            if ((cw & ControlWord.RSO2) != 0)
+                sb.Append("RSO2 ");
+            if ((cw & ControlWord.TAO) != 0)
+                sb.Append("TAO ");
+            if ((cw & ControlWord.TBO) != 0)
+                sb.Append("TBO ");
+
+            if ((cw & ControlWord.MASK_ALU) == ControlWord.ADD)
+                sb.Append("ADD ");
+            else if ((cw & ControlWord.MASK_ALU) == ControlWord.SUB)
+                sb.Append("SUB ");
+            else if ((cw & ControlWord.MASK_ALU) == ControlWord.OR)
+                sb.Append("OR ");
+            else if ((cw & ControlWord.MASK_ALU) == ControlWord.XOR)
+                sb.Append("XOR ");
+            else if ((cw & ControlWord.MASK_ALU) == ControlWord.AND)
+                sb.Append("AND ");
+            else if ((cw & ControlWord.MASK_ALU) == ControlWord.SHL)
+                sb.Append("SHL ");
+            else if ((cw & ControlWord.MASK_ALU) == ControlWord.SHR)
+                sb.Append("SHR ");
+
+            if ((cw & ControlWord.MASK_RI) == ControlWord.RSI1)
+                sb.Append("RSI1 ");
+            else if ((cw & ControlWord.MASK_RI) == ControlWord.TAI)
+                sb.Append("TAI ");
+            else if ((cw & ControlWord.MASK_RI) == ControlWord.TBI)
+                sb.Append("TBI ");
+
+            if ((cw & ControlWord.MASK_IR) == ControlWord.II)
+                sb.Append("II ");
+            else if ((cw & ControlWord.MASK_IR) == ControlWord.OI)
+                sb.Append("OI ");
+            else if ((cw & ControlWord.MASK_IR) == ControlWord.OI)
+                sb.Append("FI ");
+
+            if ((cw & ControlWord.JMP) != 0)
+                sb.Append("JMP ");
+
+            if ((cw & ControlWord.MASK_IPC) == ControlWord.IPC1)
+                sb.Append("IPC1");
+            else if ((cw & ControlWord.MASK_IPC) == ControlWord.IPC2)
+                sb.Append("IPC2");
+            else if ((cw & ControlWord.MASK_IPC) == ControlWord.IPC4)
+                sb.Append("IPC4");
+
+            return sb.ToString();
+        }
     }
 
     public sealed class AssemblyException : Exception

@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Text;
 
 namespace Emulator
 {
@@ -47,7 +48,8 @@ namespace Emulator
             
             var cword = ResolveControlWord();
 
-            Console.WriteLine($"{ip.Word:X4} {instruction.Word:X4} {cword}");
+            if (machine.DebugOutput)
+                Console.WriteLine($"{ip.Word:X4} {instruction.Word:X4} {(int)cword:X6} {cword.Disassemble()}");
 
             var isALUOperation = (cword & ControlWord.MASK_ALU) != 0;
             var isAddr = (cword & ControlWord.ADDR) != 0;
@@ -146,7 +148,7 @@ namespace Emulator
                 ushort seg = (cword & ControlWord.MASK_SEG) switch
                 {
                     ControlWord.CS => cs.Word,
-                    ControlWord.SS => cs.Word,
+                    ControlWord.SS => ss.Word,
                     ControlWord.DS => ds.Word,
                     _ => 0
                 };
@@ -238,15 +240,63 @@ namespace Emulator
             };
         }
 
-        public override string ToString()
+        public CpuState CaptureState()
         {
-            return $"r0 = {r0} r1 = {r1} r2 = {r2} r3 = {r3}\n" +
-                   $"sp = {sp} ss = {ss} cs = {cs} ds = {ds}\n" +
-                   $"ip = {ip} flags = {flags}";
+            return new CpuState
+            {
+                r0 = r0, r1 = r1, r2 = r2, r3 = r3,
+                sp = sp, ss = ss, cs = cs, ds = ds,
+                ip = ip, flags = flags
+            };
         }
     }
 
-    [DebuggerDisplay("{Word:X4}")]
+    public sealed record CpuState
+    {
+        public Register? r0 { get; init; }
+
+        public Register? r1 { get; init; }
+
+        public Register? r2 { get; init; }
+
+        public Register? r3 { get; init; }
+
+        public Register? sp { get; init; }
+
+        public Register? ss { get; init; }
+
+        public Register? cs { get; init; }
+
+        public Register? ds { get; init; }
+
+        public Register? ip { get; init; }
+
+        public Register? flags { get; init; }
+
+        public override string ToString()
+        {
+            var sb = new StringBuilder();
+
+            if (r0 != null) sb.Append($"r0 = {r0} ");
+            if (r1 != null) sb.Append($"r1 = {r1} ");
+            if (r2 != null) sb.Append($"r2 = {r2} ");
+            if (r3 != null) sb.Append($"r3 = {r3} ");
+            sb.AppendLine();
+
+            if (sp != null) sb.Append($"sp = {sp} ");
+            if (ss != null) sb.Append($"ss = {ss} ");
+            if (cs != null) sb.Append($"cs = {cs} ");
+            if (ds != null) sb.Append($"ds = {ds} ");
+            sb.AppendLine();
+
+            if (ip != null) sb.Append($"ip = {ip} ");
+            if (flags != null) sb.Append($"flags = {flags} ");
+
+            return sb.ToString().TrimEnd();
+        }
+    }
+
+    [DebuggerDisplay("{ToString()}")]
     public sealed class Register
     {
         public ushort Word { get; set; }
@@ -261,6 +311,25 @@ namespace Emulator
         {
             get => (byte)((Word >> 8) & 0xFF);
             set => Word = (ushort)((value << 8) | LoByte);
+        }
+
+        public static implicit operator Register(int value)
+        {
+            return new Register { Word = (ushort)value };
+        }
+
+        public static bool operator ==(Register? a, Register? b)
+        {
+            if (ReferenceEquals(a, null) && ReferenceEquals(b,null)) return true;
+            if (ReferenceEquals(a, null)) return false;
+            if (ReferenceEquals(b, null)) return false;
+
+            return a.Word == b.Word;
+        }
+
+        public static bool operator !=(Register? a, Register? b)
+        {
+            return !(a == b);
         }
 
         public override string ToString()
