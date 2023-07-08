@@ -125,6 +125,12 @@ namespace Emulator
             if (RAM != null)
                 sb.Append(RAM.ToString(0, 256));
 
+            if (RAMChecks != null)
+            {
+                foreach (var kvp in RAMChecks)
+                    sb.AppendLine($"[{kvp.Key:X4}] = {kvp.Value:X4}");
+            }
+
             return sb.ToString();
         }
     }

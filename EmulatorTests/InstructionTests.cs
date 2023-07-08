@@ -57,7 +57,7 @@ namespace EmulatorTests
         }
 
         [TestMethod]
-        public void MOV_REG_REGIMM16()
+        public void MOV_REG_dREGIMM16()
         {
             AssertState(
                 @"
@@ -84,9 +84,168 @@ namespace EmulatorTests
             );
         }
 
+        [TestMethod]
+        public void MOV_REG_dIMM16()
+        {
+            AssertState(
+                @"
+                mov [0x80], 0x1234
+                mov r0, [0x80]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x1234
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void MOV_dIMM16_REG()
+        {
+            AssertState(
+                @"
+                mov r0, 0x1234
+                mov [0x80], r0
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x1234
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void MOV_dIMM16_IMM16()
+        {
+            AssertState(
+                @"
+                mov [0x80], 0x1234
+                ",
+                new MachineState
+                {
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void MOV_dIMM16_dREGIMM16()
+        {
+            AssertState(
+                @"
+                mov r0, 0x100
+                mov [0x110], 0x1234
+                mov [0x80], [r0+0x10]
+                mov r0, 0x120
+                mov [0x90], [r0-0x10]
+                ",
+                new MachineState
+                {
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234,
+                        [0x90] = 0x1234,
+                        [0x110] = 0x1234
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void MOV_dIMM16_dIMM16()
+        {
+            AssertState(
+                @"
+                mov [0x100], 0x1234
+                mov [0x110], [0x100]
+                ",
+                new MachineState
+                {
+                    RAMChecks = new()
+                    {
+                        [0x100] = 0x1234,
+                        [0x110] = 0x1234
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void MOV_dREGIMM16_REG()
+        {
+            AssertState(
+                @"
+                mov r0, 0x100
+                mov r1, 0x1234
+                mov [r0+0x10], r1
+                mov r0, 0x130
+                mov [r0-0x10], r1
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r1 = 0x1234
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x110] = 0x1234,
+                        [0x120] = 0x1234
+                    }
+                }
+            );
+        }
+
+        // TODO
+        [TestMethod]
+        public void MOV_dREGIMM16_dREGIMM16()
+        {
+            AssertState(
+                @"
+                mov [0x80], 0x1234
+                mov [0x60], 0x1234
+                mov r0, 0x40
+                mov r1, 0x70
+                mov [r0+0x10], [r1+0x10]
+                mov [r0-0x10], [r1-0x10]
+                ",
+                new MachineState
+                {
+                    RAMChecks = new()
+                    {
+                        [0x30] = 0x1234,
+                        [0x50] = 0x1234,
+                        [0x60] = 0x1234,
+                        [0x80] = 0x1234
+                    }
+                }
+            );
+        }
+
         private void AssertState(string source, MachineState expectedState)
         {
-            var machine = new Machine(microcodeRom) { ShutdownWhenHalted = true };
+            var machine = new Machine(microcodeRom)
+            {
+                ShutdownWhenHalted = true,
+                DebugOutput = true
+            };
 
             var assembler = new Assembler(microcodeRom);
             var program = assembler.AssembleSource("nop\n" + source + "\nhlt");

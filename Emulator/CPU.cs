@@ -48,6 +48,9 @@ namespace Emulator
             
             var cword = ResolveControlWord();
 
+            if (cword == ControlWord.None)
+                throw new Exception("Illegal control word encountered!");
+
             if (machine.DebugOutput)
                 Console.WriteLine($"{ip.Word:X4} {instruction.Word:X4} {(int)cword:X6} {cword.Disassemble()}");
 
