@@ -179,49 +179,48 @@
 
         private Operand ParseOperand(int line, string? operand)
         {
-            // TODO Support hex in [REG+IMM16]
             short data1;
+            
             if (string.IsNullOrEmpty(operand))
                 return new Operand(OperandType.None);
+
+            // REG
             if ((data1 = ParseRegisterIndex(operand)) != -1)
                 return new Operand(OperandType.Reg, data1);
-            if (operand.All(char.IsDigit))
-                return new Operand(OperandType.Imm16, short.Parse(operand));
-            if (operand.Length >= 3 && operand[0] == '0' && operand[1] == 'X'
-            &&  operand.Skip(2).All(IsHexDigit))
-            {
-                data1 = Convert.ToInt16(string.Join("", operand.Skip(2)), 16);
+            
+            // IMM16
+            if (TryParseNumber(operand, out data1))
                 return new Operand(OperandType.Imm16, data1);
-            }
+
+            // [REG+IMM16] / [IMM16]
             if (operand[0] == '[' && operand[^1] == ']')
             {
-                int signIdx = operand.IndexOf('+');
-                if (signIdx == -1) signIdx = operand.IndexOf('-');
+                int signIdx = operand.IndexOfAny(SignChars);
                 var indOperand = operand.Substring(1, operand.Length - 2);
                 var regOperand = operand.Substring(1, signIdx != -1 ? signIdx - 1 : operand.Length - 2);
+
+                // [REG+IMM16]
                 if ((data1 = ParseRegisterIndex(regOperand)) != -1)
                 {
                     short data2;
-                    if ((signIdx = indOperand.IndexOf('+')) != -1)
-                        data2 = (short)-short.Parse(indOperand.Substring(signIdx + 1, indOperand.Length - signIdx - 1));
-                    else if ((signIdx = indOperand.IndexOf('-')) != -1)
-                        data2 = short.Parse(indOperand.Substring(signIdx + 1, indOperand.Length - signIdx - 1));
+                    if ((signIdx = indOperand.IndexOfAny(SignChars)) != -1)
+                    {
+                        var sign = indOperand[signIdx] == '-' ? -1 : 1;
+                        var numberString = indOperand.Substring(signIdx + 1, indOperand.Length - signIdx - 1);
+                        if (!TryParseNumber(numberString, out data2))
+                            throw new AssemblyException(line, $"Illegal operand '{operand}'");
+
+                        data2 = (short)(data2 * -sign); // Negative sign because we SUB for sign purposes
+                    }
                     else
                         data2 = 0;
+
                     return new Operand(OperandType.DerefRegPlusImm16, data1, data2);
                 }
 
-                if (indOperand.All(char.IsDigit))
-                {
-                    data1 = short.Parse(indOperand);
+                // [IMM16]
+                if (TryParseNumber(indOperand, out data1))
                     return new Operand(OperandType.DerefImm16, data1);
-                }
-                if (indOperand.Length >= 3 && indOperand[0] == '0' && indOperand[1] == 'X'
-                &&  indOperand.Skip(2).All(IsHexDigit))
-                {
-                    data1 = Convert.ToInt16(string.Join("", indOperand.Skip(2)), 16);
-                    return new Operand(OperandType.DerefImm16, data1);
-                }
             }
 
             throw new AssemblyException(line, $"Illegal operand '{operand}'");
@@ -232,9 +231,29 @@
             "R0", "R1", "R2", "R3", "SP", "SS", "CS", "DS",
             "R0H", "R0L", "R1H", "R1L", "R2H", "R2L", "R3H", "R3L"
         };
-        private short ParseRegisterIndex(string registerName)
+        private static short ParseRegisterIndex(string registerName)
         {
             return (short)Array.IndexOf(Registers, registerName);
+        }
+
+        private readonly static char[] SignChars = { '+', '-' };
+        private static bool TryParseNumber(string value, out short result)
+        {
+            if (value.All(char.IsDigit))
+            {
+                result = short.Parse(value);
+                return true;
+            }
+
+            if (value.Length >= 3 && value[0] == '0' && value[1] == 'X'
+                &&  value.Skip(2).All(IsHexDigit))
+            {
+                result = Convert.ToInt16(value[2..], 16);
+                return true;
+            }
+
+            result = 0;
+            return false;
         }
 
         private static bool IsHexDigit(char ch)

@@ -66,6 +66,8 @@ namespace Emulator
 
         public RAM? RAM { get; init; }
 
+        public Dictionary<ushort, short>? RAMChecks { get; init; } // For Unit Tests
+
         public bool IsEqual(MachineState? other)
         {
             if (other == null)
@@ -88,9 +90,14 @@ namespace Emulator
                     return false;
             }
 
-            if (RAM != null && other.RAM != null)
+            if (RAM != null && other.RAMChecks != null)
             {
-                // TODO
+                foreach (var kvp in other.RAMChecks)
+                {
+                    var actualWord = RAM.ReadWord(0x0000, kvp.Key);
+                    if (actualWord != kvp.Value)
+                        return false;
+                }
             }
 
             return true;
