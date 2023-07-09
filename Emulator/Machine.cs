@@ -16,9 +16,9 @@ namespace Emulator
 
         public Machine(MicrocodeRom microcode)
         {
-            CPU = new CPU(this, microcode);
             RAM = new RAM(16 * 1024 * 1024);
-            
+            CPU = new CPU(this, microcode);
+
             IsPowered = true;
         }
 

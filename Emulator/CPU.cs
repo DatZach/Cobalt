@@ -12,11 +12,13 @@ namespace Emulator
         private readonly Register r0, r1, r2, r3, sp, ss, cs, ds, ta, tb, ip, flags, instruction, operand;
         private readonly Machine machine;
         private readonly ControlWord[] microcode;
+        private readonly Disassembler disassembler;
 
         public CPU(Machine machine, MicrocodeRom microcodeRom)
         {
             this.machine = machine ?? throw new ArgumentNullException(nameof(machine));
             this.microcode = microcodeRom.Microcode;
+            this.disassembler = new Disassembler(microcodeRom, machine.RAM);
 
             r0 = new Register();
             r1 = new Register();
@@ -52,7 +54,12 @@ namespace Emulator
                 throw new Exception("Illegal control word encountered!");
 
             if (machine.DebugOutput)
-                Console.WriteLine($"{ip.Word:X4} {instruction.Word:X4} {(int)cword:X6} {cword.Disassemble()}");
+            {
+                Console.Write($"{ip.Word:X4} {instruction.Word:X4} {(int)cword:X6} {cword.Disassemble()}");
+                if (mci == 0)
+                    Console.Write($"\t\t{disassembler.Disassemble(cs.Word, ip.Word)}");
+                Console.WriteLine();
+            }
 
             var isALUOperation = (cword & ControlWord.MASK_ALU) != 0;
             var isAddr = (cword & ControlWord.ADDR) != 0;
