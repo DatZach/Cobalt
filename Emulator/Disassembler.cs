@@ -76,14 +76,14 @@ namespace Emulator
                     {
                         var regName = ParseRegisterName(iword & 0x000F);
                         offset += 1;
-                        var immValue = -ram.ReadWord(segment, offset);
+                        var immValue = (short)-ram.ReadWord(segment, offset);
                         offset += 2;
                         if (immValue == 0)
                             operandA = $"[{regName}]";
                         else
                         {
-                            var signStr = (immValue & 0x8000) != 0 ? '-' : '+';
-                            operandA = $"[{regName}{signStr}{immValue & 0x7FFF}]";
+                            var signStr = (immValue & 0x8000) != 0 ? "" : "+";
+                            operandA = $"[{regName}{signStr}{immValue}]";
                         }
                         break;
                     }
@@ -118,14 +118,14 @@ namespace Emulator
                     {
                         var regName = ParseRegisterName(ram.ReadByte(segment, offset) & 0x0F);
                         offset += 1;
-                        var immValue = -ram.ReadWord(segment, offset);
+                        var immValue = (short)-ram.ReadWord(segment, offset);
                         offset += 2;
                         if (immValue == 0)
                             operandB = $"[{regName}]";
                         else
                         {
-                            var signStr = (immValue & 0x8000) != 0 ? '-' : '+';
-                            operandB = $"[{regName}{signStr}{immValue & 0x7FFF}]";
+                            var signStr = (immValue & 0x8000) != 0 ? "" : "+";
+                            operandB = $"[{regName}{signStr}{immValue}]";
                         }
                         break;
                     }

@@ -61,7 +61,7 @@
                 var operand2 = ParseOperand(j, operand2String);
                 
                 if (!opcodeMetadata.TryGetValue(opcodeString, out var metadata))
-                    throw new AssemblyException(j, $"Unknonw opcode '{opcodeString}'");
+                    throw new AssemblyException(j, $"Unknown opcode '{opcodeString}'");
 
                 var (opcode, operandOrder) = ParseOpcode(j, metadata, operandCount, operand1.Type, operand2.Type);
 

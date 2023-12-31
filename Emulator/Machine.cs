@@ -118,15 +118,19 @@ namespace Emulator
             if (CPU != null)
             {
                 sb.Append(CPU.ToString());
-                if (RAM != null)
-                    sb.AppendLine();
             }
 
             if (RAM != null)
+            {
+                if (CPU != null)
+                    sb.AppendLine();
                 sb.Append(RAM.ToString(0, 256));
+            }
 
             if (RAMChecks != null)
             {
+                if (CPU != null || RAM != null)
+                    sb.AppendLine();
                 foreach (var kvp in RAMChecks)
                     sb.AppendLine($"[{kvp.Key:X4}] = {kvp.Value:X4}");
             }

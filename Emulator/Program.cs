@@ -28,8 +28,10 @@
                 mov r0, 0x80
                 mov r1, [r0]
                 mov r2, [r0+0x10]
-                " +
-                "hlt"
+                mov r0, 0xA0
+                mov r3, [r0-0x10]
+                "
+                + "hlt"
             );
             for (ushort i = 0; i < program.Length; ++i)
                 machine.RAM.WriteByte(0, i, program[i]);

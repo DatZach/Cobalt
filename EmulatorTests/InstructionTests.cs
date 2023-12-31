@@ -66,14 +66,17 @@ namespace EmulatorTests
                 mov r0, 0x80
                 mov r1, [r0]
                 mov r2, [r0+0x10]
+                mov r0, 0xA0
+                mov r3, [r0-0x10]
                 ",
                 new MachineState
                 {
                     CPU = new CpuState
                     {
-                        r0 = 0x0080,
+                        r0 = 0x00A0,
                         r1 = 0x1234,
-                        r2 = 0x1234
+                        r2 = 0x1234,
+                        r3 = 0x1234
                     },
                     RAMChecks = new()
                     {
@@ -146,7 +149,7 @@ namespace EmulatorTests
         }
 
         [TestMethod]
-        public void MOV_dIMM16_dREGIMM16()
+        public void MOV_dIMM16_dREGIMM16() // TODO VERIFY
         {
             AssertState(
                 @"
@@ -234,6 +237,69 @@ namespace EmulatorTests
                         [0x50] = 0x1234,
                         [0x60] = 0x1234,
                         [0x80] = 0x1234
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void ADD_REG_REG()
+        {
+            AssertState(
+                @"
+                mov r0, 0x100
+                mov r1, 0x200
+                add r0, r1
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x300,
+                        r1 = 0x200
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void ADD_REG_IMM16()
+        {
+            AssertState(
+                @"
+                mov r0, 0x100
+                add r0, 0x050
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x150
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void ADD_REG_dREGIMM16()
+        {
+            AssertState(
+                @"
+                mov [0x80], 0x100
+                mov r0, 0x50
+                mov r1, 0x50
+                add r0, [r1+0x30]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x150,
+                        r1 = 0x030
+                    },
+                    RAMChecks = new Dictionary<ushort, short>
+                    {
+                        [0x80] = 0x100
                     }
                 }
             );

@@ -256,7 +256,8 @@ namespace Emulator
             {
                 r0 = r0, r1 = r1, r2 = r2, r3 = r3,
                 sp = sp, ss = ss, cs = cs, ds = ds,
-                ip = ip, flags = flags
+                ip = ip, flags = flags,
+                ta = ta, tb = tb
             };
         }
     }
@@ -283,9 +284,13 @@ namespace Emulator
 
         public Register? flags { get; init; }
 
+        public Register? ta { get; init; }
+
+        public Register? tb { get; init; }
+
         public override string ToString()
         {
-            var sb = new StringBuilder();
+            var sb = new StringBuilder(128);
 
             if (r0 != null) sb.Append($"r0 = {r0} ");
             if (r1 != null) sb.Append($"r1 = {r1} ");
@@ -301,6 +306,10 @@ namespace Emulator
 
             if (ip != null) sb.Append($"ip = {ip} ");
             if (flags != null) sb.Append($"flags = {flags} ");
+            sb.AppendLine();
+
+            if (ta != null) sb.Append($"ta = {ta} ");
+            if (tb != null) sb.Append($"tb = {tb} ");
 
             return sb.ToString().TrimEnd();
         }
