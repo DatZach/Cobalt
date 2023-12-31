@@ -1,9 +1,12 @@
-﻿using System.Text;
+﻿using System.Diagnostics;
+using System.Text;
 
 namespace Emulator
 {
     public sealed class Machine
     {
+        public int ClockHz { get; set; }
+
         public bool ShutdownWhenHalted { get; set; }
 
         public bool DebugOutput { get; set; }
@@ -16,6 +19,7 @@ namespace Emulator
 
         public Machine(MicrocodeRom microcode)
         {
+            ClockHz = 1_000_000;
             RAM = new RAM(16 * 1024 * 1024);
             CPU = new CPU(this, microcode);
 
@@ -43,10 +47,45 @@ namespace Emulator
 
         public void Run()
         {
-            // TODO Run at specified Hz
-            while (IsPowered)
+            const int TicksPerMs = 10000; // From Stopwatch class
+            const int HzPerMs = 1000;
+            var hzPerTick = TicksPerMs / (ClockHz / HzPerMs);
+            double statAvgIterationsPerLoop = 0;
+            double statTotalIterations = 0;
+            double statTotalLoops = 0;
+
+            var sw = Stopwatch.StartNew();
+            var lastTickTs = sw.ElapsedTicks;
+            while (IsPowered) // && statTotalIterations < ClockHz)
             {
-                Tick();
+                ++statTotalLoops;
+                var nowTickTs = sw.ElapsedTicks;
+                var ticks = nowTickTs - lastTickTs;
+
+                var iterations = ticks / hzPerTick;
+                if (iterations <= 0)
+                    continue;
+
+                statTotalIterations += iterations;
+                statAvgIterationsPerLoop += iterations;
+                while (iterations-- > 0 && IsPowered)
+                    Tick();
+
+                lastTickTs = nowTickTs;
+            }
+            sw.Stop();
+
+            statAvgIterationsPerLoop /= statTotalLoops;
+
+            if (DebugOutput)
+            {
+                Console.WriteLine(
+                    "STATS Ran {0}ms; AVG_ITR_PER_LOOP {1}; TOT_ITR {2}; TOT_LOOPS {3}",
+                    sw.ElapsedMilliseconds,
+                    statAvgIterationsPerLoop,
+                    statTotalIterations,
+                    statTotalLoops
+                );
             }
         }
 

@@ -17,19 +17,15 @@
                 return;
             }
 
-            var machine = new Machine(microcodeRom) { DebugOutput = true };
+            var machine = new Machine(microcodeRom) { DebugOutput = true, ShutdownWhenHalted = true };
 
             var assembler = new Assembler(microcodeRom);
             var program = assembler.AssembleSource(
                 "nop\n" +
                 @"
-                mov [0x80], 0x1234
-                mov [0x90], 0x1234
-                mov r0, 0x80
-                mov r1, [r0]
-                mov r2, [r0+0x10]
-                mov r0, 0xA0
-                mov r3, [r0-0x10]
+                mov r0, 0
+                add r0, 1
+                jmp 3
                 "
                 + "hlt"
             );
@@ -39,6 +35,8 @@
             File.WriteAllBytes(@"C:\\Temp\Program.bin", program);
 
             machine.Run();
+
+            Console.ReadKey();
         }
     }
 }
