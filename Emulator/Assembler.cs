@@ -1,7 +1,13 @@
-﻿namespace Emulator
+﻿using System.Security.Cryptography.X509Certificates;
+
+namespace Emulator
 {
     public sealed class Assembler
     {
+        private readonly Dictionary<string, short> labels = new();
+        private readonly Dictionary<long, string> fixups = new();
+        private Action<long>? resolveFixup1, resolveFixup2;
+
         private readonly Dictionary<string, MicrocodeRom.Opcode> opcodeMetadata;
 
         public Assembler(MicrocodeRom microcodeRom)
@@ -14,6 +20,9 @@
             using var stream = new MemoryStream();
             using var writer = new BinaryWriter(stream);
 
+            labels.Clear();
+            fixups.Clear();
+
             var lines = source.Split('\n');
             for (var i = 0; i < lines.Length; i++)
             {
@@ -24,6 +33,25 @@
                     line = line[..semiIdx];
 
                 line = line.Trim();
+
+                var colonIdx = line.IndexOf(':');
+                if (colonIdx >= 0)
+                {
+                    var labelName = line[..colonIdx].ToUpperInvariant();
+                    line = line[(colonIdx + 1)..];
+                    line = line.Trim();
+
+                    // TODO sublabels
+                    if (labels.ContainsKey(labelName))
+                        throw new AssemblyException(i, $"Redeclaration of label '{labelName}'");
+
+                    // TODO Gotta find a better way to approach this because Cobalt technically supports
+                    //      a 32bit address space, but we can only page 16bits of it at a time...
+                    if (stream.Position > ushort.MaxValue)
+                        throw new AssemblyException(i, $"Label '{labelName}' would overflow address space");
+
+                    labels.Add(labelName, (short)stream.Position);
+                }
 
                 if (string.IsNullOrEmpty(line))
                     continue;
@@ -57,39 +85,41 @@
                 if (operand1String.Length == 0)
                     operandCount = 0;
 
-                var operand1 = ParseOperand(j, operand1String);
-                var operand2 = ParseOperand(j, operand2String);
+                resolveFixup1 = resolveFixup2 = null;
+                var operand1 = ParseOperand(j, 0, operand1String);
+                var operand2 = ParseOperand(j, 1, operand2String);
                 
                 if (!opcodeMetadata.TryGetValue(opcodeString, out var metadata))
-                    throw new AssemblyException(j, $"Unknown opcode '{opcodeString}'");
+                    throw new AssemblyException(i, $"Unknown opcode '{opcodeString}'");
 
                 var (opcode, operandOrder) = ParseOpcode(j, metadata, operandCount, operand1.Type, operand2.Type);
 
                 Operand? operandB, operandA;
+                Action<long>? resolveFixupB, resolveFixupA;
                 if (operandCount == 2)
                 {
                     if (!operandOrder)
                     {
-                        operandA = operand1;
-                        operandB = operand2;
+                        operandA = operand1; resolveFixupA = resolveFixup1;
+                        operandB = operand2; resolveFixupB = resolveFixup2;
                     }
                     else if (operandOrder)
                     {
-                        operandA = operand2;
-                        operandB = operand1;
+                        operandA = operand2; resolveFixupA = resolveFixup2;
+                        operandB = operand1; resolveFixupB = resolveFixup1;
                     }
                     else
                         throw new AssemblyException(j, $"Illegal operand direction specified in metadata '{opcodeString}'");
                 }
                 else if (operandCount == 1)
                 {
-                    operandA = operand1;
-                    operandB = null;
+                    operandA = operand1; resolveFixupA = resolveFixup1;
+                    operandB = null; resolveFixupB = null;
                 }
                 else
                 {
-                    operandA = null;
-                    operandB = null;
+                    operandA = null; resolveFixupA = null;
+                    operandB = null; resolveFixupB = null;
                 }
 
                 if (operandA != null)
@@ -104,6 +134,7 @@
 
                 if (operandA != null)
                 {
+                    resolveFixupA?.Invoke(stream.Position);
                     switch (operandA.Type)
                     {
                         case OperandType.Imm16:
@@ -126,6 +157,7 @@
 
                 if (operandB != null)
                 {
+                    resolveFixupB?.Invoke(stream.Position);
                     switch (operandB.Type)
                     {
                         case OperandType.Reg:
@@ -149,6 +181,17 @@
                         }
                     }
                 }
+            }
+
+            foreach (var kvp in fixups)
+            {
+                if (!labels.TryGetValue(kvp.Value, out var address))
+                    throw new AssemblyException(-1, $"Reference to undeclared label '{kvp.Value}'");
+
+                stream.Position = kvp.Key;
+                var imm16 = (ushort)address;
+                writer.Write((byte)(imm16 >> 8));
+                writer.Write((byte)(imm16 & 0xFF));
             }
 
             return stream.ToArray();
@@ -177,7 +220,7 @@
             return ((ushort)result, (metadata.OperandCombinations[operandCombinationIdx] & 0x80) != 0);
         }
 
-        private Operand ParseOperand(int line, string? operand)
+        private Operand ParseOperand(int line, int operandIdx, string? operand)
         {
             short data1;
             
@@ -189,7 +232,7 @@
                 return new Operand(OperandType.Reg, data1);
             
             // IMM16
-            if (TryParseNumber(operand, out data1))
+            if (TryParseImm16(operand, operandIdx, out data1))
                 return new Operand(OperandType.Imm16, data1);
 
             // [REG+IMM16] / [IMM16]
@@ -207,7 +250,7 @@
                     {
                         var sign = indOperand[signIdx] == '-' ? -1 : 1;
                         var numberString = indOperand.Substring(signIdx + 1, indOperand.Length - signIdx - 1);
-                        if (!TryParseNumber(numberString, out data2))
+                        if (!TryParseImm16(numberString, operandIdx, out data2))
                             throw new AssemblyException(line, $"Illegal operand '{operand}'");
 
                         data2 = (short)(data2 * -sign); // Negative sign because we SUB for sign purposes
@@ -219,7 +262,7 @@
                 }
 
                 // [IMM16]
-                if (TryParseNumber(indOperand, out data1))
+                if (TryParseImm16(indOperand, operandIdx, out data1))
                     return new Operand(OperandType.DerefImm16, data1);
             }
 
@@ -237,7 +280,7 @@
         }
 
         private readonly static char[] SignChars = { '+', '-' };
-        private static bool TryParseNumber(string value, out short result)
+        private bool TryParseImm16(string value, int operandIdx, out short result)
         {
             if (value.All(char.IsDigit))
             {
@@ -249,6 +292,23 @@
                 &&  value.Skip(2).All(IsHexDigit))
             {
                 result = Convert.ToInt16(value[2..], 16);
+                return true;
+            }
+
+            if (char.IsLetter(value[0]) || value[0] == '_')
+            {
+                if (labels.TryGetValue(value, out result))
+                    return true;
+
+                void Fixup(long x) => fixups.Add(x, value);
+                if (operandIdx == 0)
+                    resolveFixup1 = Fixup;
+                else if (operandIdx == 1)
+                    resolveFixup2 = Fixup;
+                else
+                    throw new ArgumentOutOfRangeException(nameof(operandIdx), operandIdx, "Must be 0 or 1");
+                
+                result = -1;
                 return true;
             }
 

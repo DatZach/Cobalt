@@ -28,7 +28,7 @@ namespace Emulator
                 if (string.IsNullOrEmpty(line))
                     continue;
 
-                var parts = line.Split(' ');
+                var parts = line.Split(' ', '\t');
                 if (current == null)
                 {
                     // MACRO DECLARATION
@@ -208,6 +208,7 @@ namespace Emulator
 
                             var cwPart = subPart switch
                             {
+                                "0" => ControlWord.None,
                                 "1" => ControlWord.Const1,
                                 "2" => ControlWord.Const2,
                                 _ => Enum.Parse<ControlWord>(subPart)
@@ -535,29 +536,41 @@ namespace Emulator
             else if ((cw & ControlWord.MASK_IP) == ControlWord.RTN)
                 sb.Append("RTN ");
 
-            if ((cw & ControlWord.RSO1) != 0)
+            if ((cw & ControlWord.MASK_A) == ControlWord.RSO1)
                 sb.Append("RSO1 ");
-            if ((cw & ControlWord.RSO2) != 0)
-                sb.Append("RSO2 ");
-            if ((cw & ControlWord.TAO) != 0)
+            else if ((cw & ControlWord.MASK_A) == ControlWord.TAO)
                 sb.Append("TAO ");
-            if ((cw & ControlWord.TBO) != 0)
-                sb.Append("TBO ");
+            else if ((cw & ControlWord.MASK_A) == ControlWord.SPO)
+                sb.Append("SPO ");
 
-            if ((cw & ControlWord.MASK_ALU) == ControlWord.ADD)
-                sb.Append("ADD ");
-            else if ((cw & ControlWord.MASK_ALU) == ControlWord.SUB)
-                sb.Append("SUB ");
-            else if ((cw & ControlWord.MASK_ALU) == ControlWord.OR)
-                sb.Append("OR ");
-            else if ((cw & ControlWord.MASK_ALU) == ControlWord.XOR)
-                sb.Append("XOR ");
-            else if ((cw & ControlWord.MASK_ALU) == ControlWord.AND)
-                sb.Append("AND ");
-            else if ((cw & ControlWord.MASK_ALU) == ControlWord.SHL)
-                sb.Append("SHL ");
-            else if ((cw & ControlWord.MASK_ALU) == ControlWord.SHR)
-                sb.Append("SHR ");
+            if ((cw & ControlWord.MASK_RI) != ControlWord.JNF)
+            {
+                if ((cw & ControlWord.MASK_ALU) == ControlWord.ADD)
+                    sb.Append("ADD ");
+                else if ((cw & ControlWord.MASK_ALU) == ControlWord.SUB)
+                    sb.Append("SUB ");
+                else if ((cw & ControlWord.MASK_ALU) == ControlWord.OR)
+                    sb.Append("OR ");
+                else if ((cw & ControlWord.MASK_ALU) == ControlWord.XOR)
+                    sb.Append("XOR ");
+                else if ((cw & ControlWord.MASK_ALU) == ControlWord.AND)
+                    sb.Append("AND ");
+                else if ((cw & ControlWord.MASK_ALU) == ControlWord.SHL)
+                    sb.Append("SHL ");
+                else if ((cw & ControlWord.MASK_ALU) == ControlWord.SHR)
+                    sb.Append("SHR ");
+            }
+
+            if ((cw & ControlWord.MASK_B) == ControlWord.RSO2)
+                sb.Append("RSO2 ");
+            else if ((cw & ControlWord.MASK_B) == ControlWord.TBO)
+                sb.Append("TBO ");
+            else if ((cw & ControlWord.MASK_B) == ControlWord.FO)
+                sb.Append("FO ");
+            else if ((cw & ControlWord.MASK_B) == ControlWord.Const1)
+                sb.Append("1 ");
+            else if ((cw & ControlWord.MASK_B) == ControlWord.Const2)
+                sb.Append("2 ");
 
             if ((cw & ControlWord.MASK_RI) == ControlWord.RSI1)
                 sb.Append("RSI1 ");
@@ -565,6 +578,14 @@ namespace Emulator
                 sb.Append("TAI ");
             else if ((cw & ControlWord.MASK_RI) == ControlWord.TBI)
                 sb.Append("TBI ");
+            else if ((cw & ControlWord.MASK_RI) == ControlWord.SPI)
+                sb.Append("SPI ");
+            else if ((cw & ControlWord.MASK_RI) == ControlWord.JNF)
+            {
+                sb.Append("JNF ");
+                sb.Append((int)(cw & ControlWord.MASK_OPR) >> 16);
+                sb.Append(' ');
+            }
 
             if ((cw & ControlWord.MASK_IR) == ControlWord.II)
                 sb.Append("II ");
