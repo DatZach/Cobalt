@@ -1,6 +1,4 @@
-﻿using System.Security.Cryptography.X509Certificates;
-
-namespace Emulator
+﻿namespace Emulator
 {
     public sealed class Assembler
     {
@@ -282,21 +280,27 @@ namespace Emulator
         private readonly static char[] SignChars = { '+', '-' };
         private bool TryParseImm16(string value, int operandIdx, out short result)
         {
+            int sign = value[0] == '-' ? -1 : 1;
+            if (value[0] is '+' or '-')
+                value = value[1..];
+
             if (value.All(char.IsDigit))
             {
-                result = short.Parse(value);
+                result = (short)(short.Parse(value) * sign);
                 return true;
             }
 
             if (value.Length >= 3 && value[0] == '0' && value[1] == 'X'
                 &&  value.Skip(2).All(IsHexDigit))
             {
-                result = Convert.ToInt16(value[2..], 16);
+                result = (short)(Convert.ToInt16(value[2..], 16) * sign);
                 return true;
             }
 
             if (char.IsLetter(value[0]) || value[0] == '_')
             {
+                if (sign == -1) throw new AssemblyException(-1, $"Label '{value}' cannot be negatively addressed");
+
                 if (labels.TryGetValue(value, out result))
                     return true;
 

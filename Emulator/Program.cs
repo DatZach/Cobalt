@@ -23,17 +23,11 @@
             var program = assembler.AssembleSource(
                 "nop\n" +
                 @"
-                jmp Main
-                mov r2, 0x3333
-                Wow:
-                    mov r0, 0x1234
-                    mov r1, 0x4321
-                    ret
-                Main:
-                    mov sp, 0xF000
-                    mov r0, 0x1111
-                    call Wow
-                    mov r3, 0x4444
+                mov r0, 12
+                mov r1, 3
+                mul r0, r1
+                mov r2, -12
+                mul r2, r1
                 "
                 + "hlt"
             );

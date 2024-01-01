@@ -331,7 +331,13 @@ namespace Emulator
             sb.AppendLine();
 
             if (ip != null) sb.Append($"ip = {ip} ");
-            if (flags != null) sb.Append($"flags = {flags} ");
+            if (flags != null)
+            {
+                sb.Append($"flags = {flags} ");
+                sb.Append((flags.Word & 0x0004) == 0 ? "zf " : "ZF ");
+                sb.Append((flags.Word & 0x0002) == 0 ? "cf " : "CF ");
+                sb.Append((flags.Word & 0x0001) == 0 ? "sf " : "SF ");
+            }
             sb.AppendLine();
 
             if (ta != null) sb.Append($"ta = {ta} ");
