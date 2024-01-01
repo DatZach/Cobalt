@@ -5,6 +5,9 @@ namespace Emulator
 {
     public sealed class CPU
     {
+        private static readonly Register Constant1 = new() { Word = 1 };
+        private static readonly Register Constant2 = new() { Word = 2 };
+
         public bool IsHalted { get; private set; }
 
         private int mci;
@@ -19,7 +22,7 @@ namespace Emulator
             this.machine = machine ?? throw new ArgumentNullException(nameof(machine));
             this.microcode = microcodeRom.Microcode;
             this.disassembler = new Disassembler(microcodeRom, machine.RAM);
-
+            
             r0 = new Register();
             r1 = new Register();
             r2 = new Register();
@@ -61,7 +64,10 @@ namespace Emulator
                 Console.WriteLine();
             }
 
-            var isALUOperation = (cword & ControlWord.MASK_ALU) != 0;
+            // NOTE Checking JNF without masking RI is a shortcut that saves us on circuitry but if
+            //      RI_XX_1 or RI_XX_2 need to be used then this will need to be changed to check against the mask
+            //      Unless, of course, those 2 microinstructions also use the ALU mask as an operand
+            var isALUOperation = (cword & ControlWord.MASK_ALU) != 0 && (cword & ControlWord.JNF) != ControlWord.JNF;
             var isAddr = (cword & ControlWord.ADDR) != 0;
 
             // CLOCK RISING EDGE
@@ -85,10 +91,20 @@ namespace Emulator
                 goto DoTick;
             }
             
-            // Register Output
-            if ((cword & ControlWord.RSO1) != 0)
+            // A-Line -- Register Output
+            var acword = cword & ControlWord.MASK_A;
+            if (acword != 0)
             {
-                var reg = SelectRegister(instruction.Word & 0x000F);
+                Register? reg;
+                if (acword == ControlWord.RSO1)
+                    reg = SelectRegister(instruction.Word & 0x000F);
+                else if (acword == ControlWord.TAO)
+                    reg = ta;
+                else if (acword == ControlWord.SPO)
+                    reg = sp;
+                else
+                    throw new InvalidOperationException();
+
                 if (isALUOperation)
                     aluaWord = reg.Word;
                 else if (isAddr)
@@ -97,33 +113,30 @@ namespace Emulator
                     dbusWord = reg.Word;
             }
 
-            if ((cword & ControlWord.RSO2) != 0)
+            // B-Line -- Register Output
+            var bcword = cword & ControlWord.MASK_B;
+            if (bcword != 0)
             {
-                var reg = SelectRegister(operand.Word & 0x000F);
+                Register? reg;
+                if (bcword == ControlWord.RSO2)
+                    reg = SelectRegister(operand.Word & 0x000F);
+                else if (bcword == ControlWord.TBO)
+                    reg = tb;
+                else if (bcword == ControlWord.FO)
+                    reg = flags;
+                else if (bcword == ControlWord.Const1)
+                    reg = Constant1;
+                else if (bcword == ControlWord.Const2)
+                    reg = Constant2;
+                else
+                    throw new InvalidOperationException();
+
                 if (isALUOperation)
                     alubWord = reg.Word;
                 else
                     dbusWord = reg.Word;
             }
-
-            if ((cword & ControlWord.TAO) != 0)
-            {
-                if (isALUOperation)
-                    aluaWord = ta.Word;
-                else if (isAddr)
-                    abusWord = ta.Word;
-                else
-                    dbusWord = ta.Word;
-            }
-
-            if ((cword & ControlWord.TBO) != 0)
-            {
-                if (isALUOperation)
-                    alubWord = tb.Word;
-                else
-                    dbusWord = tb.Word;
-            }
-
+            
             // ALU
             int zf = 0, cf = 0, sf = 0;
             if (isALUOperation)
@@ -194,16 +207,29 @@ namespace Emulator
             else if ((cword & ControlWord.MASK_IR) == ControlWord.FI)
                 flags.Word = (ushort)(zf | cf | sf);
 
-            if ((cword & ControlWord.MASK_RI) == ControlWord.RSI1)
+            var ricword = cword & ControlWord.MASK_RI;
+            if (ricword != 0)
             {
-                var reg = SelectRegister(instruction.Word & 0x000F);
-                reg.Word = dbusWord;
+                if (ricword == ControlWord.RSI1)
+                {
+                    var reg = SelectRegister(instruction.Word & 0x000F);
+                    reg.Word = dbusWord;
+                }
+                else if (ricword == ControlWord.TAI)
+                    ta.Word = dbusWord;
+                else if (ricword == ControlWord.TBI)
+                    tb.Word = dbusWord;
+                else if (ricword == ControlWord.SPI)
+                    sp.Word = dbusWord;
+                else if (ricword == ControlWord.JNF)
+                {
+                    if (flags.Word == 0)
+                        mci = (int)(cword & ControlWord.MASK_OPR) >> 16;
+                }
+                else
+                    throw new InvalidOperationException();
             }
-            else if ((cword & ControlWord.MASK_RI) == ControlWord.TAI)
-                ta.Word = dbusWord;
-            else if ((cword & ControlWord.MASK_RI) == ControlWord.TBI)
-                tb.Word = dbusWord;
-            
+
             if ((cword & ControlWord.JMP) != 0)
                 ip.Word = dbusWord;
 

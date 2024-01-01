@@ -149,6 +149,7 @@ namespace Emulator
                             break;
                         }
 
+                        // MACRO
                         if (part[0] == '#')
                         {
                             if (parts.Length > 1)
@@ -171,7 +172,30 @@ namespace Emulator
 
                             break;
                         }
+                        
+                        // LABELS
+                        if (part[^1] == ':')
+                        {
+                            var labelName = part[..^1];
+                            if (current.Labels.ContainsKey(labelName))
+                                throw new AssemblyException(i, $"Redeclaration of label '{labelName}'");
 
+                            current.Labels.Add(labelName, current.CodeLength);
+                            continue;
+                        }
+                        if (part[0] == '@')
+                        {
+                            var labelName = part[1..];
+                            if (!current.Labels.TryGetValue(labelName, out var labelAddress))
+                                throw new AssemblyException(i, $"Reference to undeclared label '{labelName}'");
+                            if ((word & ControlWord.MASK_OPR) != 0)
+                                throw new AssemblyException(i, $"Cannot reference label '{labelName}' here");
+
+                            word |= (ControlWord)((labelAddress << 16) & (int)ControlWord.MASK_OPR);
+                            continue;
+                        }
+
+                        // CONTROL WORDS
                         var subParts = part.Split(':');
                         for (var j = 0; j < subParts.Length; ++j)
                         {
@@ -182,7 +206,13 @@ namespace Emulator
                                 word |= ControlWord.ADDR;
                             }
 
-                            var cwPart = Enum.Parse<ControlWord>(subPart);
+                            var cwPart = subPart switch
+                            {
+                                "1" => ControlWord.Const1,
+                                "2" => ControlWord.Const2,
+                                _ => Enum.Parse<ControlWord>(subPart)
+                            };
+
                             if ((word & cwPart) != 0)
                                 throw new AssemblyException(i, $"Control signal {subPart} conflicts with another in this word");
 
@@ -250,12 +280,15 @@ namespace Emulator
 
             public int CodeLength { get; set; }
 
+            public Dictionary<string, int> Labels { get; }
+
             public Procedure(string name, bool isWildcard)
             {
                 Name = name;
                 IsWildcard = isWildcard;
                 Code = new ControlWord[MaxMicrocodeCount];
                 CodeLength = 0;
+                Labels = new Dictionary<string, int>();
             }
         }
     }
@@ -414,41 +447,55 @@ namespace Emulator
         MASK_IR = 0x18,
         
         RSO1    = 0x20,
-        RSO2    = 0x40,
-        TAO     = 0x80,
-        TBO     = 0x100,
-        
-        RSI1    = 0x200,
-        TAI     = 0x400,
-        TBI     = 0x600,
-        MASK_RI = 0x600,
-        
-        R       = 0x800,
-        W       = 0x1000,
-        BYTE    = 0,
-        WORD    = 0x2000,
+        TAO     = 0x40,
+        SPO     = 0x60,
+        MASK_A  = 0x60,
 
-        ADD     = 0x4000,
-        SUB     = 0x8000,
-        OR      = 0xC000,
-        XOR     = 0x10000,
-        AND     = 0x14000,
-        SHL     = 0x18000,
-        SHR     = 0x1C000,
-        MASK_ALU= 0x1C000,
+        RSO2    = 0x80,
+        TBO     = 0x100,
+        FO      = 0x180,
+        Const1  = 0x200,
+        Const2  = 0x280,
+        B_XX_1  = 0x300, // UNUSED
+        B_XX_2  = 0x380, // UNUSED
+        MASK_B  = 0x380,
+        
+        RSI1    = 0x400,
+        TAI     = 0x800,
+        TBI     = 0xC00,
+        SPI     = 0x1000,
+        JNF     = 0x1400,
+        RI_XX_1 = 0x1800,
+        RI_XX_2 = 0x1C00,
+        MASK_RI = 0x1C00,
+        
+        R       = 0x2000,
+        W       = 0x4000,
+        BYTE    = 0,
+        WORD    = 0x8000,
+
+        ADD     = 0x10000,
+        SUB     = 0x20000,
+        OR      = 0x30000,
+        XOR     = 0x40000,
+        AND     = 0x50000,
+        SHL     = 0x60000,
+        SHR     = 0x70000,
+        MASK_ALU= 0x70000,
+        MASK_OPR= 0x70000,
         
         DATA    = 0,
-        ADDR    = 0x20000,
+        ADDR    = 0x80000,
 
-        CS      = 0x40000,
-        SS      = 0x80000,
-        DS      = 0xC0000,
-        MASK_SEG= 0xC0000,
+        CS      = 0x100000,
+        SS      = 0x200000,
+        DS      = 0x300000,
+        MASK_SEG= 0x300000,
         
-        IPO     = 0x100000,
-        HLT     = 0x200000,
-        RTN     = 0x300000,
-        MASK_IP = 0x300000
+        IPO     = 0x400000,
+        HLT     = 0x800000,
+        RTN     = 0xC00000,
+        MASK_IP = 0xC00000
     }
 
     public static class MicrocodeUtility
