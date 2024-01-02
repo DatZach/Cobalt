@@ -1,0 +1,25 @@
+;
+;	Cobalt Boot ROM
+;	0xF000 - 0xFFFF
+;
+
+format bin
+origin 0xF000
+
+nop							; Required for CPU boot
+
+Main:
+	mov		[0x0000], IRQ	; We cannot disable interrupts, set this immediately!!
+	mov		sp, 0xEFF0		; Stack lives right below ROM space
+
+	mov		r0, 0x1234
+	
+Loop:
+	jmp Loop
+
+	hlt
+
+IRQ:
+	mov r0, 0x4321
+	hlt
+	rti

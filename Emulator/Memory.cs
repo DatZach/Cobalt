@@ -2,28 +2,38 @@
 
 namespace Emulator
 {
-    public sealed class RAM
+    public sealed class Memory
     {
         public int Size => data.Length;
 
+        public bool IsReadOnly { get; set; }
+
         private readonly byte[] data;
 
-        public RAM(int size)
+        public Memory(int size)
         {
             data = new byte[size];
         }
 
         public byte ReadByte(ushort segment, ushort offset) => data[ToCanonicalAddress(segment, offset)];
 
-        public void WriteByte(ushort segment, ushort offset, byte value) =>
-            data[ToCanonicalAddress(segment, offset)] = value;
-
         public ushort ReadWord(ushort segment, ushort offset) =>
             (ushort)((data[ToCanonicalAddress(segment, (ushort)(offset + 0))] << 8)
-                     | data[ToCanonicalAddress(segment, (ushort)(offset + 1))]);
+                    | data[ToCanonicalAddress(segment, (ushort)(offset + 1))]);
 
+        public void WriteByte(ushort segment, ushort offset, byte value)
+        {
+            if (IsReadOnly)
+                return;
+
+            data[ToCanonicalAddress(segment, offset)] = value;
+        }
+        
         public void WriteWord(ushort segment, ushort offset, ushort value)
         {
+            if (IsReadOnly)
+                return;
+
             data[ToCanonicalAddress(segment, (ushort)(offset + 1))] = (byte)(value & 0xFF);
             data[ToCanonicalAddress(segment, (ushort)(offset + 0))] = (byte)((value >> 8) & 0xFF);
         }
@@ -33,9 +43,9 @@ namespace Emulator
             return ((long)segment << 16) | offset;
         }
 
-        public RAM CaptureState()
+        public Memory CaptureState()
         {
-            var capture = new RAM(Size);
+            var capture = new Memory(Size);
             Array.Copy(data, capture.data, Size);
 
             return capture;

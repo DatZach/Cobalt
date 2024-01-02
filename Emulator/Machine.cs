@@ -17,16 +17,20 @@ namespace Emulator
 
         public CPU CPU { get; }
 
-        public RAM RAM { get; }
+        private Memory RAM { get; }
+
+        private Memory ROM { get; }
 
         private readonly List<Device> devices;
         public IReadOnlyList<Device> Devices => devices;
 
-        public Machine(MicrocodeRom microcode)
+        public Machine(MicrocodeRom microcode, Memory rom)
         {
             ClockHz = 1_000_000;
-            RAM = new RAM(16 * 1024 * 1024);
+            RAM = new Memory(16 * 1024 * 1024);
             CPU = new CPU(this, microcode);
+            ROM = rom;
+            ROM.IsReadOnly = true;
             devices = new List<Device>();
 
             IsPowered = true;
@@ -37,29 +41,6 @@ namespace Emulator
         {
             var device = new T { Machine = this };
             devices.Add(device);
-        }
-
-        public void Tick()
-        {
-            var isCpuHalted = CPU.IsHalted;
-
-            IsInterruptAsserted = false;
-            foreach (var device in devices)
-                IsInterruptAsserted |= device.Tick();
-
-            CPU.Tick();
-
-            if (!isCpuHalted && CPU.IsHalted)
-            {
-                if (ShutdownWhenHalted)
-                    IsPowered = false;
-
-                if (DebugOutput)
-                {
-                    Console.WriteLine("CPU Halted!");
-                    Console.WriteLine(CaptureState());
-                }
-            }
         }
 
         public void Run()
@@ -112,6 +93,67 @@ namespace Emulator
             }
         }
 
+        private void Tick()
+        {
+            var isCpuHalted = CPU.IsHalted;
+
+            IsInterruptAsserted = false;
+            foreach (var device in devices)
+                IsInterruptAsserted |= device.Tick();
+
+            CPU.Tick();
+
+            if (!isCpuHalted && CPU.IsHalted)
+            {
+                if (ShutdownWhenHalted)
+                    IsPowered = false;
+
+                if (DebugOutput)
+                {
+                    Console.WriteLine("CPU Halted!");
+                    Console.WriteLine(CaptureState());
+                }
+            }
+        }
+        
+        public byte ReadByte(ushort segment, ushort offset)
+        {
+            SelectMemoryDevice(ref segment, ref offset, out var device);
+            return device.ReadByte(segment, offset);
+        }
+
+        public ushort ReadWord(ushort segment, ushort offset)
+        {
+            SelectMemoryDevice(ref segment, ref offset, out var device);
+            return device.ReadWord(segment, offset);
+        }
+
+        public void WriteByte(ushort segment, ushort offset, byte value)
+        {
+            SelectMemoryDevice(ref segment, ref offset, out var device);
+            device.WriteByte(segment, offset, value);
+        }
+        
+        public void WriteWord(ushort segment, ushort offset, ushort value)
+        {
+            SelectMemoryDevice(ref segment, ref offset, out var device);
+            device.WriteWord(segment, offset, value);
+        }
+
+        private void SelectMemoryDevice(ref ushort segment, ref ushort offset, out Memory device)
+        {
+            if (segment == 0 && (offset & 0xF000) == 0xF000)
+            {
+                device = ROM;
+                offset -= 0xF000;
+                return;
+            }
+
+            // TODO MMIO
+
+            device = RAM;
+        }
+
         public MachineState CaptureState()
         {
             return new MachineState
@@ -126,7 +168,7 @@ namespace Emulator
     {
         public CpuState? CPU { get; init; }
 
-        public RAM? RAM { get; init; }
+        public Memory? RAM { get; init; }
 
         public Dictionary<ushort, short>? RAMChecks { get; init; } // For Unit Tests
 

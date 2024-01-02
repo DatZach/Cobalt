@@ -10,16 +10,16 @@ namespace Emulator
     public sealed class Disassembler
     {
         private readonly Dictionary<int, MicrocodeRom.Opcode> opcodeMetadata;
-        private readonly RAM ram;
+        private readonly Machine machine;
 
-        public Disassembler(MicrocodeRom microcodeRom, RAM ram)
+        public Disassembler(MicrocodeRom microcodeRom, Machine machine)
         {
             opcodeMetadata = microcodeRom?.OpcodeMetadata?.ToDictionary(
                 x => (x.Value.Index << 8) | (x.Value.OperandCount),
                 x => x.Value
             ) ?? throw new ArgumentNullException(nameof(microcodeRom));
 
-            this.ram = ram ?? throw new ArgumentNullException(nameof(ram));
+            this.machine = machine ?? throw new ArgumentNullException(nameof(machine));
         }
 
         public string Disassemble(ushort segment, ushort offset)
@@ -28,7 +28,7 @@ namespace Emulator
             // 1 Operand (1OOOOOAA AXXXXXXX) + Flags
             // 2 Operand (0OOOOOAA ABBBXXXX) NO FLAGS
 
-            var iword = ram.ReadWord(segment, offset);
+            var iword = machine.ReadWord(segment, offset);
             offset += 2;
 
             int opcodeIndex = (iword & 0x7C00) >> 10;
@@ -60,14 +60,14 @@ namespace Emulator
 
                     case OperandType.Imm16:
                     {
-                        operandA = $"0x{ram.ReadWord(segment, offset):X4}";
+                        operandA = $"0x{machine.ReadWord(segment, offset):X4}";
                         offset += 2;
                         break;
                     }
 
                     case OperandType.DerefImm16:
                     {
-                        operandA = $"[0x{ram.ReadWord(segment, offset):X4}]";
+                        operandA = $"[0x{machine.ReadWord(segment, offset):X4}]";
                         offset += 2;
                         break;
                     }
@@ -76,7 +76,7 @@ namespace Emulator
                     {
                         var regName = ParseRegisterName(iword & 0x000F);
                         offset += 1;
-                        var immValue = (short)-ram.ReadWord(segment, offset);
+                        var immValue = (short)-machine.ReadWord(segment, offset);
                         offset += 2;
                         if (immValue == 0)
                             operandA = $"[{regName}]";
@@ -96,29 +96,29 @@ namespace Emulator
                 switch (operand2Type)
                 {
                     case OperandType.Reg:
-                        operandB = ParseRegisterName(ram.ReadByte(segment, offset) & 0x0F);
+                        operandB = ParseRegisterName(machine.ReadByte(segment, offset) & 0x0F);
                         offset += 1;
                         break;
 
                     case OperandType.Imm16:
                     {
-                        operandB = $"0x{ram.ReadWord(segment, offset):X4}";
+                        operandB = $"0x{machine.ReadWord(segment, offset):X4}";
                         offset += 2;
                         break;
                     }
 
                     case OperandType.DerefImm16:
                     {
-                        operandB = $"[0x{ram.ReadWord(segment, offset):X4}]";
+                        operandB = $"[0x{machine.ReadWord(segment, offset):X4}]";
                         offset += 2;
                         break;
                     }
 
                     case OperandType.DerefRegPlusImm16:
                     {
-                        var regName = ParseRegisterName(ram.ReadByte(segment, offset) & 0x0F);
+                        var regName = ParseRegisterName(machine.ReadByte(segment, offset) & 0x0F);
                         offset += 1;
-                        var immValue = (short)-ram.ReadWord(segment, offset);
+                        var immValue = (short)-machine.ReadWord(segment, offset);
                         offset += 2;
                         if (immValue == 0)
                             operandB = $"[{regName}]";

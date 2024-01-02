@@ -23,13 +23,13 @@ namespace Emulator
 
         private ushort RegFireEveryXSeconds
         {
-            get => Machine.RAM.ReadWord(0, 0xFF80);
-            set => Machine.RAM.WriteWord(0, 0xFF80, value);
+            get => Machine.ReadWord(0, 0x7F80);
+            set => Machine.WriteWord(0, 0x7F80, value);
         }
         private bool RegIsFired
         {
-            get => Machine.RAM.ReadWord(0, 0xFF82) != 0;
-            set => Machine.RAM.WriteWord(0, 0xFF82, (ushort)(value ? 1 : 0));
+            get => Machine.ReadWord(0, 0x7F82) != 0;
+            set => Machine.WriteWord(0, 0x7F82, (ushort)(value ? 1 : 0));
         }
 
         private bool prevRegIsFired;
@@ -69,8 +69,8 @@ namespace Emulator
 
         private char OutChar
         {
-            get => (char)Machine.RAM.ReadWord(0, 0xFF84);
-            set => Machine.RAM.WriteWord(0, 0xFF84, (byte)value);
+            get => (char)Machine.ReadWord(0, 0xFF84);
+            set => Machine.WriteWord(0, 0xFF84, (byte)value);
         }
 
         public override void Initialize()

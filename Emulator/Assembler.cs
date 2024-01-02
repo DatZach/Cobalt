@@ -5,6 +5,7 @@
         private readonly Dictionary<string, short> labels = new();
         private readonly Dictionary<long, string> fixups = new();
         private Action<long>? resolveFixup1, resolveFixup2;
+        private int origin;
 
         private readonly Dictionary<string, MicrocodeRom.Opcode> opcodeMetadata;
 
@@ -15,6 +16,9 @@
 
         public byte[] AssembleSource(string source)
         {
+            var format = OutputFormat.Bin;
+            origin = 0;
+
             using var stream = new MemoryStream();
             using var writer = new BinaryWriter(stream);
 
@@ -60,6 +64,20 @@
                 int j = opcodeString.Length;
                 while (j < line.Length && char.IsWhiteSpace(line[j]))
                     ++j;
+
+                if (opcodeString == "FORMAT")
+                {
+                    var operandString = line[j..];
+                    format = Enum.Parse<OutputFormat>(operandString, true);
+                    continue;
+                }
+                else if (opcodeString == "ORIGIN")
+                {
+                    var operandString = line[j..].ToUpperInvariant();
+                    TryParseImm16(operandString, -1, out var sOrigin);
+                    origin = sOrigin & 0xFFFF;
+                    continue;
+                }
 
                 int operandCount = 0;
                 var commaIdx = line.IndexOf(',', j);
@@ -187,7 +205,7 @@
                     throw new AssemblyException(-1, $"Reference to undeclared label '{kvp.Value}'");
 
                 stream.Position = kvp.Key;
-                var imm16 = (ushort)address;
+                var imm16 = (ushort)(origin + address);
                 writer.Write((byte)(imm16 >> 8));
                 writer.Write((byte)(imm16 & 0xFF));
             }
@@ -302,14 +320,17 @@
                 if (sign == -1) throw new AssemblyException(-1, $"Label '{value}' cannot be negatively addressed");
 
                 if (labels.TryGetValue(value, out result))
+                {
+                    result += (short)origin;
                     return true;
+                }
 
                 void Fixup(long x) => fixups.Add(x, value);
                 if (operandIdx == 0)
                     resolveFixup1 = Fixup;
                 else if (operandIdx == 1)
                     resolveFixup2 = Fixup;
-                else
+                else if (operandIdx != -1)
                     throw new ArgumentOutOfRangeException(nameof(operandIdx), operandIdx, "Must be 0 or 1");
                 
                 result = -1;
@@ -328,5 +349,11 @@
         }
 
         private sealed record Operand(OperandType Type, short Data1 = 0, short Data2 = 0);
+
+        private enum OutputFormat
+        {
+            Bin,
+            Exe
+        }
     }
 }

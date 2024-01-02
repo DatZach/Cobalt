@@ -307,7 +307,7 @@ namespace EmulatorTests
 
         private void AssertState(string source, MachineState expectedState)
         {
-            var machine = new Machine(microcodeRom)
+            var machine = new Machine(microcodeRom, null)
             {
                 ShutdownWhenHalted = true,
                 DebugOutput = true
@@ -316,7 +316,7 @@ namespace EmulatorTests
             var assembler = new Assembler(microcodeRom);
             var program = assembler.AssembleSource("nop\n" + source + "\nhlt");
             for (ushort i = 0; i < program.Length; ++i)
-                machine.RAM.WriteByte(0, i, program[i]);
+                machine.WriteByte(0, i, program[i]);
 
             machine.Run();
 

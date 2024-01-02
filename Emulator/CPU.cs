@@ -24,7 +24,7 @@ namespace Emulator
         {
             this.machine = machine ?? throw new ArgumentNullException(nameof(machine));
             this.microcode = microcodeRom.Microcode;
-            this.disassembler = new Disassembler(microcodeRom, machine.RAM);
+            this.disassembler = new Disassembler(microcodeRom, machine);
             
             r0 = new Register();
             r1 = new Register();
@@ -36,7 +36,7 @@ namespace Emulator
             ds = new Register();
             ta = new Register();
             tb = new Register();
-            ip = new Register();
+            ip = new Register { Word = 0xF000 };
             flags = new Register();
             instruction = new Register();
             operand = new Register();
@@ -192,16 +192,16 @@ namespace Emulator
                 if (isRead) // Read
                 {
                     if ((cword & ControlWord.WORD) != 0) // 16-bit
-                        dbusWord = machine.RAM.ReadWord(seg, abusWord);
+                        dbusWord = machine.ReadWord(seg, abusWord);
                     else
-                        dbusWord = machine.RAM.ReadByte(seg, abusWord);
+                        dbusWord = machine.ReadByte(seg, abusWord);
                 }
                 else if (isWrite) // Write
                 {
                     if ((cword & ControlWord.WORD) != 0) // 16-bit
-                        machine.RAM.WriteWord(seg, abusWord, dbusWord);
+                        machine.WriteWord(seg, abusWord, dbusWord);
                     else
-                        machine.RAM.WriteByte(seg, abusWord, (byte)(dbusWord & 0xFF));
+                        machine.WriteByte(seg, abusWord, (byte)(dbusWord & 0xFF));
                 }
             }
 
