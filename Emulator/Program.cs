@@ -34,7 +34,8 @@
                 return;
             }
 
-            var machine = new Machine(microcodeRom, bootRom) { DebugOutput = true, ShutdownWhenHalted = true };
+            var machine = new Machine(microcodeRom, bootRom) { DebugOutput = true, ShutdownWhenHalted = false };
+            machine.AddDevice<VideoDevice>();
             machine.AddDevice<PITDevice>();
             //machine.AddDevice<TTLDevice>();
 

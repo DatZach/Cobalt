@@ -12,14 +12,10 @@ Main:
 	mov		[0x0000], IRQ	; We cannot disable interrupts, set this immediately!!
 	mov		sp, 0xEFF0		; Stack lives right below ROM space
 
-	mov		r0, 0x1234
+	mov		[0x1000], 0x4142
 	
-Loop:
-	jmp Loop
-
 	hlt
 
 IRQ:
-	mov r0, 0x4321
 	hlt
 	rti
