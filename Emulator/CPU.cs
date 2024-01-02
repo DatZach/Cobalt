@@ -7,10 +7,13 @@ namespace Emulator
     {
         private static readonly Register Constant1 = new() { Word = 1 };
         private static readonly Register Constant2 = new() { Word = 2 };
+        private const ushort iRTI_Hi = 0x08;
+        private const ushort iINT_Hi = 0x0C;
 
         public bool IsHalted { get; private set; }
 
         private int mci;
+        private bool latchINT;
 
         private readonly Register r0, r1, r2, r3, sp, ss, cs, ds, ta, tb, ip, flags, instruction, operand;
         private readonly Machine machine;
@@ -46,6 +49,16 @@ namespace Emulator
                 return;
 
             DoTick:
+            if (machine.IsInterruptAsserted && mci == 0 && !latchINT)
+            {
+                instruction.Word = iINT_Hi << 8;
+                mci = 1;
+            }
+            if (instruction.HiByte == iINT_Hi)
+                latchINT = true;
+            if (instruction.HiByte == iRTI_Hi && mci == 5 /* TAO TAI */)
+                latchINT = false;
+
             ushort dbusWord = 0;
             ushort abusWord = 0;
             ushort aluaWord = 0;

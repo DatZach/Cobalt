@@ -13,22 +13,39 @@ namespace Emulator
 
         public bool IsPowered { get; private set; }
 
+        public bool IsInterruptAsserted { get; private set; }
+
         public CPU CPU { get; }
 
         public RAM RAM { get; }
+
+        private readonly List<Device> devices;
+        public IReadOnlyList<Device> Devices => devices;
 
         public Machine(MicrocodeRom microcode)
         {
             ClockHz = 1_000_000;
             RAM = new RAM(16 * 1024 * 1024);
             CPU = new CPU(this, microcode);
+            devices = new List<Device>();
 
             IsPowered = true;
+        }
+
+        public void AddDevice<T>()
+            where T : Device, new()
+        {
+            var device = new T { Machine = this };
+            devices.Add(device);
         }
 
         public void Tick()
         {
             var isCpuHalted = CPU.IsHalted;
+
+            IsInterruptAsserted = false;
+            foreach (var device in devices)
+                IsInterruptAsserted |= device.Tick();
 
             CPU.Tick();
 
@@ -54,6 +71,9 @@ namespace Emulator
             double statTotalIterations = 0;
             double statTotalLoops = 0;
 
+            foreach (var device in devices)
+                device.Initialize();
+
             var sw = Stopwatch.StartNew();
             var lastTickTs = sw.ElapsedTicks;
             while (IsPowered) // && statTotalIterations < ClockHz)
@@ -76,6 +96,9 @@ namespace Emulator
             sw.Stop();
 
             statAvgIterationsPerLoop /= statTotalLoops;
+
+            foreach (var device in devices)
+                device.Shutdown();
 
             if (DebugOutput)
             {

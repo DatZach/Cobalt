@@ -53,7 +53,7 @@ namespace Emulator
             var rows = length / 16;
             for (int i = 0; i < rows; ++i)
             {
-                sb.Append($"{(i * 16):X4} ");
+                sb.Append($"{offset + (i * 16):X4} ");
                 for (int j = 0; j < 16; ++j)
                 {
                     var idx = i * 16 + j;
