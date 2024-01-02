@@ -36,7 +36,7 @@
 
             var machine = new Machine(microcodeRom, bootRom) { DebugOutput = true, ShutdownWhenHalted = false };
             machine.AddDevice<VideoDevice>();
-            machine.AddDevice<PITDevice>();
+            //machine.AddDevice<PITDevice>();
             //machine.AddDevice<TTLDevice>();
 
 //            var assembler = new Assembler(microcodeRom);

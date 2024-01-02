@@ -36,7 +36,7 @@ namespace Emulator
             if (renderer == IntPtr.Zero)
                 throw new Exception($"SDL Init Error - {SDL.SDL_GetError()}");
 
-            var _bmpFont = SDL.SDL_LoadBMP("BitmapFont.bmp");
+            var _bmpFont = SDL.SDL_LoadBMP("CobaltFont.bmp");
             bmpFont = SDL.SDL_CreateTextureFromSurface(renderer, _bmpFont);
         }
 
@@ -63,28 +63,28 @@ namespace Emulator
             SDL.SDL_RenderClear(renderer);
 
             var srcRect = new SDL.SDL_Rect();
+            srcRect.y = 12;
+            srcRect.w = GlyphWidth;
+            srcRect.h = GlyphHeight;
             var dstRect = new SDL.SDL_Rect();
+            dstRect.w = GlyphWidth;
+            dstRect.h = GlyphHeight;
 
             const int LinesPerPage = ResolutionHeight / GlyphHeight;
             const int GlyphsPerLine = ResolutionWidth / GlyphWidth;
-            const int Stride = 1;
+            const int Stride = 2;
             for (int y = 0; y < LinesPerPage; ++y)
             {
                 for (int x = 0; x < GlyphsPerLine; ++x)
                 {
                     var offset = y * GlyphsPerLine + x;
-                    var ch = Machine.ReadByte(0x0000, (ushort)(0x1000 + offset * Stride));
+                    var ch = Machine.ReadWord(0x0001, (ushort)(offset * Stride));
                     if (ch == 0)
                         continue;
 
-                    srcRect.x = (int)(ch - 'A') * GlyphWidth;
-                    srcRect.y = 0;
-                    srcRect.w = GlyphWidth;
-                    srcRect.h = GlyphHeight;
+                    srcRect.x = ch * GlyphWidth;
                     dstRect.x = x * GlyphWidth;
                     dstRect.y = y * GlyphHeight;
-                    dstRect.w = GlyphWidth;
-                    dstRect.h = GlyphHeight;
                     SDL.SDL_RenderCopy(renderer, bmpFont, ref srcRect, ref dstRect);
                 }
             }

@@ -9,15 +9,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Remove="BitmapFont.bmp" />
     <None Remove="Boot.cas" />
+    <None Remove="CobaltFont.bmp" />
     <None Remove="Microcode.cmc" />
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="BitmapFont.bmp">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
     <Content Include="Boot.cas">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
@@ -28,6 +25,12 @@
 
   <ItemGroup>
     <PackageReference Include="Sayers.SDL2.Core" Version="1.0.11" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="CobaltFont.bmp">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>
