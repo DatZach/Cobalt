@@ -14,7 +14,7 @@ namespace Emulator
         private const int LinesPerPage = ResolutionHeight / GlyphHeight;
         private const int GlyphsPerLine = ResolutionWidth / GlyphWidth;
         private const int Stride = 2;
-        private const int UserDefinedGlyphIndex = 0xED;
+        private const int UserDefinedGlyphIndex = 0xF0;
 
         public override string Name => "Video";
 
@@ -95,7 +95,7 @@ namespace Emulator
                     SDL.SDL_SetRenderDrawColor(renderer, r, g, b, 255);
                     SDL.SDL_RenderFillRect(renderer, ref dstRect);
 
-                    if (ch < UserDefinedGlyphIndex)
+                    if ((ch & 0xF0) != 0xF0)
                     {
                         IndexToRGB((byte)fg, out r, out g, out b);
                         SDL.SDL_SetTextureColorMod(bmpFont, r, g, b);
