@@ -216,11 +216,11 @@
         private (ushort, bool) ParseOpcode(int line, MicrocodeRom.Opcode metadata, int operandCount, OperandType operand1, OperandType operand2)
         {
             if (metadata.OperandCount != operandCount)
-                throw new AssemblyException(line, $"Opcode expected {metadata.OperandCount} operands, received {operandCount} instead");
+                throw new AssemblyException(line, $"Opcode '{metadata.Name}' expected {metadata.OperandCount} operands, received {operandCount} instead");
             var operandCombination = (byte)(((byte)operand1 << 4) | (byte)operand2);
             var operandCombinationIdx = metadata.OperandCombinations.FindIndex(x => (x & 0x7F) == operandCombination);
             if (operandCombinationIdx == -1)
-                throw new AssemblyException(line, $"Opcode does not support the operand combination {operand1}, {operand2}");
+                throw new AssemblyException(line, $"Opcode '{metadata.Name}' does not support the operand combination {operand1}, {operand2}");
 
             int result = 0;
 

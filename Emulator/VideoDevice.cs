@@ -1,4 +1,5 @@
-﻿using SDL2;
+﻿using System.Diagnostics;
+using SDL2;
 
 namespace Emulator
 {
@@ -6,12 +7,18 @@ namespace Emulator
     {
         private const int ResolutionWidth = 640;
         private const int ResolutionHeight = 480;
+        private const int ScreenHz = 60;
         private const int Scale = 1;
         private const int GlyphWidth = 8;
         private const int GlyphHeight = 12;
+        private const int LinesPerPage = ResolutionHeight / GlyphHeight;
+        private const int GlyphsPerLine = ResolutionWidth / GlyphWidth;
+        private const int Stride = 2;
+        private const int UserDefinedGlyphIndex = 0xED;
 
         public override string Name => "Video";
 
+        private DateTime lastFrameTime;
         private IntPtr window;
         private IntPtr renderer;
         private IntPtr bmpFont;
@@ -59,9 +66,68 @@ namespace Emulator
                 }
             }
 
+            var nowFrameTime = DateTime.UtcNow;
+            if ((nowFrameTime - lastFrameTime).Milliseconds < 1000 / ScreenHz)
+                return false;
+            lastFrameTime = nowFrameTime;
+
             SDL.SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
             SDL.SDL_RenderClear(renderer);
 
+            var srcRect = new SDL.SDL_Rect { y = 12, w = GlyphWidth, h = GlyphHeight };
+            var dstRect = new SDL.SDL_Rect { w = GlyphWidth, h = GlyphHeight };
+            for (int y = 0; y < LinesPerPage; ++y)
+            {
+                for (int x = 0; x < GlyphsPerLine; ++x)
+                {
+                    var offset = (ushort)((y * GlyphsPerLine + x) * Stride);
+                    var value = Machine.ReadWord(0x0001, offset);
+                    var ch = value & 0x00FF;
+                    var fg = (value & 0x0F00) >> 8;
+                    var bg = (value & 0xF000) >> 12;
+                    byte r, g, b;
+
+                    srcRect.x = ch * GlyphWidth;
+                    dstRect.x = x * GlyphWidth;
+                    dstRect.y = y * GlyphHeight;
+
+                    IndexToRGB((byte)bg, out r, out g, out b);
+                    SDL.SDL_SetRenderDrawColor(renderer, r, g, b, 255);
+                    SDL.SDL_RenderFillRect(renderer, ref dstRect);
+
+                    if (ch < UserDefinedGlyphIndex)
+                    {
+                        IndexToRGB((byte)fg, out r, out g, out b);
+                        SDL.SDL_SetTextureColorMod(bmpFont, r, g, b);
+                        SDL.SDL_RenderCopy(renderer, bmpFont, ref srcRect, ref dstRect);
+                    }
+                    else
+                    {
+                        for (int yy = 0; yy < GlyphHeight; ++yy)
+                        {
+                            for (int xx = 0; xx < GlyphWidth; ++xx)
+                            {
+                                offset = (ushort)((ch - UserDefinedGlyphIndex) * (GlyphWidth * GlyphHeight) + 0x1900);
+                                var col = Machine.ReadByte(0x0001, offset);
+                                IndexToRGB(col, out r, out g, out b);
+                                SDL.SDL_SetRenderDrawColor(renderer, r, g, b, 255);
+                                SDL.SDL_RenderDrawPoint(renderer, dstRect.x + xx, dstRect.y + yy);
+                            }
+                        }
+                    }
+                }
+            }
+
+            //RenderColorSpace();
+            
+            SDL.SDL_RenderPresent(renderer);
+
+            return false;
+        }
+
+        [Conditional("DEBUG")]
+        private void RenderColorSpace()
+        {
             var srcRect = new SDL.SDL_Rect();
             srcRect.y = 12;
             srcRect.w = GlyphWidth;
@@ -70,28 +136,78 @@ namespace Emulator
             dstRect.w = GlyphWidth;
             dstRect.h = GlyphHeight;
 
-            const int LinesPerPage = ResolutionHeight / GlyphHeight;
-            const int GlyphsPerLine = ResolutionWidth / GlyphWidth;
-            const int Stride = 2;
+            int c = 0;
             for (int y = 0; y < LinesPerPage; ++y)
             {
                 for (int x = 0; x < GlyphsPerLine; ++x)
                 {
-                    var offset = y * GlyphsPerLine + x;
-                    var ch = Machine.ReadWord(0x0001, (ushort)(offset * Stride));
-                    if (ch == 0)
-                        continue;
+                    var v = c++;
+                    if (v >= 256)
+                        break;
 
-                    srcRect.x = ch * GlyphWidth;
-                    dstRect.x = x * GlyphWidth;
-                    dstRect.y = y * GlyphHeight;
-                    SDL.SDL_RenderCopy(renderer, bmpFont, ref srcRect, ref dstRect);
+                    IndexToRGB((byte)v, out var r, out var g, out var b);
+                    SDL.SDL_SetRenderDrawColor(renderer, r, g, b, 255);
+                    dstRect.x = x * 8;
+                    dstRect.y = y * 8;
+                    dstRect.w = 8;
+                    dstRect.h = 8;
+                    SDL.SDL_RenderFillRect(renderer, ref dstRect);
                 }
             }
 
-            SDL.SDL_RenderPresent(renderer);
+            c = 0;
+            for (; c <= 0xF; ++c)
+            {
+                // VBGR -> VB_VGG_VRR
+                var iv = (c & 0b1000) >> 3;
+                var ib = (c & 0b0100) >> 2;
+                var ig = (c & 0b0010) >> 1;
+                var ir = (c & 0b0001) >> 0;
+                var v = (byte)(
+                      (iv << 7)
+                    | (ib << 6)
+                    | (ib << 5)
+                    | (iv << 4)
+                    | (ig << 3)
+                    | (ig << 2)
+                    | (iv << 1)
+                    | (ir << 0)
+                );
+                IndexToRGB((byte)v, out var r, out var g, out var b);
+                SDL.SDL_SetRenderDrawColor(renderer, r, g, b, 255);
+                dstRect.x = c * 8;
+                dstRect.y = 16 * 8;
+                dstRect.w = 8;
+                dstRect.h = 8;
+                SDL.SDL_RenderFillRect(renderer, ref dstRect);
+            }
 
-            return false;
+            c = 0;
+            for (; c <= 0b111; ++c)
+            {
+                // VRGB -> VR_VGG_VBB
+                var v = (byte)(
+                        (((c & 0b110) >> 1) << 6)
+                      | (((c & 0b110) >> 1) << 4)
+                      | (((c & 0b110) >> 1) << 1)
+                );
+                IndexToRGB((byte)v, out var r, out var g, out var b);
+                SDL.SDL_SetRenderDrawColor(renderer, r, g, b, 255);
+                dstRect.x = c * 8;
+                dstRect.y = 24 * 8;
+                dstRect.w = 8;
+                dstRect.h = 8;
+                SDL.SDL_RenderFillRect(renderer, ref dstRect);
+            }
+        }
+
+        private static void IndexToRGB(byte c, out byte r, out byte g, out byte b)
+        {
+            var lo = (int)(255 * 0.15); // 0.33
+            var hi = (int)(255 * 0.95); // 0.90
+            r = (byte)(((c & 0b00_000_111) >> 0) * ((hi - lo) / 0b111) + lo);
+            g = (byte)(((c & 0b00_111_000) >> 3) * ((hi - lo) / 0b111) + lo);
+            b = (byte)(((c & 0b11_000_000) >> 6) * ((hi - lo) / 0b11) + lo);
         }
     }
 }
