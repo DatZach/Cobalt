@@ -78,6 +78,39 @@
                     origin = sOrigin & 0xFFFF;
                     continue;
                 }
+                else if (opcodeString == "DB")
+                {
+                    var operandString = line;
+                    if (operandString[j] == '"' && operandString[^1] == '"')
+                    {
+                        while (++j < operandString.Length - 1)
+                        {
+                            var ch = operandString[j];
+                            if (ch == '^')
+                            {
+                                ch = operandString[++j] switch
+                                {
+                                    '0' => '\0',
+                                    'b' => '\b',
+                                    'r' => '\r',
+                                    'n' => '\n',
+                                    't' => '\t',
+                                    '^' => '^',
+                                    _ => throw new Exception($"Illegal escape code '{operandString[j]}'")
+                                };
+                            }
+
+                            writer.Write((byte)ch);
+                        }
+                    }
+                    else
+                    {
+                        operandString = operandString[j..];
+                        TryParseImm16(operandString, -1, out var result);
+                        writer.Write((byte)(result & 0xFF));
+                    }
+                    continue;
+                }
 
                 int operandCount = 0;
                 var commaIdx = line.IndexOf(',', j);
@@ -108,7 +141,7 @@
                 if (!opcodeMetadata.TryGetValue(opcodeString, out var metadata))
                     throw new AssemblyException(i, $"Unknown opcode '{opcodeString}'");
 
-                var (opcode, operandOrder) = ParseOpcode(j, metadata, operandCount, operand1.Type, operand2.Type);
+                var (opcode, operandOrder) = ParseOpcode(i, metadata, operandCount, operand1.Type, operand2.Type);
 
                 Operand? operandB, operandA;
                 Action<long>? resolveFixupB, resolveFixupA;
@@ -125,7 +158,7 @@
                         operandB = operand1; resolveFixupB = resolveFixup1;
                     }
                     else
-                        throw new AssemblyException(j, $"Illegal operand direction specified in metadata '{opcodeString}'");
+                        throw new AssemblyException(i, $"Illegal operand direction specified in metadata '{opcodeString}'");
                 }
                 else if (operandCount == 1)
                 {
@@ -140,7 +173,8 @@
 
                 if (operandA != null)
                 {
-                    if (operandA.Type == OperandType.Reg || operandA.Type == OperandType.DerefWordRegPlusImm16)
+                    if (operandA.Type is OperandType.Reg or OperandType.DerefWordRegPlusImm16
+                                      or OperandType.DerefByteRegPlusImm16)
                         opcode |= (ushort)(operandA.Data1 & 0x000F);
                 }
 

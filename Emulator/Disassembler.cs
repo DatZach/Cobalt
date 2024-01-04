@@ -79,7 +79,7 @@ namespace Emulator
                     {
                         var busWidthName = operand1Type == OperandType.DerefWordRegPlusImm16 ? "WORD" : "BYTE";
                         var regName = ParseRegisterName(iword & 0x000F);
-                        offset += 1;
+                        //offset += 1;
                         var immValue = (short)-machine.ReadWord(segment, offset);
                         offset += 2;
                         if (immValue == 0)
@@ -115,7 +115,7 @@ namespace Emulator
                     case OperandType.DerefWordImm16:
                     case OperandType.DerefByteImm16:
                     {
-                        var busWidthName = operand1Type == OperandType.DerefWordImm16 ? "WORD" : "BYTE";
+                        var busWidthName = operand2Type == OperandType.DerefWordImm16 ? "WORD" : "BYTE";
                         operandB = $"{busWidthName} [0x{machine.ReadWord(segment, offset):X4}]";
                         offset += 2;
                         break;
@@ -124,7 +124,7 @@ namespace Emulator
                     case OperandType.DerefWordRegPlusImm16:
                     case OperandType.DerefByteRegPlusImm16:
                     {
-                        var busWidthName = operand1Type == OperandType.DerefWordRegPlusImm16 ? "WORD" : "BYTE";
+                        var busWidthName = operand2Type == OperandType.DerefWordRegPlusImm16 ? "WORD" : "BYTE";
                         var regName = ParseRegisterName(machine.ReadByte(segment, offset) & 0x0F);
                         offset += 1;
                         var immValue = (short)-machine.ReadWord(segment, offset);

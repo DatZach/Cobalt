@@ -64,9 +64,9 @@ namespace Emulator
                     if (operandCount == 1)
                     {
                         var operand1 = ParseOperand(parts[3], i);
-                        var hasZF = parts.Contains("+ZF") ? 0x0200 : 0;
-                        var hasCF = parts.Contains("+CF") ? 0x0100 : 0;
-                        var hasSF = parts.Contains("+SF") ? 0x0080 : 0;
+                        var hasZF = parts.Contains("+ZF") ? 0x0040 : 0;
+                        var hasCF = parts.Contains("+CF") ? 0x0020 : 0;
+                        var hasSF = parts.Contains("+SF") ? 0x0010 : 0;
                         isWildcard = parts[4] == "*";
                         
                         opcode |= 0x8000;
@@ -595,7 +595,7 @@ namespace Emulator
                 sb.Append("II ");
             else if ((cw & ControlWord.MASK_IR) == ControlWord.OI)
                 sb.Append("OI ");
-            else if ((cw & ControlWord.MASK_IR) == ControlWord.OI)
+            else if ((cw & ControlWord.MASK_IR) == ControlWord.FI)
                 sb.Append("FI ");
 
             if ((cw & ControlWord.JMP) != 0)
@@ -619,7 +619,7 @@ namespace Emulator
         public AssemblyException(int line, string message)
             : base(message)
         {
-            Line = line;
+            Line = line + 1;
         }
     }
 }
