@@ -263,8 +263,10 @@ namespace Emulator
             {
                 "REG" => OperandType.Reg,
                 "IMM16" => OperandType.Imm16,
-                "[REG+IMM16]" => OperandType.DerefRegPlusImm16,
-                "[IMM16]" => OperandType.DerefImm16,
+                "[REG+IMM16]" => OperandType.DerefWordRegPlusImm16,
+                "[IMM16]" => OperandType.DerefWordImm16,
+                "BYTE[REG+IMM16]" => OperandType.DerefByteRegPlusImm16,
+                "BYTE[IMM16]" => OperandType.DerefByteImm16,
                 _ => throw new AssemblyException(line, $"Illegal operand: {value}")
             };
         }
@@ -299,8 +301,10 @@ namespace Emulator
         None,
         Reg = 2,
         Imm16,
-        DerefRegPlusImm16,
-        DerefImm16
+        DerefWordRegPlusImm16,
+        DerefWordImm16,
+        DerefByteRegPlusImm16,
+        DerefByteImm16
     }
 
     public sealed class MicrocodeRom

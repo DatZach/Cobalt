@@ -6,16 +6,31 @@
 format bin
 origin 0xF000
 
-nop							; Required for CPU boot
+nop								; Required for CPU boot
 
 Main:
-	mov		[0x0000], IRQ	; We cannot disable interrupts, set this immediately!!
-	mov		sp, 0xEFF0		; Stack lives right below ROM space
+	mov		word [0x0000], IRQ	; We cannot disable interrupts, set this immediately!!
+	mov		sp, 0xEFF0			; Stack lives right below ROM space
 
 	mov		ds, 0x0001
 
+	mov		byte [0x0000], 0x0F
+	mov		byte [0x0001], 'C
+	mov		byte [0x0002], 0x0E
+	mov		byte [0x0003], 'O
+	mov		byte [0x0004], 0x0D
+	mov		byte [0x0005], 'B
+	mov		byte [0x0006], 0x0C
+	mov		byte [0x0007], 'A
+	mov		byte [0x0008], 0x0B
+	mov		byte [0x0009], 'L
+	mov		byte [0x000A], 0x0A
+	mov		byte [0x000B], 'T
+
+	hlt
+
 	mov		r0, 0x2400
-	mov		r2, 0x0000
+	mov		r2, 0x000C
 	mov		r3, 0xFF
 Loop:
 	mov		[r2], r0
@@ -41,21 +56,6 @@ Done2:
 	add		r0, 5
 	jmp		Res
 
-
-	;mov		[0x0000], 0x48
-	;mov		[0x0002], 0x65
-	;mov		[0x0004], 0x6c
-	;mov		[0x0006], 0x6c
-	;mov		[0x0008], 0x6f
-	;mov		[0x000A], 0x2c
-	;mov		[0x000C], 0x20
-	;mov		[0x000E], 0x57
-	;mov		[0x0010], 0x6f
-	;mov		[0x0012], 0x72
-	;mov		[0x0014], 0x6c
-	;mov		[0x0016], 0x64
-	;mov		[0x0018], 0x21
-	
 	hlt
 
 IRQ:

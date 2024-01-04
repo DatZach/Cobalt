@@ -140,7 +140,7 @@
 
                 if (operandA != null)
                 {
-                    if (operandA.Type == OperandType.Reg || operandA.Type == OperandType.DerefRegPlusImm16)
+                    if (operandA.Type == OperandType.Reg || operandA.Type == OperandType.DerefWordRegPlusImm16)
                         opcode |= (ushort)(operandA.Data1 & 0x000F);
                 }
 
@@ -154,14 +154,16 @@
                     switch (operandA.Type)
                     {
                         case OperandType.Imm16:
-                        case OperandType.DerefImm16:
+                        case OperandType.DerefWordImm16:
+                        case OperandType.DerefByteImm16:
                         {
                             var imm16 = (ushort)operandA.Data1;
                             writer.Write((byte)(imm16 >> 8));
                             writer.Write((byte)(imm16 & 0xFF));
                             break;
                         }
-                        case OperandType.DerefRegPlusImm16:
+                        case OperandType.DerefWordRegPlusImm16:
+                        case OperandType.DerefByteRegPlusImm16:
                         {
                             var imm16 = (ushort)operandA.Data2;
                             writer.Write((byte)(imm16 >> 8));
@@ -180,14 +182,16 @@
                             writer.Write((byte)operandB.Data1);
                             break;
                         case OperandType.Imm16:
-                        case OperandType.DerefImm16:
+                        case OperandType.DerefWordImm16:
+                        case OperandType.DerefByteImm16:
                         {
                             var imm16 = (ushort)operandB.Data1;
                             writer.Write((byte)(imm16 >> 8));
                             writer.Write((byte)(imm16 & 0xFF));
                             break;
                         }
-                        case OperandType.DerefRegPlusImm16:
+                        case OperandType.DerefWordRegPlusImm16:
+                        case OperandType.DerefByteRegPlusImm16:
                         {
                             writer.Write((byte)operandB.Data1);
                             var imm16 = (ushort)operandB.Data2;
@@ -243,6 +247,13 @@
             if (string.IsNullOrEmpty(operand))
                 return new Operand(OperandType.None);
 
+            // CHARACTERS
+            if (operand.Length >= 2 && operand[0] == '\'')
+            {
+                // TODO Escape codes '^n
+                return new Operand(OperandType.Imm16, (short)operand[1]);
+            }
+
             // REG
             if ((data1 = ParseRegisterIndex(operand)) != -1)
                 return new Operand(OperandType.Reg, data1);
@@ -252,7 +263,23 @@
                 return new Operand(OperandType.Imm16, data1);
 
             // [REG+IMM16] / [IMM16]
-            if (operand[0] == '[' && operand[^1] == ']')
+            bool isByte;
+            if (operand.StartsWith("BYTE"))
+            {
+                operand = operand[4..];
+                isByte = true;
+            }
+            else if (operand.StartsWith("WORD"))
+            {
+                operand = operand[4..];
+                isByte = false;
+            }
+            else
+                isByte = false;
+            while (operand[0] is ' ' or '\t')
+                operand = operand[1..];
+            
+            if (operand.Length >= 2 && operand[0] == '[' && operand[^1] == ']')
             {
                 int signIdx = operand.IndexOfAny(SignChars);
                 var indOperand = operand.Substring(1, operand.Length - 2);
@@ -274,12 +301,16 @@
                     else
                         data2 = 0;
 
-                    return new Operand(OperandType.DerefRegPlusImm16, data1, data2);
+                    var operandType = isByte ? OperandType.DerefByteRegPlusImm16 : OperandType.DerefWordRegPlusImm16;
+                    return new Operand(operandType, data1, data2);
                 }
 
                 // [IMM16]
                 if (TryParseImm16(indOperand, operandIdx, out data1))
-                    return new Operand(OperandType.DerefImm16, data1);
+                {
+                    var operandType = isByte ? OperandType.DerefByteImm16 : OperandType.DerefWordImm16;
+                    return new Operand(operandType, data1);
+                }
             }
 
             throw new AssemblyException(line, $"Illegal operand '{operand}'");
@@ -315,7 +346,8 @@
                 return true;
             }
 
-            if (char.IsLetter(value[0]) || value[0] == '_')
+            if ((char.IsLetter(value[0]) || value[0] == '_')
+            &&  !value.StartsWith("WORD") && !value.StartsWith("BYTE"))
             {
                 if (sign == -1) throw new AssemblyException(-1, $"Label '{value}' cannot be negatively addressed");
 

@@ -8,7 +8,7 @@ namespace Emulator
         private const int ResolutionWidth = 640;
         private const int ResolutionHeight = 480;
         private const int ScreenHz = 60;
-        private const int Scale = 1;
+        private const int Scale = 2;
         private const int GlyphWidth = 8;
         private const int GlyphHeight = 12;
         private const int LinesPerPage = ResolutionHeight / GlyphHeight;
@@ -21,7 +21,7 @@ namespace Emulator
         private DateTime lastFrameTime;
         private IntPtr window;
         private IntPtr renderer;
-        private IntPtr bmpFont;
+        private IntPtr texFont;
 
         public override void Initialize()
         {
@@ -43,8 +43,8 @@ namespace Emulator
             if (renderer == IntPtr.Zero)
                 throw new Exception($"SDL Init Error - {SDL.SDL_GetError()}");
 
-            var _bmpFont = SDL.SDL_LoadBMP("CobaltFont.bmp");
-            bmpFont = SDL.SDL_CreateTextureFromSurface(renderer, _bmpFont);
+            var surfFont = SDL.SDL_LoadBMP("CobaltFont.bmp");
+            texFont = SDL.SDL_CreateTextureFromSurface(renderer, surfFont);
         }
 
         public override void Shutdown()
@@ -74,8 +74,8 @@ namespace Emulator
             SDL.SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
             SDL.SDL_RenderClear(renderer);
 
-            var srcRect = new SDL.SDL_Rect { y = 12, w = GlyphWidth, h = GlyphHeight };
-            var dstRect = new SDL.SDL_Rect { w = GlyphWidth, h = GlyphHeight };
+            var srcRect = new SDL.SDL_Rect { y = 0, w = GlyphWidth, h = GlyphHeight };
+            var dstRect = new SDL.SDL_Rect { w = GlyphWidth * Scale, h = GlyphHeight * Scale };
             for (int y = 0; y < LinesPerPage; ++y)
             {
                 for (int x = 0; x < GlyphsPerLine; ++x)
@@ -88,18 +88,18 @@ namespace Emulator
                     byte r, g, b;
 
                     srcRect.x = ch * GlyphWidth;
-                    dstRect.x = x * GlyphWidth;
-                    dstRect.y = y * GlyphHeight;
+                    dstRect.x = x * GlyphWidth * Scale;
+                    dstRect.y = y * GlyphHeight * Scale;
 
-                    IndexToRGB((byte)bg, out r, out g, out b);
+                    IndexedColorToRGB((byte)bg, out r, out g, out b);
                     SDL.SDL_SetRenderDrawColor(renderer, r, g, b, 255);
                     SDL.SDL_RenderFillRect(renderer, ref dstRect);
 
                     if ((ch & 0xF0) != 0xF0)
                     {
-                        IndexToRGB((byte)fg, out r, out g, out b);
-                        SDL.SDL_SetTextureColorMod(bmpFont, r, g, b);
-                        SDL.SDL_RenderCopy(renderer, bmpFont, ref srcRect, ref dstRect);
+                        IndexedColorToRGB((byte)fg, out r, out g, out b);
+                        SDL.SDL_SetTextureColorMod(texFont, r, g, b);
+                        SDL.SDL_RenderCopy(renderer, texFont, ref srcRect, ref dstRect);
                     }
                     else
                     {
@@ -109,7 +109,7 @@ namespace Emulator
                             {
                                 offset = (ushort)((ch - UserDefinedGlyphIndex) * (GlyphWidth * GlyphHeight) + 0x1900);
                                 var col = Machine.ReadByte(0x0001, offset);
-                                IndexToRGB(col, out r, out g, out b);
+                                PackedByteToRGB(col, out r, out g, out b);
                                 SDL.SDL_SetRenderDrawColor(renderer, r, g, b, 255);
                                 SDL.SDL_RenderDrawPoint(renderer, dstRect.x + xx, dstRect.y + yy);
                             }
@@ -145,7 +145,7 @@ namespace Emulator
                     if (v >= 256)
                         break;
 
-                    IndexToRGB((byte)v, out var r, out var g, out var b);
+                    PackedByteToRGB((byte)v, out var r, out var g, out var b);
                     SDL.SDL_SetRenderDrawColor(renderer, r, g, b, 255);
                     dstRect.x = x * 8;
                     dstRect.y = y * 8;
@@ -158,22 +158,7 @@ namespace Emulator
             c = 0;
             for (; c <= 0xF; ++c)
             {
-                // VBGR -> VB_VGG_VRR
-                var iv = (c & 0b1000) >> 3;
-                var ib = (c & 0b0100) >> 2;
-                var ig = (c & 0b0010) >> 1;
-                var ir = (c & 0b0001) >> 0;
-                var v = (byte)(
-                      (iv << 7)
-                    | (ib << 6)
-                    | (ib << 5)
-                    | (iv << 4)
-                    | (ig << 3)
-                    | (ig << 2)
-                    | (iv << 1)
-                    | (ir << 0)
-                );
-                IndexToRGB((byte)v, out var r, out var g, out var b);
+                IndexedColorToRGB((byte)c, out var r, out var g, out var b);
                 SDL.SDL_SetRenderDrawColor(renderer, r, g, b, 255);
                 dstRect.x = c * 8;
                 dstRect.y = 16 * 8;
@@ -191,7 +176,7 @@ namespace Emulator
                       | (((c & 0b110) >> 1) << 4)
                       | (((c & 0b110) >> 1) << 1)
                 );
-                IndexToRGB((byte)v, out var r, out var g, out var b);
+                PackedByteToRGB((byte)v, out var r, out var g, out var b);
                 SDL.SDL_SetRenderDrawColor(renderer, r, g, b, 255);
                 dstRect.x = c * 8;
                 dstRect.y = 24 * 8;
@@ -201,13 +186,34 @@ namespace Emulator
             }
         }
 
-        private static void IndexToRGB(byte c, out byte r, out byte g, out byte b)
+        private static void IndexedColorToRGB(byte idx, out byte r, out byte g, out byte b)
+        {
+            // VBGR -> VBB_VGG_VR
+            var iv = (idx & 0b1000) >> 3;
+            var ib = (idx & 0b0100) >> 2;
+            var ig = (idx & 0b0010) >> 1;
+            var ir = (idx & 0b0001) >> 0;
+            var v = (byte)(
+                  (iv << 7)
+                | (ib << 6)
+                | (ib << 5)
+                | (iv << 4)
+                | (ig << 3)
+                | (ig << 2)
+                | (iv << 1)
+                | (ir << 0)
+            );
+
+            PackedByteToRGB(v, out r, out g, out b);
+        }
+
+        private static void PackedByteToRGB(byte v, out byte r, out byte g, out byte b)
         {
             var lo = (int)(255 * 0.15); // 0.33
             var hi = (int)(255 * 0.95); // 0.90
-            r = (byte)(((c & 0b00_000_111) >> 0) * ((hi - lo) / 0b111) + lo);
-            g = (byte)(((c & 0b00_111_000) >> 3) * ((hi - lo) / 0b111) + lo);
-            b = (byte)(((c & 0b11_000_000) >> 6) * ((hi - lo) / 0b11) + lo);
+            r = (byte)(((v & 0b00_000_111) >> 0) * ((hi - lo) / 0b111) + lo);
+            g = (byte)(((v & 0b00_111_000) >> 3) * ((hi - lo) / 0b111) + lo);
+            b = (byte)(((v & 0b11_000_000) >> 6) * ((hi - lo) / 0b11) + lo);
         }
     }
 }
