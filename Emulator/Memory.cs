@@ -8,6 +8,9 @@ namespace Emulator
 
         public bool IsReadOnly { get; set; }
 
+        public delegate void OnReadDel(ushort segment, ushort offset, byte size);
+        public event OnReadDel OnRead;
+
         private readonly byte[] data;
 
         public Memory(int size)
@@ -15,11 +18,20 @@ namespace Emulator
             data = new byte[size];
         }
 
-        public byte ReadByte(ushort segment, ushort offset) => data[ToCanonicalAddress(segment, offset)];
+        public byte ReadByte(ushort segment, ushort offset)
+        {
+            OnRead?.Invoke(segment, offset, 1);
+            return data[ToCanonicalAddress(segment, offset)];
+        }
 
-        public ushort ReadWord(ushort segment, ushort offset) =>
-            (ushort)((data[ToCanonicalAddress(segment, (ushort)(offset + 0))] << 8)
-                    | data[ToCanonicalAddress(segment, (ushort)(offset + 1))]);
+        public ushort ReadWord(ushort segment, ushort offset)
+        {
+            OnRead?.Invoke(segment, offset, 2);
+            return (ushort)(
+                (data[ToCanonicalAddress(segment, (ushort)(offset + 0))] << 8)
+               | data[ToCanonicalAddress(segment, (ushort)(offset + 1))]
+            );
+        }
 
         public void WriteByte(ushort segment, ushort offset, byte value)
         {

@@ -34,8 +34,9 @@
                 return;
             }
 
-            var machine = new Machine(microcodeRom, bootRom) { DebugOutput = false, ShutdownWhenHalted = false };
+            var machine = new Machine(microcodeRom, bootRom) { DebugOutput = true, ShutdownWhenHalted = false };
             machine.AddDevice<VideoDevice>();
+            machine.AddDevice<KeyboardDevice>();
             //machine.AddDevice<PITDevice>();
             //machine.AddDevice<TTLDevice>();
 
@@ -69,7 +70,9 @@
 
 //            File.WriteAllBytes(@"C:\\Temp\Program.bin", program);
 
+            machine.Initialize();
             machine.Run();
+            machine.Shutdown();
 
             Console.WriteLine("Execution complete");
             Console.ReadKey();

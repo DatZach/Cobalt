@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Text;
+using SDL2;
 
 namespace Emulator
 {
@@ -49,6 +50,23 @@ namespace Emulator
             return devices.FirstOrDefault(x => x is T) as T;
         }
 
+        public void Initialize()
+        {
+            if (SDL.SDL_Init(SDL.SDL_INIT_VIDEO | SDL.SDL_INIT_EVENTS) < 0)
+                throw new Exception($"SDL Init Error - {SDL.SDL_GetError()}");
+
+            foreach (var device in devices)
+                device.Initialize();
+        }
+
+        public void Shutdown()
+        {
+            foreach (var device in devices)
+                device.Shutdown();
+
+            SDL.SDL_Quit();
+        }
+
         public void Run()
         {
             const int TicksPerMs = 10000; // From Stopwatch class
@@ -57,9 +75,6 @@ namespace Emulator
             double statAvgIterationsPerLoop = 0;
             double statTotalIterations = 0;
             double statTotalLoops = 0;
-
-            foreach (var device in devices)
-                device.Initialize();
 
             var sw = Stopwatch.StartNew();
             var lastTickTs = sw.ElapsedTicks;
@@ -84,9 +99,6 @@ namespace Emulator
 
             statAvgIterationsPerLoop /= statTotalLoops;
 
-            foreach (var device in devices)
-                device.Shutdown();
-
             if (DebugOutput)
             {
                 Console.WriteLine(
@@ -102,6 +114,18 @@ namespace Emulator
         private void Tick()
         {
             var isCpuHalted = CPU.IsHalted;
+
+            while (SDL.SDL_PollEvent(out var ev) == 1)
+            {
+                if (ev.type == SDL.SDL_EventType.SDL_QUIT)
+                {
+                    IsPowered = false;
+                    break;
+                }
+
+                foreach (var device in devices)
+                    device.DispatchEvent(ev);
+            }
 
             IsInterruptAsserted = false;
             foreach (var device in devices)
@@ -169,6 +193,7 @@ namespace Emulator
                         continue;
 
                     segment -= 0xC000;
+                    offset -= (ushort)device.DevAddrLo;
                     memory = device.Memory!;
                     return;
                 }

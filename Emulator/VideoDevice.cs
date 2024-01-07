@@ -19,9 +19,7 @@ namespace Emulator
         public override string Name => "Video";
 
         public override Memory? Memory { get; } = new (0xFFFF);
-
         public override short DevAddrLo => -1;
-
         public override short DevAddrHi => -1;
 
         private DateTime lastFrameTime;
@@ -31,9 +29,6 @@ namespace Emulator
 
         public override void Initialize()
         {
-            if (SDL.SDL_Init(SDL.SDL_INIT_VIDEO) < 0)
-                throw new Exception($"SDL Init Error - {SDL.SDL_GetError()}");
-
             window = SDL.SDL_CreateWindow(
                 "Cobalt",
                 SDL.SDL_WINDOWPOS_UNDEFINED,
@@ -57,21 +52,10 @@ namespace Emulator
         {
             SDL.SDL_DestroyRenderer(renderer);
             SDL.SDL_DestroyWindow(window);
-            SDL.SDL_Quit();
         }
 
         public override bool Tick()
         {
-            while (SDL.SDL_PollEvent(out var ev) == 1)
-            {
-                switch (ev.type)
-                {
-                    case SDL.SDL_EventType.SDL_QUIT:
-                        Environment.Exit(0);
-                        break;
-                }
-            }
-
             var nowFrameTime = DateTime.UtcNow;
             if ((nowFrameTime - lastFrameTime).Milliseconds < 1000 / ScreenHz)
                 return false;
@@ -129,6 +113,11 @@ namespace Emulator
             SDL.SDL_RenderPresent(renderer);
 
             return false;
+        }
+
+        public override void DispatchEvent(SDL.SDL_Event ev)
+        {
+            // NOTE Nothing to do
         }
 
         [Conditional("DEBUG")]

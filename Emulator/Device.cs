@@ -1,4 +1,6 @@
-﻿namespace Emulator
+﻿using SDL2;
+
+namespace Emulator
 {
     public abstract class Device
     {
@@ -17,5 +19,7 @@
         public abstract void Shutdown();
 
         public abstract bool Tick();
+
+        public abstract void DispatchEvent(SDL.SDL_Event ev);
     }
 }

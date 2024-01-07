@@ -95,6 +95,7 @@
                                     'r' => '\r',
                                     'n' => '\n',
                                     't' => '\t',
+                                    '"' => '\"',
                                     '^' => '^',
                                     _ => throw new Exception($"Illegal escape code '{operandString[j]}'")
                                 };
@@ -109,6 +110,14 @@
                         TryParseImm16(operandString, -1, out var result);
                         writer.Write((byte)(result & 0xFF));
                     }
+                    continue;
+                }
+                else if (opcodeString == "DW")
+                {
+                    var operandString = line[j..];
+                    TryParseImm16(operandString, -1, out var result);
+                    writer.Write((byte)(result >> 8));
+                    writer.Write((byte)(result & 0xFF));
                     continue;
                 }
 

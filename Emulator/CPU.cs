@@ -239,6 +239,8 @@ namespace Emulator
                     if (flags.Word == 0)
                         mci = (int)(cword & ControlWord.MASK_OPR) >> 16;
                 }
+                else if (ricword == ControlWord.FS)
+                    flags.Word = dbusWord;
                 else
                     throw new InvalidOperationException();
             }

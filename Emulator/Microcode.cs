@@ -470,7 +470,7 @@ namespace Emulator
         TBI     = 0xC00,
         SPI     = 0x1000,
         JNF     = 0x1400,
-        RI_XX_1 = 0x1800,
+        FS      = 0x1800,
         RI_XX_2 = 0x1C00,
         MASK_RI = 0x1C00,
         
