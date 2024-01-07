@@ -18,6 +18,12 @@ namespace Emulator
 
         public override string Name => "Video";
 
+        public override Memory? Memory { get; } = new (0xFFFF);
+
+        public override short DevAddrLo => -1;
+
+        public override short DevAddrHi => -1;
+
         private DateTime lastFrameTime;
         private IntPtr window;
         private IntPtr renderer;
@@ -81,7 +87,7 @@ namespace Emulator
                 for (int x = 0; x < GlyphsPerLine; ++x)
                 {
                     var offset = (ushort)((y * GlyphsPerLine + x) * Stride);
-                    var value = Machine.ReadWord(0x0001, offset);
+                    var value = Memory!.ReadWord(0x0000, offset);
                     var ch = value & 0x00FF;
                     var fg = (value & 0x0F00) >> 8;
                     var bg = (value & 0xF000) >> 12;
@@ -108,7 +114,7 @@ namespace Emulator
                             for (int xx = 0; xx < GlyphWidth; ++xx)
                             {
                                 offset = (ushort)((ch - UserDefinedGlyphIndex) * (GlyphWidth * GlyphHeight) + 0x1900);
-                                var col = Machine.ReadByte(0x0001, offset);
+                                var col = Memory.ReadByte(0x0000, offset);
                                 PackedByteToRGB(col, out r, out g, out b);
                                 SDL.SDL_SetRenderDrawColor(renderer, r, g, b, 255);
                                 SDL.SDL_RenderDrawPoint(renderer, dstRect.x + xx, dstRect.y + yy);

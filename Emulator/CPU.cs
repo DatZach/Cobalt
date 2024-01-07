@@ -32,11 +32,11 @@ namespace Emulator
             r3 = new Register();
             sp = new Register();
             ss = new Register();
-            cs = new Register();
+            cs = new Register { Word = 0x4000 };
             ds = new Register();
             ta = new Register();
             tb = new Register();
-            ip = new Register { Word = 0xF000 };
+            ip = new Register();
             flags = new Register();
             instruction = new Register();
             operand = new Register();

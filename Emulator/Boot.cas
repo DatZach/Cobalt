@@ -4,7 +4,7 @@
 ;
 
 format bin
-origin 0xF000
+origin 0x0000
 
 nop								; Required for CPU boot
 
@@ -12,7 +12,13 @@ Main:
 	mov		word [0x0000], IRQ	; We cannot disable interrupts, set this immediately!!
 	mov		sp, 0xEFF0			; Stack lives right below ROM space
 
+	jmp TestVideo
+IRQ:
+	hlt
+	rti
 
+
+TestVideo:
 	mov		r3, 0x01
 	mov		r0, 0x0000
 Reload:
@@ -22,10 +28,9 @@ Loop:
 	mov		r2, byte [r1]
 	cmp		r2, 0
 	jz		Done
-	mov		ds, 0x0001
+	mov		ds, 0x8000
 	mov		byte [r0+0], r3
 	mov		byte [r0+1], r2
-	;hlt
 	add		r0, 2
 	add		r1, 1
 	add		r3, 1
@@ -33,9 +38,4 @@ Loop:
 Done:
 	jmp		Reload
 	hlt
-
-IRQ:
-	hlt
-	rti
-
-Message: db "THE QUICK BROWN FOX JUMPED OVER THE LAZY DOG! ^0"
+Message: db "0123456789ABCDEF^0"

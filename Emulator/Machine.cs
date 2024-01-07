@@ -43,6 +43,12 @@ namespace Emulator
             devices.Add(device);
         }
 
+        public T? GetDevice<T>()
+            where T : Device
+        {
+            return devices.FirstOrDefault(x => x is T) as T;
+        }
+
         public void Run()
         {
             const int TicksPerMs = 10000; // From Stopwatch class
@@ -118,40 +124,59 @@ namespace Emulator
         
         public byte ReadByte(ushort segment, ushort offset)
         {
-            SelectMemoryDevice(ref segment, ref offset, out var device);
+            SelectMemoryPage(ref segment, ref offset, out var device);
             return device.ReadByte(segment, offset);
         }
 
         public ushort ReadWord(ushort segment, ushort offset)
         {
-            SelectMemoryDevice(ref segment, ref offset, out var device);
+            SelectMemoryPage(ref segment, ref offset, out var device);
             return device.ReadWord(segment, offset);
         }
 
         public void WriteByte(ushort segment, ushort offset, byte value)
         {
-            SelectMemoryDevice(ref segment, ref offset, out var device);
+            SelectMemoryPage(ref segment, ref offset, out var device);
             device.WriteByte(segment, offset, value);
         }
         
         public void WriteWord(ushort segment, ushort offset, ushort value)
         {
-            SelectMemoryDevice(ref segment, ref offset, out var device);
+            SelectMemoryPage(ref segment, ref offset, out var device);
             device.WriteWord(segment, offset, value);
         }
 
-        private void SelectMemoryDevice(ref ushort segment, ref ushort offset, out Memory device)
+        private void SelectMemoryPage(ref ushort segment, ref ushort offset, out Memory memory)
         {
-            if (segment == 0 && (offset & 0xF000) == 0xF000)
+            var segSel = segment & 0xC000;
+            if (segSel == 0x0000)
+                memory = RAM;
+            else if (segSel == 0x4000)
             {
-                device = ROM;
-                offset -= 0xF000;
-                return;
+                segment -= 0x4000;
+                memory = ROM;
             }
+            else if (segSel == 0x8000)
+            {
+                segment -= 0x8000;
+                memory = GetDevice<VideoDevice>()!.Memory!;
+            }
+            else if (segSel == 0xC000)
+            {
+                foreach (var device in devices)
+                {
+                    if (offset < device.DevAddrLo || offset > device.DevAddrHi)
+                        continue;
 
-            // TODO MMIO
+                    segment -= 0xC000;
+                    memory = device.Memory!;
+                    return;
+                }
 
-            device = RAM;
+                throw new InvalidOperationException($"Unknown device register 0x{offset:X4}");
+            }
+            else
+                throw new InvalidOperationException($"Unknown segment address 0x{segment:X4}");
         }
 
         public MachineState CaptureState()
