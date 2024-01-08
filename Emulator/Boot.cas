@@ -11,60 +11,72 @@ nop								; Required for CPU boot
 Main:
 	mov		word [0x0000], IRQ	; We cannot disable interrupts, set this immediately!!
 	mov		sp, 0x20 ; 0xEFF0			; Stack lives right below ROM space
-	mov		ds, 0x4000
 	
 	jmp EchoKeyboard
 
 IRQ:
 	push	r0
-
 	push	ds
-		mov		ds, 0xC000
-		mov		r0, byte [0x08]
-	pop		ds
-	
+
+	mov		ds, 0xC000
+	mov		r0, byte [0x08]
+	mov		ds, 0x0000
 	mov		byte [scancode], r0
+	
+	pop		ds
 	pop		r0
 	rti
 
 EchoKeyboard:
-jmp EchoKeyboard
+	mov		ds, 0x0000
 	mov		r0, byte [scancode]
 	cmp		r0, 0
 	jz		EchoKeyboard
-	hlt
 
-;	cmp		r0, 0x2A			; LSHIFT Pressed
-;	jnz		EchoKeyboard_1
-;	mov		byte [isShift], 1
-;	jmp		EchoKeyboard
-;EchoKeyboard_1:
-;	cmp		r0, 0xAA			; RSHIFT Released
-;	jnz		EchoKeyboard_2
-;	mov		byte [isShift], 0
-;	jmp		EchoKeyboard
-;EchoKeyboard_2:
+	cmp		r0, 0x2A			; LSHIFT Pressed
+	jnz		EchoKeyboard_1
+	mov		byte [isShift], 1
+	mov		byte [scancode], 0
+	jmp		EchoKeyboard
+EchoKeyboard_1:
+	cmp		r0, 0xAA			; LSHIFT Released
+	jnz		EchoKeyboard_2
+	mov		byte [isShift], 0
+	mov		byte [scancode], 0
+	jmp		EchoKeyboard
+EchoKeyboard_2:
+	cmp		r0, 0x39
+	jnz		EchoKeyboard_4
+	mov		r0, word [X]
+	add		r0, 2
+	mov		word [X], r0
+	mov		byte [scancode], 0
+	jmp		EchoKeyboard
+EchoKeyboard_4:
 
 	bit		r0, 0x80			; Released key
 	jnz		EchoKeyboard
+
+	mov		r2, byte [isShift]
+	cmp		r2, 0
+	jz		EchoKeyboard_3
+	add		r0, 35
+EchoKeyboard_3:
+
 	sub		r0, 0x10			; Q
-	hlt
-	;hlt
-	;mov		r2, byte [isShift]
-	;add		r2, 1
-	;mul		r0, r2
+	mov		ds, 0x4000
 	add		r0, ASCIILookup
 	mov		r3, byte [r0]
 	;hlt
+	mov		ds, 0x0000
 	mov		r1, word [X]
 
-	push ds
 	mov		ds, 0x8000
-		mov		byte [r1+0], 0x0F
-		mov		byte [r1+1], r3
-	pop ds
+	mov		byte [r1+0], 0x0F
+	mov		byte [r1+1], r3
 
 	add		r1, 2
+	mov		ds, 0x0000
 	mov		word [X], r1
 
 	mov		byte [scancode], 0
@@ -91,7 +103,7 @@ Done:
 	ret
 
 Message: db "0123456789ABCDEF^0"
-ASCIILookup: db "qwertyuiop[]  asdfghjkl_'  \zxcvbnm,./QWERTYUIOP{}  ASDFGHJKL_^"  |ZXCVBNM<>?"
+ASCIILookup: db "qwertyuiop[]  asdfghjkl_'  \zxcvbnmQWERTYUIOP{}  ASDFGHJKL_^"  |ZXCVBNM<>?"
 
 X: dw 0
 isShift: db 0

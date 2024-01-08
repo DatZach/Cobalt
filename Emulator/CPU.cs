@@ -218,7 +218,12 @@ namespace Emulator
             else if ((cword & ControlWord.MASK_IR) == ControlWord.OI)
                 operand.Word = dbusWord;
             else if ((cword & ControlWord.MASK_IR) == ControlWord.FI)
-                flags.Word = (ushort)(zf | cf | sf);
+            {
+                if (isALUOperation)
+                    flags.Word = (ushort)(zf | cf | sf);
+                else
+                    flags.Word = dbusWord;
+            }
 
             var ricword = cword & ControlWord.MASK_RI;
             if (ricword != 0)
@@ -239,8 +244,6 @@ namespace Emulator
                     if (flags.Word == 0)
                         mci = (int)(cword & ControlWord.MASK_OPR) >> 16;
                 }
-                else if (ricword == ControlWord.FS)
-                    flags.Word = dbusWord;
                 else
                     throw new InvalidOperationException();
             }
