@@ -7,38 +7,20 @@ namespace Emulator
         private const ushort RegScancode = 0x0000; // + 0x6000:0x0008
 
         public override string Name => "Keyboard";
-
-        public override Memory? Memory { get; }
+        
         public override short DevAddrLo => 0x08;
         public override short DevAddrHi => 0x08;
 
         private readonly byte[] buffer;
         private int bufferIdx;
         private int bufferHead;
+        private byte regScancode0;
         private DateTime tsLastDispatch;
         private bool interruptAsserted;
 
         public KeyboardDevice()
         {
-            Memory = new Memory(1);
-            Memory!.OnRead += Register_OnRead;
             buffer = new byte[16];
-        }
-
-        private void Register_OnRead(ushort segment, ushort offset, byte size)
-        {
-            if (offset == RegScancode)
-                interruptAsserted = false;
-        }
-
-        public override void Initialize()
-        {
-            
-        }
-
-        public override void Shutdown()
-        {
-            
         }
 
         public override bool Tick()
@@ -51,7 +33,7 @@ namespace Emulator
                 if ((tsNow - tsLastDispatch).Milliseconds >= 1)
                 {
                     var idx = bufferIdx++ % buffer.Length;
-                    Memory!.WriteByte(0, RegScancode, buffer[idx]);
+                    WriteByte(0, RegScancode, buffer[idx]);
                     tsLastDispatch = DateTime.UtcNow;
                 }
             }
@@ -80,6 +62,30 @@ namespace Emulator
             }
             
             interruptAsserted = true;
+        }
+
+        public override void WriteByte(ushort segment, ushort offset, byte value)
+        {
+            if (offset == RegScancode)
+                regScancode0 = value;
+        }
+
+        public override void WriteWord(ushort segment, ushort offset, ushort value)
+        {
+            WriteByte(segment, offset, (byte)value);
+        }
+
+        public override byte ReadByte(ushort segment, ushort offset)
+        {
+            if (offset == RegScancode)
+                interruptAsserted = false;
+
+            return regScancode0;
+        }
+
+        public override ushort ReadWord(ushort segment, ushort offset)
+        {
+            return ReadByte(segment, offset);
         }
 
         private static readonly Dictionary<SDL.SDL_Scancode, long> SDLScancode2ATScancode_Pressed = new ()

@@ -88,17 +88,26 @@
                             var ch = operandString[j];
                             if (ch == '^')
                             {
-                                ch = operandString[++j] switch
+                                var escapeCode = operandString[++j];
+                                if (escapeCode == 'x')
                                 {
-                                    '0' => '\0',
-                                    'b' => '\b',
-                                    'r' => '\r',
-                                    'n' => '\n',
-                                    't' => '\t',
-                                    '"' => '\"',
-                                    '^' => '^',
-                                    _ => throw new Exception($"Illegal escape code '{operandString[j]}'")
-                                };
+                                    ch = (char)Convert.ToInt16(operandString.Substring(++j, 2), 16);
+                                    j += 2;
+                                }
+                                else
+                                {
+                                    ch = escapeCode switch
+                                    {
+                                        '0' => '\0',
+                                        'b' => '\b',
+                                        'r' => '\r',
+                                        'n' => '\n',
+                                        't' => '\t',
+                                        '"' => '\"',
+                                        '^' => '^',
+                                        _ => throw new Exception($"Illegal escape code '{operandString[j]}'")
+                                    };
+                                }
                             }
 
                             writer.Write((byte)ch);

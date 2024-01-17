@@ -170,7 +170,7 @@ namespace Emulator
             device.WriteWord(segment, offset, value);
         }
 
-        private void SelectMemoryPage(ref ushort segment, ref ushort offset, out Memory memory)
+        private void SelectMemoryPage(ref ushort segment, ref ushort offset, out IMemory memory)
         {
             var segSel = segment & 0xC000;
             if (segSel == 0x0000)
@@ -183,7 +183,7 @@ namespace Emulator
             else if (segSel == 0x8000)
             {
                 segment -= 0x8000;
-                memory = GetDevice<VideoDevice>()!.Memory!;
+                memory = GetDevice<VideoDevice>()!;
             }
             else if (segSel == 0xC000)
             {
@@ -194,7 +194,7 @@ namespace Emulator
 
                     segment -= 0xC000;
                     offset -= (ushort)device.DevAddrLo;
-                    memory = device.Memory!;
+                    memory = device;
                     return;
                 }
 

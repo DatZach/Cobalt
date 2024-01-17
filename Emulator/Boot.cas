@@ -83,12 +83,12 @@ EchoKeyboard_3:
 	jmp		EchoKeyboard
 
 TestVideo:
-	mov		r3, 0x01
+	mov		r3, 0x00
 	mov		r0, 0x0000
 Reload:
 	mov		r1, Message
 Loop:
-	mov		ds, cs
+	mov		ds, 0x4000
 	mov		r2, byte [r1]
 	cmp		r2, 0
 	jz		Done
@@ -102,8 +102,64 @@ Loop:
 Done:
 	ret
 
+;
+;	Print
+;	Arguments
+;		r0		Memory index (word aligned)
+;		r1		String to print
+;		r3		Color
+;	Clobbered
+;		r2
+;
+Print:
+	mov		ds, 0x4000
+	mov		r2, byte [r1]
+	cmp		r2, 0
+	jz		PrintDone
+	mov		ds, 0x8000
+	mov		byte [r0+0], r3
+	mov		byte [r0+1], r2
+	add		r0, 2
+	add		r1, 1
+	jmp		Print
+PrintDone:
+	ret
+
+TestTerminalLayout:
+	mov		r0, 0
+	mov		r1, StrHeader
+	mov		r3, 0x40
+	call	Print
+
+	mov		r0, 124
+	mov		r1, StrTimeLHS
+	mov		r3, 0x45
+	call	Print
+	mov		r0, 126
+	mov		r1, StrTime
+	mov		r3, 0x50
+	call	Print
+	mov		r0, 158
+	mov		r1, StrTimeRHS
+	mov		r3, 0x45
+	call	Print
+
+	mov		r0, 160
+	mov		r1, StrCmd
+	mov		r3, 0x0F
+	call	Print
+
+	hlt
+	ret
+
 Message: db "0123456789ABCDEF^0"
 ASCIILookup: db "qwertyuiop[]  asdfghjkl_'  \zxcvbnmQWERTYUIOP{}  ASDFGHJKL_^"  |ZXCVBNM<>?"
+
+StrHeader: db "Terminal                                                      ^0^0"
+StrTimeLHS: db "^x80^0^0^0"
+StrTimeRHS: db "^x81^0^0^0"
+StrTime: db "2024-01-14 14:09^0^0^0"
+StrCmd: db "^x7Fld^0"
 
 X: dw 0
 isShift: db 0

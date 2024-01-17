@@ -17,8 +17,7 @@ namespace Emulator
         private const int UserDefinedGlyphIndex = 0xF0;
 
         public override string Name => "Video";
-
-        public override Memory? Memory { get; } = new (0xFFFF);
+        
         public override short DevAddrLo => -1;
         public override short DevAddrHi => -1;
 
@@ -26,6 +25,13 @@ namespace Emulator
         private IntPtr window;
         private IntPtr renderer;
         private IntPtr texFont;
+
+        private readonly Memory memory;
+
+        public VideoDevice()
+        {
+            memory = new Memory(0xFFFF);
+        }
 
         public override void Initialize()
         {
@@ -71,7 +77,7 @@ namespace Emulator
                 for (int x = 0; x < GlyphsPerLine; ++x)
                 {
                     var offset = (ushort)((y * GlyphsPerLine + x) * Stride);
-                    var value = Memory!.ReadWord(0x0000, offset);
+                    var value = ReadWord(0x0000, offset);
                     var ch = value & 0x00FF;
                     var fg = (value & 0x0F00) >> 8;
                     var bg = (value & 0xF000) >> 12;
@@ -98,7 +104,7 @@ namespace Emulator
                             for (int xx = 0; xx < GlyphWidth; ++xx)
                             {
                                 offset = (ushort)((ch - UserDefinedGlyphIndex) * (GlyphWidth * GlyphHeight) + 0x1900);
-                                var col = Memory.ReadByte(0x0000, offset);
+                                var col = ReadByte(0x0000, offset);
                                 PackedByteToRGB(col, out r, out g, out b);
                                 SDL.SDL_SetRenderDrawColor(renderer, r, g, b, 255);
                                 SDL.SDL_RenderDrawPoint(renderer, dstRect.x + xx, dstRect.y + yy);
@@ -115,9 +121,24 @@ namespace Emulator
             return false;
         }
 
-        public override void DispatchEvent(SDL.SDL_Event ev)
+        public override void WriteByte(ushort segment, ushort offset, byte value)
         {
-            // NOTE Nothing to do
+            memory.WriteByte(segment, offset, value);
+        }
+
+        public override void WriteWord(ushort segment, ushort offset, ushort value)
+        {
+            memory.WriteWord(segment, offset, value);
+        }
+
+        public override byte ReadByte(ushort segment, ushort offset)
+        {
+            return memory.ReadByte(segment, offset);
+        }
+
+        public override ushort ReadWord(ushort segment, ushort offset)
+        {
+            return memory.ReadWord(segment, offset);
         }
 
         [Conditional("DEBUG")]
@@ -131,10 +152,11 @@ namespace Emulator
             dstRect.w = GlyphWidth;
             dstRect.h = GlyphHeight;
 
+            int yo = 32;
             int c = 0;
-            for (int y = 0; y < LinesPerPage; ++y)
+            for (int y = 0; y < 16; ++y)
             {
-                for (int x = 0; x < GlyphsPerLine; ++x)
+                for (int x = 0; x < 16; ++x)
                 {
                     var v = c++;
                     if (v >= 256)
@@ -143,7 +165,7 @@ namespace Emulator
                     PackedByteToRGB((byte)v, out var r, out var g, out var b);
                     SDL.SDL_SetRenderDrawColor(renderer, r, g, b, 255);
                     dstRect.x = x * 8;
-                    dstRect.y = y * 8;
+                    dstRect.y = yo + y * 8;
                     dstRect.w = 8;
                     dstRect.h = 8;
                     SDL.SDL_RenderFillRect(renderer, ref dstRect);
@@ -156,7 +178,7 @@ namespace Emulator
                 IndexedColorToRGB((byte)c, out var r, out var g, out var b);
                 SDL.SDL_SetRenderDrawColor(renderer, r, g, b, 255);
                 dstRect.x = c * 8;
-                dstRect.y = 16 * 8;
+                dstRect.y = yo + 24 * 8;
                 dstRect.w = 8;
                 dstRect.h = 8;
                 SDL.SDL_RenderFillRect(renderer, ref dstRect);
@@ -174,7 +196,7 @@ namespace Emulator
                 PackedByteToRGB((byte)v, out var r, out var g, out var b);
                 SDL.SDL_SetRenderDrawColor(renderer, r, g, b, 255);
                 dstRect.x = c * 8;
-                dstRect.y = 24 * 8;
+                dstRect.y = yo + 32 * 8;
                 dstRect.w = 8;
                 dstRect.h = 8;
                 SDL.SDL_RenderFillRect(renderer, ref dstRect);
@@ -195,7 +217,7 @@ namespace Emulator
                 | (iv << 4)
                 | (ig << 3)
                 | (ig << 2)
-                | (iv << 1)
+                | (ir << 1)
                 | (ir << 0)
             );
 
@@ -204,11 +226,23 @@ namespace Emulator
 
         private static void PackedByteToRGB(byte v, out byte r, out byte g, out byte b)
         {
-            var lo = (int)(255 * 0.15); // 0.33
-            var hi = (int)(255 * 0.95); // 0.90
-            r = (byte)(((v & 0b00_000_111) >> 0) * ((hi - lo) / 0b111) + lo);
-            g = (byte)(((v & 0b00_111_000) >> 3) * ((hi - lo) / 0b111) + lo);
-            b = (byte)(((v & 0b11_000_000) >> 6) * ((hi - lo) / 0b11) + lo);
+            r = (byte)((
+                0.104f
+                + ((v & 0b00_000_001) != 0 ? 0.080f : 0.0f)
+                + ((v & 0b00_000_010) != 0 ? 0.157f : 0.0f)
+                + ((v & 0b00_000_100) != 0 ? 0.319f : 0.0f)
+            ) / 0.700f * 255);
+            g = (byte)((
+                0.104f
+                + ((v & 0b00_001_000) != 0 ? 0.080f : 0.0f)
+                + ((v & 0b00_010_000) != 0 ? 0.157f : 0.0f)
+                + ((v & 0b00_100_000) != 0 ? 0.319f : 0.0f)
+            ) / 0.700f * 255);
+            b = (byte)((
+                0.104f
+                + ((v & 0b01_000_000) != 0 ? 0.180f : 0.0f)
+                + ((v & 0b10_000_000) != 0 ? 0.373f : 0.0f)
+            ) / 0.700f * 255);
         }
     }
 }

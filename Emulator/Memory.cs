@@ -2,14 +2,11 @@
 
 namespace Emulator
 {
-    public sealed class Memory
+    public sealed class Memory : IMemory
     {
         public int Size => data.Length;
 
         public bool IsReadOnly { get; set; }
-
-        public delegate void OnReadDel(ushort segment, ushort offset, byte size);
-        public event OnReadDel OnRead;
 
         private readonly byte[] data;
 
@@ -20,13 +17,11 @@ namespace Emulator
 
         public byte ReadByte(ushort segment, ushort offset)
         {
-            OnRead?.Invoke(segment, offset, 1);
             return data[ToCanonicalAddress(segment, offset)];
         }
 
         public ushort ReadWord(ushort segment, ushort offset)
         {
-            OnRead?.Invoke(segment, offset, 2);
             return (ushort)(
                 (data[ToCanonicalAddress(segment, (ushort)(offset + 0))] << 8)
                | data[ToCanonicalAddress(segment, (ushort)(offset + 1))]
@@ -108,5 +103,16 @@ namespace Emulator
         {
             return ToString(0, Size);
         }
+    }
+
+    public interface IMemory
+    {
+        byte ReadByte(ushort segment, ushort offset);
+
+        ushort ReadWord(ushort segment, ushort offset);
+
+        void WriteByte(ushort segment, ushort offset, byte value);
+
+        void WriteWord(ushort segment, ushort offset, ushort value);
     }
 }
