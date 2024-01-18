@@ -24,13 +24,13 @@
         private const byte SR_BSY  = 0b10000000;
 
         // NOTE Read/Write to this does not affect the interrupt flag
-        private byte StatusFlags
+        private int StatusFlags
         {
             get => registers.ReadByte(0, RegStatus_Command * 2);
             set
             {
-                registers.WriteByte(0, RegStatus_Command * 2, value);
-                registers.WriteByte(0, RegAltStatus_DevControl * 2, value);
+                registers.WriteByte(0, RegStatus_Command * 2, (byte)value);
+                registers.WriteByte(0, RegAltStatus_DevControl * 2, (byte)value);
             }
         }
 
@@ -45,8 +45,7 @@
 
         private readonly Memory registers;
         private bool interruptAsserted;
-        private byte[]? pending;
-        private int pendingIdx;
+        private AtaCommand? activeCommand;
 
         public AtaDevice()
         {
@@ -69,6 +68,19 @@
 
         public override bool Tick()
         {
+            if (activeCommand != null)
+            {
+                try
+                {
+                    if (activeCommand.Tick())
+                        activeCommand = null;
+                }
+                catch
+                {
+                    StatusFlags |= SR_ERR;
+                }
+            }
+
             return interruptAsserted;
         }
 
@@ -91,6 +103,9 @@
         public override void WriteWord(ushort segment, ushort offset, ushort value)
         {
             WriteByte(segment, offset, (byte)value);
+
+            if (offset == RegData)
+                activeCommand?.WriteData(value);
         }
 
         public override byte ReadByte(ushort segment, ushort offset)
@@ -99,7 +114,7 @@
 
             if (offset == RegStatus_Command)
             {
-                StatusFlags = (byte)(StatusFlags & ~SR_DRQ);
+                StatusFlags &= ~SR_DRQ;
                 interruptAsserted = false;
             }
 
@@ -109,23 +124,19 @@
         public override ushort ReadWord(ushort segment, ushort offset)
         {
             if (offset == RegData)
-            {
-                if (pending != null && pendingIdx < pending.Length)
-                {
-                    var value = (ushort)((pending[pendingIdx + 0] << 8) | pending[pendingIdx + 1]);
-                    pendingIdx += 2;
-
-                    return value;
-                }
-
-                return 0;
-            }
+                return activeCommand?.ReadData() ?? 0;
 
             return ReadByte(segment, offset);
         }
 
         private void DispatchCommand(byte commandId)
         {
+            // TODO Verify this behavior
+            if ((StatusFlags & SR_BSY) != 0)
+                return;
+
+            StatusFlags &= ~SR_ERR;
+
             switch (commandId)
             {
                 case 0x20: // Read sector(s) w/ verify
@@ -136,23 +147,28 @@
                     var count = (int)ReadByte(0, RegSectorCount);
                     if (count == 0) count = 256;
 
-                    try
-                    {
-                        interruptAsserted = true;
-                        // TODO BSY set?
-                        pending = ReadSectors(lba, count); // TODO Process on a tick timescale?
-                        pendingIdx = 0;
-                        // TODO BSY unset?
-                        StatusFlags |= SR_DRQ;
-                    }
-                    catch
-                    {
-                        StatusFlags |= SR_ERR;
-                    }
+                    activeCommand = new ReadSectorsCommand(this, lba, count);
                     break;
                 }
 
+                case 0x30: // Write sector(s) w/ verify
+                case 0x31: // Write sector(s) w/o verify
+                {
+                    var lba = (ReadByte(0, RegLBA3) << 24) | (ReadByte(0, RegLBA2) << 16) |
+                              (ReadByte(0, RegLBA1) << 8 ) | (ReadByte(0, RegLBA0));
+                    var count = (int)ReadByte(0, RegSectorCount);
+                    if (count == 0) count = 256;
+
+                    activeCommand = new WriteSectorsCommand(this, lba, count);
+                    break;
+                }
+
+                case 0xEC: // Identify drive
+                    activeCommand = new IdentifyDriveCommand(this);
+                    break;
+
                 default:
+                    StatusFlags |= SR_ERR;
                     break;
             }
         }
@@ -177,6 +193,177 @@
                 throw new InvalidDataException();
 
             return buffer;
+        }
+
+        private abstract class AtaCommand
+        {
+            protected AtaDevice Device { get; }
+
+            protected AtaCommand(AtaDevice device)
+            {
+                Device = device ?? throw new ArgumentNullException(nameof(device));
+            }
+
+            public abstract bool Tick();
+
+            public abstract ushort ReadData();
+
+            public abstract void WriteData(ushort value);
+        }
+
+        private sealed class ReadSectorsCommand : AtaCommand
+        {
+            private byte[]? pending;
+            private int pendingIdx;
+
+            private readonly int lba, count;
+
+            public ReadSectorsCommand(AtaDevice device, int lba, int count)
+                : base(device)
+            {
+                this.lba = lba;
+                this.count = count;
+                pending = new byte[count];
+            }
+
+            public override bool Tick()
+            {
+                // TODO Rate limit read to tick time
+
+                pending = Device.ReadSectors(lba, count);
+                pendingIdx = 0;
+
+                Device.StatusFlags &= ~SR_BSY;
+                Device.StatusFlags |= SR_DRQ;
+                Device.interruptAsserted = true;
+
+                return true;
+            }
+
+            public override ushort ReadData()
+            {
+                if (pending != null && pendingIdx < pending.Length)
+                {
+                    var value = (ushort)((pending[pendingIdx + 0] << 8) | pending[pendingIdx + 1]);
+                    pendingIdx += 2;
+
+                    return value;
+                }
+
+                return 0;
+            }
+
+            public override void WriteData(ushort value)
+            {
+                // NOTE Nothing to do?
+            }
+        }
+
+        private sealed class WriteSectorsCommand : AtaCommand
+        {
+            private int status;
+
+            private readonly byte[] pending;
+            private int pendingIdx;
+
+            private int lba, count;
+
+            public WriteSectorsCommand(AtaDevice device, int lba, int count)
+                : base(device)
+            {
+                this.pending = new byte[Device.bytesPerSector];
+                this.lba = lba;
+                this.count = count;
+
+                status = 0;
+            }
+
+            public override bool Tick()
+            {
+                // TODO Rate limit write to tick time
+
+                switch (status)
+                {
+                    case 0: // Init (10.2.c)
+                        Device.StatusFlags |= SR_DRQ;
+                        pendingIdx = 0;
+                        break;
+
+                    case 1: // Pending host (10.2.d)
+                        break;
+                    
+                    case 2: // Write to disk (10.2.f)
+                        Device.WriteSectors(lba, 1, pending);
+                        Device.StatusFlags &= ~SR_BSY;
+                        Device.interruptAsserted = true;
+                        if (--count > 0)
+                        {
+                            Device.StatusFlags |= SR_DRQ;
+                            status = 3;
+                        }
+                        else
+                            return true;
+                        break;
+
+                    case 3: // Pending status register read (10.2.g)
+                        if (!Device.interruptAsserted)
+                        {
+                            pendingIdx = 0;
+                            status = 1;
+                        }
+                        break;
+                }
+
+                return false;
+            }
+
+            public override ushort ReadData()
+            {
+                // NOTE Nothing to do
+                return 0;
+            }
+
+            public override void WriteData(ushort value)
+            {
+                if (pendingIdx < pending.Length)
+                {
+                    pending[pendingIdx + 0] = (byte)(value >> 8);
+                    pending[pendingIdx + 1] = (byte)(value & 0xFF);
+                    pendingIdx += 2;
+                }
+
+                if (pendingIdx >= pending.Length)
+                {
+                    Device.StatusFlags &= ~SR_DRQ;
+                    Device.StatusFlags |= SR_BSY;
+                    status = 2;
+                }
+            }
+        }
+
+        private sealed class IdentifyDriveCommand : AtaCommand
+        {
+            public IdentifyDriveCommand(AtaDevice device)
+                : base(device)
+            {
+
+            }
+
+            public override bool Tick()
+            {
+                return true;
+            }
+
+            public override ushort ReadData()
+            {
+                // NOTE Nothing to do
+                return 0;
+            }
+
+            public override void WriteData(ushort value)
+            {
+                // NOTE Nothing to do
+            }
         }
     }
 }
