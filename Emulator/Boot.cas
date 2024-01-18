@@ -9,12 +9,47 @@ origin 0x0000
 nop								; Required for CPU boot
 
 Main:
-	mov		word [0x0000], IRQ	; We cannot disable interrupts, set this immediately!!
+	mov		word [0x0000], HddIRQ		; We cannot disable interrupts, set this immediately!!
 	mov		sp, 0x20 ; 0xEFF0			; Stack lives right below ROM space
 	
-	jmp EchoKeyboard
+	jmp TestHdd
 
-IRQ:
+HddIRQ:
+	push	r0
+	mov		r2, 0
+	mov		r3, 256
+HddIRQ_Loop:
+	mov		ds, 0xC000
+	mov		r1, word [0x0C]
+	mov		ds, 0x8000
+	mov		byte [r2+0], 0x0F
+	mov		byte [r2+1], r1h
+	mov		byte [r2+2], 0x0F
+	mov		byte [r2+3], r1l
+	add		r2, 4
+	sub		r3, 1
+
+	cmp		r3, 0
+	jnz		HddIRQ_Loop
+	
+	mov		ds, 0xC000
+	mov		r0, byte [0x13]		; Read status to clear interrupt
+	pop		r0
+	rti
+
+TestHdd:
+	mov		ds, 0xC000
+	mov		byte [0x0E], 1		; Sector Count
+	mov		byte [0x0F], 1		; Sector 1
+	mov		byte [0x10], 0
+	mov		byte [0x11], 0
+	mov		byte [0x12], 0
+	mov		byte [0x13], 0x20	; Read Sectors command
+TestHdd_Loop:
+	jmp		TestHdd_Loop
+	ret
+
+KbdIRQ:
 	push	r0
 	push	ds
 

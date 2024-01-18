@@ -290,6 +290,8 @@ namespace Emulator
                 5 => ss,
                 6 => cs,
                 7 => ds,
+                10 => new Register { LoByte = r1.HiByte }, // TODO Readonly hack
+                11 => new Register { LoByte = r1.LoByte }, // TODO Readonly hack
                 _ => throw new NotImplementedException()
             };
         }
