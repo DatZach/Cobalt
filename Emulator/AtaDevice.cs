@@ -72,8 +72,7 @@
             {
                 try
                 {
-                    if (activeCommand.Tick())
-                        activeCommand = null;
+                    activeCommand.Tick();
                 }
                 catch
                 {
@@ -181,6 +180,7 @@
 
             stream.Position = sector * bytesPerSector;
             stream.Write(data, 0, count * bytesPerSector);
+            stream.Flush(true);
         }
 
         private byte[] ReadSectors(long sector, int count)
@@ -204,7 +204,7 @@
                 Device = device ?? throw new ArgumentNullException(nameof(device));
             }
 
-            public abstract bool Tick();
+            public abstract void Tick();
 
             public abstract ushort ReadData();
 
@@ -216,6 +216,8 @@
             private byte[]? pending;
             private int pendingIdx;
 
+            private int stage;
+
             private readonly int lba, count;
 
             public ReadSectorsCommand(AtaDevice device, int lba, int count)
@@ -223,21 +225,34 @@
             {
                 this.lba = lba;
                 this.count = count;
-                pending = new byte[count];
             }
 
-            public override bool Tick()
+            public override void Tick()
             {
-                // TODO Rate limit read to tick time
+                switch (stage)
+                {
+                    case 0: // 10.1.c
+                        Device.StatusFlags |= SR_BSY;
+                        stage = 1;
+                        break;
 
-                pending = Device.ReadSectors(lba, count);
-                pendingIdx = 0;
+                    case 1: // 10.1.c
+                        // TODO Rate limit read to tick time
+                        pending = Device.ReadSectors(lba, count);
+                        pendingIdx = 0;
+                        stage = 2;
+                        break;
 
-                Device.StatusFlags &= ~SR_BSY;
-                Device.StatusFlags |= SR_DRQ;
-                Device.interruptAsserted = true;
+                    case 2: // 10.1.d
+                        Device.StatusFlags &= ~SR_BSY;
+                        Device.StatusFlags |= SR_DRQ;
+                        Device.interruptAsserted = true;
+                        stage = 3;
+                        break;
 
-                return true;
+                    case 3: // Complete
+                        break;
+                }
             }
 
             public override ushort ReadData()
@@ -250,6 +265,8 @@
                     return value;
                 }
 
+                // TODO ERR? Read while BSY is set, or read more than specified sectors worth of data
+
                 return 0;
             }
 
@@ -261,7 +278,7 @@
 
         private sealed class WriteSectorsCommand : AtaCommand
         {
-            private int status;
+            private int stage;
 
             private readonly byte[] pending;
             private int pendingIdx;
@@ -275,18 +292,19 @@
                 this.lba = lba;
                 this.count = count;
 
-                status = 0;
+                stage = 0;
             }
 
-            public override bool Tick()
+            public override void Tick()
             {
                 // TODO Rate limit write to tick time
 
-                switch (status)
+                switch (stage)
                 {
                     case 0: // Init (10.2.c)
                         Device.StatusFlags |= SR_DRQ;
                         pendingIdx = 0;
+                        stage = 1;
                         break;
 
                     case 1: // Pending host (10.2.d)
@@ -296,25 +314,27 @@
                         Device.WriteSectors(lba, 1, pending);
                         Device.StatusFlags &= ~SR_BSY;
                         Device.interruptAsserted = true;
-                        if (--count > 0)
-                        {
-                            Device.StatusFlags |= SR_DRQ;
-                            status = 3;
-                        }
+                        if (count == 0)
+                            stage = 4;
                         else
-                            return true;
+                        {
+                            ++lba; --count;
+                            Device.StatusFlags |= SR_DRQ;
+                            stage = 3;
+                        }
                         break;
 
                     case 3: // Pending status register read (10.2.g)
                         if (!Device.interruptAsserted)
                         {
                             pendingIdx = 0;
-                            status = 1;
+                            stage = 1;
                         }
                         break;
-                }
 
-                return false;
+                    case 4: // Complete
+                        break;
+                }
             }
 
             public override ushort ReadData()
@@ -336,7 +356,7 @@
                 {
                     Device.StatusFlags &= ~SR_DRQ;
                     Device.StatusFlags |= SR_BSY;
-                    status = 2;
+                    stage = 2;
                 }
             }
         }
@@ -349,9 +369,9 @@
 
             }
 
-            public override bool Tick()
+            public override void Tick()
             {
-                return true;
+                
             }
 
             public override ushort ReadData()

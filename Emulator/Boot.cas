@@ -16,9 +16,23 @@ Main:
 
 HddIRQ:
 	push	r0
+	push	r1
+	push	r2
+
+	mov		ds, 0x0000
+	mov		r0, byte [HddCommand]
+	cmp		r0, 0		; Read
+	jz		HddIRQ_Read
+	;cmp		r0, 1		; Write
+	;jz		HddIRQ_Write
+	cmp		r0, 2		; Write Continue
+	jz		HddIRQ_WriteContinue
+	jmp		HddIRQ_Done
+
+HddIRQ_Read:
 	mov		r2, 0
 	mov		r3, 256
-HddIRQ_Loop:
+HddIRQ_Read_Loop:
 	mov		ds, 0xC000
 	mov		r1, word [0x0C]
 	mov		ds, 0x8000
@@ -30,10 +44,20 @@ HddIRQ_Loop:
 	sub		r3, 1
 
 	cmp		r3, 0
-	jnz		HddIRQ_Loop
+	jnz		HddIRQ_Read_Loop
 	
+	jmp		HddIRQ_Done
+
+HddIRQ_WriteContinue:
+	jmp		HddIRQ_Done
+
+HddIRQ_Done:
 	mov		ds, 0xC000
 	mov		r0, byte [0x13]		; Read status to clear interrupt
+	mov		ds, 0x0000
+	mov		byte [HddIsDone], 1
+	pop		r2
+	pop		r1
 	pop		r0
 	rti
 
@@ -46,8 +70,43 @@ TestHdd:
 	mov		byte [0x12], 0
 	mov		byte [0x13], 0x20	; Read Sectors command
 TestHdd_Loop:
-	jmp		TestHdd_Loop
+	mov		ds, 0x0000
+	mov		r0, byte [HddIsDone]
+	cmp		r0, 1
+	jnz		TestHdd_Loop
+TestHdd_Write:
+	mov		ds, 0x0000
+	mov		byte [HddCommand], 1
+	mov		ds, 0xC000
+	mov		byte [0x0E], 1		; Sector Count
+	mov		byte [0x0F], 3		; Sector 3
+	mov		byte [0x10], 0
+	mov		byte [0x11], 0
+	mov		byte [0x12], 0
+	mov		byte [0x13], 0x30	; Read Sectors command
+HddIRQ_Write:
+	mov		ds, 0xC000
+	mov		r0, byte [0x13]		; Wait for drive to be ready
+	bit		r0, 0x10
+	jz		HddIRQ_Write
+
+	mov		ds, 0x0000
+	mov		byte [HddCommand], 2
+
+	mov		ds, 0xC000
+	mov		r3, 256
+HddIRQ_Write_1:
+	mov		word [0x0C], 0x33CC
+	sub		r3, 1
+	cmp		r3, 0
+	jnz		HddIRQ_Write_1
+
+TestHdd_Loop2:
+	jmp TestHdd_Loop2
 	ret
+
+HddCommand: db 0
+HddIsDone: db 0
 
 KbdIRQ:
 	push	r0
