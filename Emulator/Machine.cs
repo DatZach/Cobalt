@@ -22,8 +22,8 @@ namespace Emulator
 
         private Memory ROM { get; }
 
-        private readonly List<Device> devices;
-        public IReadOnlyList<Device> Devices => devices;
+        private readonly List<IDeviceBase> devices;
+        public IReadOnlyList<IDeviceBase> Devices => devices;
 
         public Machine(MicrocodeRom microcode, Memory rom)
         {
@@ -32,22 +32,23 @@ namespace Emulator
             CPU = new CPU(this, microcode);
             ROM = rom;
             ROM.IsReadOnly = true;
-            devices = new List<Device>();
+            devices = new List<IDeviceBase>();
 
             IsPowered = true;
         }
 
-        public void AddDevice<T>()
-            where T : Device, new()
+        public void AddDevice<T, TConfig>(TConfig config)
+            where T : DeviceBase<TConfig>, new()
+            where TConfig : DeviceConfigBase, new()
         {
-            var device = new T { Machine = this };
+            var device = new T { Machine = this, Config = config };
             devices.Add(device);
         }
 
         public T? GetDevice<T>()
-            where T : Device
+            where T : IDeviceBase
         {
-            return devices.FirstOrDefault(x => x is T) as T;
+            return (T?)devices.FirstOrDefault(x => x is T);
         }
 
         public void Initialize()

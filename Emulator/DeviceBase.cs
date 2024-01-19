@@ -2,9 +2,12 @@
 
 namespace Emulator
 {
-    public abstract class Device : IMemory
+    public abstract class DeviceBase<TConfig> : IDeviceBase
+        where TConfig : DeviceConfigBase, new()
     {
         public Machine Machine { get; init; }
+
+        public TConfig Config { get; init; }
 
         public abstract string Name { get; }
 
@@ -51,5 +54,29 @@ namespace Emulator
         {
             
         }
+    }
+
+    public interface IDeviceBase : IMemory
+    {
+        Machine Machine { get; init; }
+        
+        string Name { get; }
+
+        short DevAddrLo { get; }
+
+        short DevAddrHi { get; }
+
+        void Initialize();
+    
+        void Shutdown();
+
+        bool Tick();
+
+        void DispatchEvent(SDL.SDL_Event ev);
+    }
+
+    public class DeviceConfigBase
+    {
+
     }
 }

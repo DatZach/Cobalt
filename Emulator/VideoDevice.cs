@@ -3,7 +3,7 @@ using SDL2;
 
 namespace Emulator
 {
-    internal sealed class VideoDevice : Device
+    internal sealed class VideoDevice : DeviceBase<VideoDevice.ConfigDefinition>
     {
         private const int ResolutionWidth = 640;
         private const int ResolutionHeight = 480;
@@ -35,6 +35,9 @@ namespace Emulator
 
         public override void Initialize()
         {
+            if (Config.Headless)
+                return;
+
             window = SDL.SDL_CreateWindow(
                 "Cobalt",
                 SDL.SDL_WINDOWPOS_UNDEFINED,
@@ -56,12 +59,18 @@ namespace Emulator
 
         public override void Shutdown()
         {
+            if (Config.Headless)
+                return;
+
             SDL.SDL_DestroyRenderer(renderer);
             SDL.SDL_DestroyWindow(window);
         }
 
         public override bool Tick()
         {
+            if (Config.Headless)
+                return false;
+
             var nowFrameTime = DateTime.UtcNow;
             if ((nowFrameTime - lastFrameTime).Milliseconds < 1000 / ScreenHz)
                 return false;
@@ -243,6 +252,11 @@ namespace Emulator
                 + ((v & 0b01_000_000) != 0 ? 0.180f : 0.0f)
                 + ((v & 0b10_000_000) != 0 ? 0.373f : 0.0f)
             ) / 0.700f * 255);
+        }
+
+        public sealed class ConfigDefinition : DeviceConfigBase
+        {
+            public bool Headless { get; set; } = false;
         }
     }
 }

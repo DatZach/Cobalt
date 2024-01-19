@@ -2,7 +2,7 @@
 
 namespace Emulator
 {
-    internal sealed class KeyboardDevice : Device
+    internal sealed class KeyboardDevice : DeviceBase<KeyboardDevice.ConfigDefinition>
     {
         private const ushort RegScancode = 0x0000; // + 0x6000:0x0008
 
@@ -344,5 +344,10 @@ namespace Emulator
             [SDL.SDL_Scancode.SDL_SCANCODE_MEDIASELECT] = 0xEDE0,
             [SDL.SDL_Scancode.SDL_SCANCODE_PRINTSCREEN] = 0xAAE0B7E0,
         };
+
+        public sealed class ConfigDefinition : DeviceConfigBase
+        {
+
+        }
     }
 }

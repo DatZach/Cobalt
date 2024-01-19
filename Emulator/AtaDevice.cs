@@ -1,6 +1,6 @@
 ﻿namespace Emulator
 {
-    internal sealed class AtaDevice : Device
+    internal sealed class AtaDevice : DeviceBase<AtaDevice.ConfigDefinition>
     {
         private const ushort RegAltStatus_DevControl = 0;
         private const ushort RegData = 1;
@@ -41,9 +41,6 @@
 
         private FileStream stream;
         private long totalSectors;
-        private int bytesPerSector;
-        private int headsPerCylinder;
-        private int sectorsPerTrack;
 
         private readonly Memory registers;
         private bool interruptAsserted;
@@ -56,13 +53,8 @@
 
         public override void Initialize()
         {
-            var path = @"C:\Temp\c.img"; // TODO From config
-            bytesPerSector = 512; // TODO From config
-
-            stream = File.Open(path, FileMode.Open, FileAccess.ReadWrite, FileShare.Read);
-            totalSectors = stream.Length / bytesPerSector;
-            headsPerCylinder = 16;
-            sectorsPerTrack = 63;
+            stream = File.Open(Config.DiskPath, FileMode.Open, FileAccess.ReadWrite, FileShare.Read);
+            totalSectors = stream.Length / Config.BytesPerSector;
         }
 
         public override void Shutdown()
@@ -195,8 +187,8 @@
 
         private void LBAToCHS(int lba, out int c, out int h, out int s)
         {
-            var hpc = headsPerCylinder;
-            var spt = sectorsPerTrack;
+            var hpc = Config.HeadsPerCylinder;
+            var spt = Config.SectorsPerTrack;
             c = lba / (hpc * spt);
             h = (lba / spt) % hpc;
             s = (lba % spt) + 1;
@@ -204,32 +196,43 @@
 
         private void CHSToLBA(int c, int h, int s, out int lba)
         {
-            var hpc = headsPerCylinder;
-            var spt = sectorsPerTrack;
+            var hpc = Config.HeadsPerCylinder;
+            var spt = Config.SectorsPerTrack;
             lba = (c * hpc + h) * spt + (s - 1);
         }
 
         private void WriteSectors(long sector, int count, byte[] data)
         {
             if (data == null) throw new ArgumentNullException(nameof(data));
-            if (count * bytesPerSector != data.Length) throw new ArgumentException("data must be sector size * count");
+            if (count * Config.BytesPerSector != data.Length) throw new ArgumentException("data must be sector size * count");
             if (sector + count >= totalSectors) throw new ArgumentException("Would overwrite disk bounds");
 
-            stream.Position = sector * bytesPerSector;
-            stream.Write(data, 0, count * bytesPerSector);
+            stream.Position = sector * Config.BytesPerSector;
+            stream.Write(data, 0, count * Config.BytesPerSector);
             stream.Flush(true);
         }
 
         private byte[] ReadSectors(long sector, int count)
         {
-            var size = count * bytesPerSector;
+            var size = count * Config.BytesPerSector;
             var buffer = new byte[size];
 
-            stream.Position = sector * bytesPerSector;
+            stream.Position = sector * Config.BytesPerSector;
             if (stream.Read(buffer, 0, size) != size)
                 throw new InvalidDataException();
 
             return buffer;
+        }
+
+        public sealed class ConfigDefinition : DeviceConfigBase
+        {
+            public string? DiskPath { get; set; }
+
+            public int BytesPerSector { get; set; } = 512;
+
+            public int HeadsPerCylinder { get; set; } = 16;
+
+            public int SectorsPerTrack { get; set; } = 63;
         }
 
         private abstract class AtaCommand
@@ -328,7 +331,7 @@
                 lba = device.ReadLBA();
                 count = device.ReadSectorCount();
 
-                pending = new byte[Device.bytesPerSector];
+                pending = new byte[Device.Config.BytesPerSector];
                 stage = 0;
             }
 
@@ -412,16 +415,20 @@
                 const string FirmareVersion = "1.00";
                 const string ModelNumber = "COBALT1PATA0001";
 
+                var spt = Device.Config.SectorsPerTrack;
+                var hpc = Device.Config.HeadsPerCylinder;
+                var bps = Device.Config.BytesPerSector;
+
                 using var stream = new MemoryStream();
                 using var writer = new BinaryWriter(stream);
 
                 writer.Write((ushort)0x0C5A);
-                writer.Write((ushort)(device.totalSectors / device.sectorsPerTrack / device.headsPerCylinder));
+                writer.Write((ushort)(device.totalSectors / spt / hpc));
                 writer.Write((ushort)0x0000);
-                writer.Write((ushort)device.headsPerCylinder);
-                writer.Write((ushort)(device.sectorsPerTrack * device.bytesPerSector));
-                writer.Write((ushort)device.bytesPerSector);
-                writer.Write((ushort)device.sectorsPerTrack);
+                writer.Write((ushort)hpc);
+                writer.Write((ushort)(spt * bps));
+                writer.Write((ushort)bps);
+                writer.Write((ushort)spt);
                 writer.Write((ushort)0x0000);
                 writer.Write((ushort)0x0000);
                 writer.Write((ushort)0x0000);
@@ -439,9 +446,9 @@
                 writer.Write((ushort)0x0000);
                 writer.Write((ushort)0x0000);
                 writer.Write((ushort)0x0001);
-                writer.Write((ushort)(device.totalSectors / device.sectorsPerTrack));
-                writer.Write((ushort)device.headsPerCylinder);
-                writer.Write((ushort)device.sectorsPerTrack);
+                writer.Write((ushort)(device.totalSectors / spt));
+                writer.Write((ushort)hpc);
+                writer.Write((ushort)spt);
                 writer.Write((ushort)(device.totalSectors >> 16) & 0xFFFF);
                 writer.Write((ushort)(device.totalSectors & 0xFFFF));
                 writer.Write((ushort)0x00FF);

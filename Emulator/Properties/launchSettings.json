@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Emulator": {
+      "commandName": "Project",
+      "commandLineArgs": "--config=C:\\Temp\\cobalt.json"
+    }
+  }
+}
