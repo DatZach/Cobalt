@@ -26,11 +26,11 @@
         // NOTE Read/Write to this does not affect the interrupt flag
         private int StatusFlags
         {
-            get => registers.ReadByte(0, RegStatus_Command * 2);
+            get => registers.ReadByte(0, RegStatus_Command * 2 + 1);
             set
             {
-                registers.WriteByte(0, RegStatus_Command * 2, (byte)value);
-                registers.WriteByte(0, RegAltStatus_DevControl * 2, (byte)value);
+                registers.WriteByte(0, RegStatus_Command * 2 + 1, (byte)value);
+                registers.WriteByte(0, RegAltStatus_DevControl * 2 + 1, (byte)value);
             }
         }
 
@@ -42,6 +42,8 @@
         private FileStream stream;
         private long totalSectors;
         private int bytesPerSector;
+        private int headsPerCylinder;
+        private int sectorsPerTrack;
 
         private readonly Memory registers;
         private bool interruptAsserted;
@@ -59,6 +61,8 @@
 
             stream = File.Open(path, FileMode.Open, FileAccess.ReadWrite, FileShare.Read);
             totalSectors = stream.Length / bytesPerSector;
+            headsPerCylinder = 16;
+            sectorsPerTrack = 63;
         }
 
         public override void Shutdown()
@@ -140,27 +144,13 @@
             {
                 case 0x20: // Read sector(s) w/ verify
                 case 0x21: // Read sector(s) w/o verify
-                {
-                    var lba = (ReadByte(0, RegLBA3) << 24) | (ReadByte(0, RegLBA2) << 16) |
-                              (ReadByte(0, RegLBA1) << 8 ) | (ReadByte(0, RegLBA0));
-                    var count = (int)ReadByte(0, RegSectorCount);
-                    if (count == 0) count = 256;
-
-                    activeCommand = new ReadSectorsCommand(this, lba, count);
+                    activeCommand = new ReadSectorsCommand(this);
                     break;
-                }
 
                 case 0x30: // Write sector(s) w/ verify
                 case 0x31: // Write sector(s) w/o verify
-                {
-                    var lba = (ReadByte(0, RegLBA3) << 24) | (ReadByte(0, RegLBA2) << 16) |
-                              (ReadByte(0, RegLBA1) << 8 ) | (ReadByte(0, RegLBA0));
-                    var count = (int)ReadByte(0, RegSectorCount);
-                    if (count == 0) count = 256;
-
-                    activeCommand = new WriteSectorsCommand(this, lba, count);
+                    activeCommand = new WriteSectorsCommand(this);
                     break;
-                }
 
                 case 0xEC: // Identify drive
                     activeCommand = new IdentifyDriveCommand(this);
@@ -170,6 +160,53 @@
                     StatusFlags |= SR_ERR;
                     break;
             }
+        }
+
+        private int ReadLBA()
+        {
+            var lba3 = ReadByte(0, RegLBA3);
+            var lba2 = ReadByte(0, RegLBA2);
+            var lba1 = ReadByte(0, RegLBA1);
+            var lba0 = ReadByte(0, RegLBA0);
+
+            int driveId = (lba3 & 0b0001_0000) >> 4; // TODO Discard if driveId does not match
+            if ((lba3 & 0b0100_0000) == 0)
+            {
+                // CHS
+                var c = (lba2 << 8) | lba1;
+                var h = lba3 & 0x0F;
+                var s = lba0;
+                CHSToLBA(c, h, s, out var lba);
+                return lba;
+            }
+            else
+            {
+                // LBA
+                return ((lba3 & 0x0F) << 24) | (lba2 << 16) | (lba1 << 8) | lba0;
+            }
+        }
+
+        private int ReadSectorCount()
+        {
+            int count = ReadByte(0, RegSectorCount);
+            if (count == 0) count = 256;
+            return count;
+        }
+
+        private void LBAToCHS(int lba, out int c, out int h, out int s)
+        {
+            var hpc = headsPerCylinder;
+            var spt = sectorsPerTrack;
+            c = lba / (hpc * spt);
+            h = (lba / spt) % hpc;
+            s = (lba % spt) + 1;
+        }
+
+        private void CHSToLBA(int c, int h, int s, out int lba)
+        {
+            var hpc = headsPerCylinder;
+            var spt = sectorsPerTrack;
+            lba = (c * hpc + h) * spt + (s - 1);
         }
 
         private void WriteSectors(long sector, int count, byte[] data)
@@ -220,11 +257,11 @@
 
             private readonly int lba, count;
 
-            public ReadSectorsCommand(AtaDevice device, int lba, int count)
+            public ReadSectorsCommand(AtaDevice device)
                 : base(device)
             {
-                this.lba = lba;
-                this.count = count;
+                lba = device.ReadLBA();
+                count = device.ReadSectorCount();
             }
 
             public override void Tick()
@@ -285,13 +322,13 @@
 
             private int lba, count;
 
-            public WriteSectorsCommand(AtaDevice device, int lba, int count)
+            public WriteSectorsCommand(AtaDevice device)
                 : base(device)
             {
-                this.pending = new byte[Device.bytesPerSector];
-                this.lba = lba;
-                this.count = count;
+                lba = device.ReadLBA();
+                count = device.ReadSectorCount();
 
+                pending = new byte[Device.bytesPerSector];
                 stage = 0;
             }
 
@@ -363,20 +400,100 @@
 
         private sealed class IdentifyDriveCommand : AtaCommand
         {
+            private int stage;
+
+            private readonly byte[] pending;
+            private int pendingIdx;
+
             public IdentifyDriveCommand(AtaDevice device)
                 : base(device)
             {
+                const string SerialNumber = "A1B2C3D4E5F6G7H8I9J0";
+                const string FirmareVersion = "1.00";
+                const string ModelNumber = "COBALT1PATA0001";
 
+                using var stream = new MemoryStream();
+                using var writer = new BinaryWriter(stream);
+
+                writer.Write((ushort)0x0C5A);
+                writer.Write((ushort)(device.totalSectors / device.sectorsPerTrack / device.headsPerCylinder));
+                writer.Write((ushort)0x0000);
+                writer.Write((ushort)device.headsPerCylinder);
+                writer.Write((ushort)(device.sectorsPerTrack * device.bytesPerSector));
+                writer.Write((ushort)device.bytesPerSector);
+                writer.Write((ushort)device.sectorsPerTrack);
+                writer.Write((ushort)0x0000);
+                writer.Write((ushort)0x0000);
+                writer.Write((ushort)0x0000);
+                WriteASCII16(SerialNumber, 20);
+                writer.Write((ushort)0x0001);
+                writer.Write((ushort)0x0000);
+                writer.Write((ushort)0x0000);
+                writer.Write((ushort)0x0000);
+                WriteASCII16(FirmareVersion, 8);
+                WriteASCII16(ModelNumber, 40);
+                writer.Write((ushort)0x0000); // TODO Support multiple read/write commands?
+                writer.Write((ushort)0x0000);
+                writer.Write((ushort)0x0200); // TODO Support DMA some day...
+                writer.Write((ushort)0x0000);
+                writer.Write((ushort)0x0000);
+                writer.Write((ushort)0x0000);
+                writer.Write((ushort)0x0001);
+                writer.Write((ushort)(device.totalSectors / device.sectorsPerTrack));
+                writer.Write((ushort)device.headsPerCylinder);
+                writer.Write((ushort)device.sectorsPerTrack);
+                writer.Write((ushort)(device.totalSectors >> 16) & 0xFFFF);
+                writer.Write((ushort)(device.totalSectors & 0xFFFF));
+                writer.Write((ushort)0x00FF);
+                writer.Write((ushort)0x00FF);
+                writer.Write((ushort)0xFFFF);
+                writer.Write((ushort)0x0000);
+                writer.Write((ushort)0x0000);
+
+                pending = stream.ToArray();
+
+                void WriteASCII16(string value, int length)
+                {
+                    for (int i = 0; i < length; ++i)
+                    {
+                        var ch0 = i + 0 < value.Length ? value[i + 0] : ' ';
+                        var ch1 = i + 1 < value.Length ? value[i + 1] : ' ';
+                        writer.Write((ushort)((ch0 << 8) | ch1));
+                    }
+                }
             }
 
             public override void Tick()
             {
-                
+                switch (stage)
+                {
+                    case 0: // 9.9
+                        Device.StatusFlags |= SR_BSY;
+                        stage = 1;
+                        break;
+
+                    case 1:
+                        Device.StatusFlags &= ~SR_BSY;
+                        Device.StatusFlags |= SR_DRQ;
+                        Device.interruptAsserted = true;
+                        stage = 2;
+                        break;
+                        
+                    case 2: // Complete
+                        break;
+                }
             }
 
             public override ushort ReadData()
             {
-                // NOTE Nothing to do
+                if (stage >= 1 && pendingIdx < pending.Length)
+                {
+                    var value = (ushort)((pending[pendingIdx + 0] << 8) | pending[pendingIdx + 1]);
+                    pendingIdx += 2;
+
+                    return value;
+                }
+                
                 return 0;
             }
 

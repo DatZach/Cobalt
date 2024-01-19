@@ -27,6 +27,8 @@ HddIRQ:
 	;jz		HddIRQ_Write
 	cmp		r0, 2		; Write Continue
 	jz		HddIRQ_WriteContinue
+	cmp		r0, 3		; Identify Drive
+	jz		HddIRQ_IdentifyDrive
 	jmp		HddIRQ_Done
 
 HddIRQ_Read:
@@ -51,6 +53,9 @@ HddIRQ_Read_Loop:
 HddIRQ_WriteContinue:
 	jmp		HddIRQ_Done
 
+HddIRQ_IdentifyDrive:
+	jmp		HddIRQ_Read
+
 HddIRQ_Done:
 	mov		ds, 0xC000
 	mov		r0, byte [0x13]		; Read status to clear interrupt
@@ -67,13 +72,24 @@ TestHdd:
 	mov		byte [0x0F], 1		; Sector 1
 	mov		byte [0x10], 0
 	mov		byte [0x11], 0
-	mov		byte [0x12], 0
+	mov		byte [0x12], 0x40	; LBA Mode
 	mov		byte [0x13], 0x20	; Read Sectors command
 TestHdd_Loop:
 	mov		ds, 0x0000
 	mov		r0, byte [HddIsDone]
 	cmp		r0, 1
 	jnz		TestHdd_Loop
+TestHdd_IdentifyDrive:
+	mov		ds, 0x0000
+	mov		byte [HddCommand], 3
+	mov		byte [HddIsDone], 0
+	mov		ds, 0xC000
+	mov		byte [0x13], 0xEC	; Identify Drive command
+TestHdd_Loop3:
+	mov		ds, 0x0000
+	mov		r0, byte [HddIsDone]
+	cmp		r0, 1
+	jnz		TestHdd_Loop3
 TestHdd_Write:
 	mov		ds, 0x0000
 	mov		byte [HddCommand], 1
@@ -82,7 +98,7 @@ TestHdd_Write:
 	mov		byte [0x0F], 3		; Sector 3
 	mov		byte [0x10], 0
 	mov		byte [0x11], 0
-	mov		byte [0x12], 0
+	mov		byte [0x12], 0x40	; LBA Mode
 	mov		byte [0x13], 0x30	; Read Sectors command
 HddIRQ_Write:
 	mov		ds, 0xC000
