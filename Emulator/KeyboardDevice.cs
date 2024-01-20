@@ -8,8 +8,8 @@ namespace Emulator
 
         public override string Name => "Keyboard";
         
-        public override short DevAddrLo => 0x08;
-        public override short DevAddrHi => 0x08;
+        public override short DevAddrLo => 0x09;
+        public override short DevAddrHi => 0x09;
 
         private readonly byte[] buffer;
         private int bufferIdx;

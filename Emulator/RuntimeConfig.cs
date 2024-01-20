@@ -34,13 +34,7 @@ namespace Emulator
                      ? ParseCommandLineConfig(args)
                      : ParseJsonConfig(configPath);
 
-            // Please, C#, an ounce of decent reflection <_<
-            // TODO Do not string compare, use the real types here
-            var asm = Assembly.GetEntryAssembly();
-            var deviceTypes = asm!.GetTypes()
-                .Where(x => x.BaseType != null && x.BaseType.Name.StartsWith("DeviceConfigBase"))
-                .ToList();
-
+            var deviceTypes = DeviceManager.GetDeviceTypes();
             var config = new RuntimeConfig();
             var devices = new List<DeviceConfigBase>();
             foreach (var kvp in dict)
@@ -60,12 +54,12 @@ namespace Emulator
                 else
                 {
                     // TODO Do not string compare, use the real types here
-                    var deviceType = deviceTypes.FirstOrDefault(x => x.FullName.Contains(kvp.Key));
+                    var deviceType = deviceTypes.FirstOrDefault(x => x.Config.FullName.Contains(kvp.Key));
                     var valueDict = kvp.Value as Dictionary<string, object>;
                     if (deviceType == null || valueDict == null)
                         continue;
 
-                    if (ParseDict(valueDict, deviceType) is DeviceConfigBase subConfig)
+                    if (ParseDict(valueDict, deviceType.Config) is DeviceConfigBase subConfig)
                         devices.Add(subConfig);
                 }
             }

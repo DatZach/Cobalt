@@ -25,7 +25,7 @@ namespace Emulator
         private readonly List<IDeviceBase> devices;
         public IReadOnlyList<IDeviceBase> Devices => devices;
 
-        public Machine(MicrocodeRom microcode, Memory rom)
+        public Machine(MicrocodeRom microcode, Memory rom, IReadOnlyList<DeviceConfigBase> deviceConfigs)
         {
             ClockHz = 1_000_000;
             RAM = new Memory(16 * 1024 * 1024);
@@ -34,21 +34,31 @@ namespace Emulator
             ROM.IsReadOnly = true;
             devices = new List<IDeviceBase>();
 
+            var deviceTypes = DeviceManager.GetDeviceTypes();
+            foreach (var deviceType in deviceTypes)
+            {
+                var deviceConfigType = deviceType.Config;
+                var deviceConfig = deviceConfigs.FirstOrDefault(x => x.GetType() == deviceConfigType);
+                if (deviceConfig == null)
+                    deviceConfig = Activator.CreateInstance(deviceConfigType) as DeviceConfigBase;
+
+                var device = Activator.CreateInstance(deviceType.Device) as IDeviceBase;
+
+                if (device == null || deviceConfig == null)
+                    throw new InvalidOperationException();
+
+                device.Machine = this;
+                device.Config = deviceConfig;
+                devices.Add(device);
+            }
+
             IsPowered = true;
         }
-
-        public void AddDevice<T, TConfig>(TConfig config)
-            where T : DeviceBase<TConfig>, new()
-            where TConfig : DeviceConfigBase, new()
-        {
-            var device = new T { Machine = this, Config = config };
-            devices.Add(device);
-        }
-
-        public T? GetDevice<T>()
+        
+        public T GetDevice<T>()
             where T : IDeviceBase
         {
-            return (T?)devices.FirstOrDefault(x => x is T);
+            return (T)devices.Single(x => x is T);
         }
 
         public void Initialize()

@@ -5,9 +5,13 @@ namespace Emulator
     public abstract class DeviceBase<TConfig> : IDeviceBase
         where TConfig : DeviceConfigBase, new()
     {
-        public Machine Machine { get; init; }
+        public Machine Machine => ((IDeviceBase)this).Machine;
 
-        public TConfig Config { get; init; }
+        public TConfig Config => (TConfig)((IDeviceBase)this).Config;
+
+        Machine IDeviceBase.Machine { get; set; }
+
+        DeviceConfigBase IDeviceBase.Config { get; set; }
 
         public abstract string Name { get; }
 
@@ -58,8 +62,10 @@ namespace Emulator
 
     public interface IDeviceBase : IMemory
     {
-        Machine Machine { get; init; }
-        
+        Machine Machine { get; set; }
+
+        DeviceConfigBase Config { get; set; }
+
         string Name { get; }
 
         short DevAddrLo { get; }
@@ -78,5 +84,28 @@ namespace Emulator
     public class DeviceConfigBase
     {
 
+    }
+
+    public static class DeviceManager
+    {
+        private static IReadOnlyList<TypeMetadata>? deviceTypes;
+        public static IReadOnlyList<TypeMetadata> GetDeviceTypes()
+        {
+            if (deviceTypes == null)
+            {
+                var deviceBaseType = typeof(IDeviceBase);
+                var asm = deviceBaseType.Assembly;
+                var types = asm.GetTypes();
+                deviceTypes = types.Where(x => deviceBaseType.IsAssignableFrom(x)
+                                            && x.BaseType != null
+                                            && x.BaseType != typeof(object))
+                    .Select(x => new TypeMetadata(x, x.BaseType!.GenericTypeArguments[0]))
+                    .ToList();
+            }
+
+            return deviceTypes;
+        }
+
+        public sealed record TypeMetadata(Type Device, Type Config);
     }
 }

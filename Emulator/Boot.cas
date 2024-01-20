@@ -129,7 +129,7 @@ KbdIRQ:
 	push	ds
 
 	mov		ds, 0xC000
-	mov		r0, byte [0x08]
+	mov		r0, byte [0x09]
 	mov		ds, 0x0000
 	mov		byte [scancode], r0
 	
