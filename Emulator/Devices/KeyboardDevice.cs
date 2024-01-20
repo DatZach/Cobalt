@@ -1,13 +1,13 @@
 ﻿using SDL2;
 
-namespace Emulator
+namespace Emulator.Devices
 {
     internal sealed class KeyboardDevice : DeviceBase<KeyboardDevice.ConfigDefinition>
     {
         private const ushort RegScancode = 0x0000; // + 0x6000:0x0008
 
         public override string Name => "Keyboard";
-        
+
         public override short DevAddrLo => 0x09;
         public override short DevAddrHi => 0x09;
 
@@ -60,7 +60,7 @@ namespace Emulator
                 buffer[bufferHead++ % buffer.Length] = scancode;
                 mapped >>= 8;
             }
-            
+
             interruptAsserted = true;
         }
 
@@ -88,7 +88,7 @@ namespace Emulator
             return ReadByte(segment, offset);
         }
 
-        private static readonly Dictionary<SDL.SDL_Scancode, long> SDLScancode2ATScancode_Pressed = new ()
+        private static readonly Dictionary<SDL.SDL_Scancode, long> SDLScancode2ATScancode_Pressed = new()
         {
             [SDL.SDL_Scancode.SDL_SCANCODE_ESCAPE] = 0x01,
             [SDL.SDL_Scancode.SDL_SCANCODE_1] = 0x02,
@@ -217,7 +217,7 @@ namespace Emulator
             [SDL.SDL_Scancode.SDL_SCANCODE_PAUSE] = 0xC59DE1451DE1,
         };
 
-        private static readonly Dictionary<SDL.SDL_Scancode, long> SDLScancode2ATScancode_Released = new ()
+        private static readonly Dictionary<SDL.SDL_Scancode, long> SDLScancode2ATScancode_Released = new()
         {
             [SDL.SDL_Scancode.SDL_SCANCODE_ESCAPE] = 0x81,
             [SDL.SDL_Scancode.SDL_SCANCODE_1] = 0x82,

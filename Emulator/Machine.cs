@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Text;
+using Emulator.Devices;
 using SDL2;
 
 namespace Emulator

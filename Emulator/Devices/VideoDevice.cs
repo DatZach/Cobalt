@@ -1,7 +1,7 @@
 ﻿using System.Diagnostics;
 using SDL2;
 
-namespace Emulator
+namespace Emulator.Devices
 {
     internal sealed class VideoDevice : DeviceBase<VideoDevice.ConfigDefinition>
     {
@@ -17,7 +17,7 @@ namespace Emulator
         private const int UserDefinedGlyphIndex = 0xF0;
 
         public override string Name => "Video";
-        
+
         public override short DevAddrLo => -1;
         public override short DevAddrHi => -1;
 
@@ -112,7 +112,7 @@ namespace Emulator
                         {
                             for (int xx = 0; xx < GlyphWidth; ++xx)
                             {
-                                offset = (ushort)((ch - UserDefinedGlyphIndex) * (GlyphWidth * GlyphHeight) + 0x1900);
+                                offset = (ushort)((ch - UserDefinedGlyphIndex) * GlyphWidth * GlyphHeight + 0x1900);
                                 var col = ReadByte(0x0000, offset);
                                 PackedByteToRGB(col, out r, out g, out b);
                                 SDL.SDL_SetRenderDrawColor(renderer, r, g, b, 255);
@@ -124,7 +124,7 @@ namespace Emulator
             }
 
             //RenderColorSpace();
-            
+
             SDL.SDL_RenderPresent(renderer);
 
             return false;
@@ -198,11 +198,11 @@ namespace Emulator
             {
                 // VRGB -> VR_VGG_VBB
                 var v = (byte)(
-                        (((c & 0b110) >> 1) << 6)
-                      | (((c & 0b110) >> 1) << 4)
-                      | (((c & 0b110) >> 1) << 1)
+                        (c & 0b110) >> 1 << 6
+                      | (c & 0b110) >> 1 << 4
+                      | (c & 0b110) >> 1 << 1
                 );
-                PackedByteToRGB((byte)v, out var r, out var g, out var b);
+                PackedByteToRGB(v, out var r, out var g, out var b);
                 SDL.SDL_SetRenderDrawColor(renderer, r, g, b, 255);
                 dstRect.x = c * 8;
                 dstRect.y = yo + 32 * 8;
@@ -220,14 +220,14 @@ namespace Emulator
             var ig = (idx & 0b0010) >> 1;
             var ir = (idx & 0b0001) >> 0;
             var v = (byte)(
-                  (iv << 7)
-                | (ib << 6)
-                | (ib << 5)
-                | (iv << 4)
-                | (ig << 3)
-                | (ig << 2)
-                | (ir << 1)
-                | (ir << 0)
+                  iv << 7
+                | ib << 6
+                | ib << 5
+                | iv << 4
+                | ig << 3
+                | ig << 2
+                | ir << 1
+                | ir << 0
             );
 
             PackedByteToRGB(v, out r, out g, out b);

@@ -307,7 +307,7 @@ namespace EmulatorTests
 
         private void AssertState(string source, MachineState expectedState)
         {
-            var machine = new Machine(microcodeRom, null)
+            var machine = new Machine(microcodeRom, null, null)
             {
                 ShutdownWhenHalted = true,
                 DebugOutput = true

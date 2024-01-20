@@ -1,4 +1,4 @@
-﻿namespace Emulator
+﻿namespace Emulator.Devices
 {
     internal sealed class AtaDevice : DeviceBase<AtaDevice.ConfigDefinition>
     {
@@ -14,14 +14,14 @@
 
         private const byte DCR_SRST = 0b00000100;
 
-        private const byte SR_ERR  = 0b00000001;
-        private const byte SR_IDX  = 0b00000010;
+        private const byte SR_ERR = 0b00000001;
+        private const byte SR_IDX = 0b00000010;
         private const byte SR_CORR = 0b00000100;
-        private const byte SR_DRQ  = 0b00001000;
-        private const byte SR_DSC  = 0b00010000;
-        private const byte SR_DWF  = 0b00100000;
+        private const byte SR_DRQ = 0b00001000;
+        private const byte SR_DSC = 0b00010000;
+        private const byte SR_DWF = 0b00100000;
         private const byte SR_DRDY = 0b01000000;
-        private const byte SR_BSY  = 0b10000000;
+        private const byte SR_BSY = 0b10000000;
 
         // NOTE Read/Write to this does not affect the interrupt flag
         private int StatusFlags
@@ -165,7 +165,7 @@
             if ((lba3 & 0b0100_0000) == 0)
             {
                 // CHS
-                var c = (lba2 << 8) | lba1;
+                var c = lba2 << 8 | lba1;
                 var h = lba3 & 0x0F;
                 var s = lba0;
                 CHSToLBA(c, h, s, out var lba);
@@ -174,7 +174,7 @@
             else
             {
                 // LBA
-                return ((lba3 & 0x0F) << 24) | (lba2 << 16) | (lba1 << 8) | lba0;
+                return (lba3 & 0x0F) << 24 | lba2 << 16 | lba1 << 8 | lba0;
             }
         }
 
@@ -190,8 +190,8 @@
             var hpc = Config.HeadsPerCylinder;
             var spt = Config.SectorsPerTrack;
             c = lba / (hpc * spt);
-            h = (lba / spt) % hpc;
-            s = (lba % spt) + 1;
+            h = lba / spt % hpc;
+            s = lba % spt + 1;
         }
 
         private void CHSToLBA(int c, int h, int s, out int lba)
@@ -299,7 +299,7 @@
             {
                 if (pending != null && pendingIdx < pending.Length)
                 {
-                    var value = (ushort)((pending[pendingIdx + 0] << 8) | pending[pendingIdx + 1]);
+                    var value = (ushort)(pending[pendingIdx + 0] << 8 | pending[pendingIdx + 1]);
                     pendingIdx += 2;
 
                     return value;
@@ -349,7 +349,7 @@
 
                     case 1: // Pending host (10.2.d)
                         break;
-                    
+
                     case 2: // Write to disk (10.2.f)
                         Device.WriteSectors(lba, 1, pending);
                         Device.StatusFlags &= ~SR_BSY;
@@ -465,7 +465,7 @@
                     {
                         var ch0 = i + 0 < value.Length ? value[i + 0] : ' ';
                         var ch1 = i + 1 < value.Length ? value[i + 1] : ' ';
-                        writer.Write((ushort)((ch0 << 8) | ch1));
+                        writer.Write((ushort)(ch0 << 8 | ch1));
                     }
                 }
             }
@@ -485,7 +485,7 @@
                         Device.interruptAsserted = true;
                         stage = 2;
                         break;
-                        
+
                     case 2: // Complete
                         break;
                 }
@@ -495,12 +495,12 @@
             {
                 if (stage >= 1 && pendingIdx < pending.Length)
                 {
-                    var value = (ushort)((pending[pendingIdx + 0] << 8) | pending[pendingIdx + 1]);
+                    var value = (ushort)(pending[pendingIdx + 0] << 8 | pending[pendingIdx + 1]);
                     pendingIdx += 2;
 
                     return value;
                 }
-                
+
                 return 0;
             }
 
