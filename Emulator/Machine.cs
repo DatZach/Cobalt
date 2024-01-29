@@ -64,7 +64,7 @@ namespace Emulator
 
         public void Initialize()
         {
-            if (SDL.SDL_Init(SDL.SDL_INIT_VIDEO | SDL.SDL_INIT_EVENTS) < 0)
+            if (SDL.SDL_Init(SDL.SDL_INIT_VIDEO | SDL.SDL_INIT_AUDIO | SDL.SDL_INIT_EVENTS) < 0)
                 throw new Exception($"SDL Init Error - {SDL.SDL_GetError()}");
 
             foreach (var device in devices)
@@ -185,7 +185,12 @@ namespace Emulator
         private void SelectMemoryPage(ref ushort segment, ref ushort offset, out IMemory memory)
         {
             var segSel = segment & 0xC000;
-            if (segSel == 0x0000)
+            if (segment == 0x2000)
+            {
+                //segment -= 0x2000;
+                memory = GetDevice<SoundDevice>();
+            }
+            else if (segSel == 0x0000)
                 memory = RAM;
             else if (segSel == 0x4000)
             {
@@ -195,7 +200,7 @@ namespace Emulator
             else if (segSel == 0x8000)
             {
                 segment -= 0x8000;
-                memory = GetDevice<VideoDevice>()!;
+                memory = GetDevice<VideoDevice>();
             }
             else if (segSel == 0xC000)
             {

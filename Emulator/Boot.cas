@@ -9,10 +9,108 @@ origin 0x0000
 nop								; Required for CPU boot
 
 Main:
-	mov		word [0x0000], HddIRQ		; We cannot disable interrupts, set this immediately!!
+	mov		word [0x0000], SndIRQ		; We cannot disable interrupts, set this immediately!!
 	mov		sp, 0x20 ; 0xEFF0			; Stack lives right below ROM space
 	
-	jmp TestRtc
+	jmp	TestSND
+
+TestSND:
+	;mov		ds, 0xC000
+	;mov		byte [0x0E], 43		; Sector Count
+	;mov		byte [0x0F], 0	
+	;mov		byte [0x10], 0
+	;mov		byte [0x11], 0
+	;mov		byte [0x12], 0x40	; LBA Mode
+	;mov		byte [0x13], 0x20	; Read Sectors command
+
+TestSND_Loop:
+	jmp TestSND_Loop
+
+SndIRQ:
+	push	r0
+	push	r1
+	push	r2
+
+	mov		ds, 0xC000
+	mov		r0, byte [0x14]
+	cmp		r0, 1
+	jz		SndIRQ_Next
+	jmp		SndIRQ_Read
+	jmp		IRQ_Done
+
+SndIRQ_Read:
+	mov		ds, 0x0000
+	mov		r2, word [bufferOff]
+	cmp		r2, 0
+	jz		Wow0
+	jmp		Wow1
+Wow0:
+	mov		word [bufferOff], 22050
+	jmp		Wow2
+Wow1:
+	mov		word [bufferOff], 0
+Wow2:
+mov r3, 11008
+SndIRQ_Read_Loop:
+	mov		ds, 0xC000
+	mov		r1, word [0x0C]
+	mov		ds, 0x2000
+	mov		byte [r2+0], r1l
+	mov		byte [r2+1], r1h
+	add		r2, 2
+	sub		r3, 1
+
+	cmp		r3, 0
+	jnz		SndIRQ_Read_Loop
+
+	mov		r3, 34
+SndIRQ_Fill_Loop:
+	mov		byte [r2], r1l
+	add		r2, 1
+	sub		r3, 1
+	cmp		r3, 0
+	jnz		SndIRQ_Fill_Loop
+
+	mov		ds, 0xC000
+	mov		r0, byte [0x13]		; Read status to clear interrupt
+	mov		ds, 0x0000
+
+	jmp		IRQ_Done
+
+SndIRQ_Next:
+	mov		ds, 0x0000
+	mov		r1, word [sectorIdx]
+	mov		ds, 0xC000
+	mov		byte [0x0E], 43		; Sector Count
+	mov		byte [0x0F], r1l	
+	mov		byte [0x10], r1h
+	mov		byte [0x11], 0
+	mov		byte [0x12], 0x40	; LBA Mode
+	mov		byte [0x13], 0x20	; Read Sectors command
+
+	mov		ds, 0xC000
+	mov		byte [0x14], 0
+
+	add		r1, 43
+	mov		ds, 0x0000
+	mov		word [sectorIdx], r1
+	jmp		IRQ_Done
+
+IRQ_Done:
+	pop		r2
+	pop		r1
+	pop		r0
+	rti
+
+sectorIdx: dw 0
+bufferOff: dw 22050
+
+TestBoot:
+	mov		r0, 0x0C2A
+	mov		r1, StrCobalt
+	mov		r3, 0x30
+	call	Print
+	hlt
 
 TestRTC:
 	mov		ds, 0xC000
@@ -336,6 +434,7 @@ StrTimeLHS: db "^x80^0^0^0"
 StrTimeRHS: db "^x81^0^0^0"
 StrTime: db "2024-01-14 14:09^0^0^0"
 StrCmd: db "^x7Fld^0"
+StrCobalt: db "COBALT^0^0";
 
 X: dw 0
 isShift: db 0

@@ -269,7 +269,7 @@ namespace Emulator
             int iaddr;
             if ((iword & 0x8000) != 0)
                 iaddr = (iword & 0xFF80) | ((flags.LoByte & 0x07) << 4);
-            else if ((iword & 0x0300) != 0)
+            else if ((iword & 0x0300) != 0) // NOTE == 0 and flipping the branch gives us the 001 for use
                 iaddr = iword & 0xFFF0;
             else
                 iaddr = iword & 0xFC00;
