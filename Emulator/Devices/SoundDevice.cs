@@ -5,6 +5,12 @@ namespace Emulator.Devices
 {
     internal sealed class SoundDevice : DeviceBase<SoundDevice.SoundConfig>
     {
+        public const int Frequency = 22050;
+        public const int Channels = 1;
+        public const int SampleSize = sizeof(byte);
+        public const int BufferSize = Frequency * SampleSize * Channels;
+        public const int BufferCount = 2;
+
         public override string Name => "Sound";
 
         public override short DevAddrLo => 0x14;
@@ -12,71 +18,65 @@ namespace Emulator.Devices
         public override short DevAddrHi => 0x14;
 
         private bool interruptAsserted;
+        private bool isPaused;
         private int tickIdx;
         private int bufferIdx;
         private readonly byte[] buffer;
-        private IntPtr audioStream;
-        private uint audioDevice;
+        private IntPtr inStream;
+        private uint audioDeviceId;
 
         private readonly SDL.SDL_AudioCallback deviceAudioCallback;
 
         public SoundDevice()
         {
             deviceAudioCallback = AudioDevice_OnCallback;
-            buffer = new byte[22050 * 2];
+            buffer = new byte[BufferSize * BufferCount];
+            isPaused = true;
         }
 
         public override void Initialize()
         {
-            //var audioSpec = new SDL.SDL_AudioSpec
-            //{
-            //    freq = 44100,
-            //    format = SDL.AUDIO_F32,
-            //    channels = 2,
-            //    samples = 44100,
-            //    callback = deviceAudioCallback
-            //};
-            var audioSpec = new SDL.SDL_AudioSpec
+            var spec = new SDL.SDL_AudioSpec
             {
-                freq = 22050,
+                freq = Frequency,
                 format = SDL.AUDIO_U8,
-                channels = 1,
-                samples = 22050,
+                channels = Channels,
+                samples = Frequency,
                 callback = deviceAudioCallback
             };
-            audioDevice = SDL.SDL_OpenAudioDevice(IntPtr.Zero, 0, ref audioSpec, out _, 0);
-
-            audioStream = SDL.SDL_NewAudioStream(SDL.AUDIO_U8, 1, 22050, SDL.AUDIO_U8, 1, 22050);
-            
-            SDL.SDL_PauseAudioDevice(audioDevice, 0);
-        }
-
-        private void AudioDevice_OnCallback(IntPtr userdata, IntPtr outStream, int len)
-        {
-            SDL.SDL_AudioStreamGet(audioStream, outStream, len);
+            audioDeviceId = SDL.SDL_OpenAudioDevice(IntPtr.Zero, 0, ref spec, out _, 0);
+            inStream = SDL.SDL_NewAudioStream(
+                spec.format, spec.channels, spec.freq,
+                spec.format, spec.channels, spec.freq
+            );
+            SDL.SDL_PauseAudioDevice(audioDeviceId, isPaused ? 1 : 0);
         }
 
         public override void Shutdown()
         {
-            SDL.SDL_FreeAudioStream(audioStream);
+            SDL.SDL_FreeAudioStream(inStream);
         }
 
-        public override unsafe bool Tick()
+        public override bool Tick()
         {
-            if (tickIdx++ >= 45 / 2) // TODO 45.35 ticks at the 1MHz rate, this is slightly slow
+            var machine = Machine;
+            if (!isPaused && machine.TickIndex % machine.ClockHz == 0)
             {
-                if (bufferIdx == 0 || bufferIdx == 22050)
-                {
-                    var pinBuffer = GCHandle.Alloc(buffer, GCHandleType.Pinned);
-                    SDL.SDL_LockAudioDevice(audioDevice);
-                    SDL.SDL_AudioStreamPut(audioStream, pinBuffer.AddrOfPinnedObject() + (bufferIdx + 22050) % buffer.Length, 22050);
-                    SDL.SDL_UnlockAudioDevice(audioDevice);
-                    pinBuffer.Free();
+                Console.WriteLine($"[SoundDevice] Submitting buffer");
 
-                    interruptAsserted = true;
-                }
+                var pinBuffer = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+                SDL.SDL_LockAudioDevice(audioDeviceId);
+                SDL.SDL_AudioStreamPut(
+                    inStream,
+                    pinBuffer.AddrOfPinnedObject() + bufferIdx * BufferSize,
+                    BufferSize
+                );
+                SDL.SDL_UnlockAudioDevice(audioDeviceId);
+                pinBuffer.Free();
 
-                bufferIdx = (bufferIdx + 1) % buffer.Length;
+                interruptAsserted = true;
+
+                bufferIdx = (bufferIdx + 1) % BufferCount;
                 tickIdx = 0;
             }
 
@@ -92,7 +92,13 @@ namespace Emulator.Devices
             }
             else if (segment == 0x0000)
             {
-                interruptAsserted = false;
+                var wasPaused = isPaused;
+                isPaused = (value & 0x40) == 0x40;
+                interruptAsserted = false;//wasPaused != isPaused && !isPaused;
+
+                SDL.SDL_PauseAudioDevice(audioDeviceId, isPaused ? 1 : 0);
+
+                Console.WriteLine($"[SoundDevice] WriteByte Status = {value:X2}; isPaused = {isPaused}");
             }
         }
 
@@ -111,7 +117,13 @@ namespace Emulator.Devices
             else if (segment == 0x0000)
             {
                 if (offset == 0)
-                    return (byte)(interruptAsserted ? 0x01 : 0x00);
+                {
+                    return (byte)(
+                          (bufferIdx & 0x01)
+                        | (isPaused ? 0x40 : 0x00)
+                        | (interruptAsserted ? 0x80 : 0x00)
+                    );
+                }
             }
 
             return 0;
@@ -120,6 +132,11 @@ namespace Emulator.Devices
         public override ushort ReadWord(ushort segment, ushort offset)
         {
             return ReadByte(segment, offset);
+        }
+
+        private void AudioDevice_OnCallback(IntPtr userdata, IntPtr outStream, int len)
+        {
+            SDL.SDL_AudioStreamGet(inStream, outStream, len);
         }
 
         public sealed class SoundConfig : DeviceConfigBase

@@ -9,20 +9,25 @@ origin 0x0000
 nop								; Required for CPU boot
 
 Main:
-	mov		word [0x0000], SndIRQ		; We cannot disable interrupts, set this immediately!!
+	;; KEYBOARD TEST
+	mov		word [0x0000], KbdIRQ		; We cannot disable interrupts, set this immediately!!
 	mov		sp, 0x20 ; 0xEFF0			; Stack lives right below ROM space
-	
-	jmp	TestSND
+	jmp	EchoKeyboard
+
+	;; SOUND TEST
+	mov		word [0x0000], SndIRQ
+	mov		sp, 0x20
+	jmp		TestSND
 
 TestSND:
-	;mov		ds, 0xC000
-	;mov		byte [0x0E], 43		; Sector Count
-	;mov		byte [0x0F], 0	
-	;mov		byte [0x10], 0
-	;mov		byte [0x11], 0
-	;mov		byte [0x12], 0x40	; LBA Mode
-	;mov		byte [0x13], 0x20	; Read Sectors command
-
+	mov		ds, 0xC000
+	mov		byte [0x14], 0x40
+	mov		byte [0x0E], 43		; Sector Count
+	mov		byte [0x0F], 0	
+	mov		byte [0x10], 0
+	mov		byte [0x11], 0
+	mov		byte [0x12], 0x40	; LBA Mode
+	mov		byte [0x13], 0x20	; Read Sectors command
 TestSND_Loop:
 	jmp TestSND_Loop
 
@@ -33,8 +38,8 @@ SndIRQ:
 
 	mov		ds, 0xC000
 	mov		r0, byte [0x14]
-	cmp		r0, 1
-	jz		SndIRQ_Next
+	bit		r0, 0x80
+	jnz		SndIRQ_Next
 	jmp		SndIRQ_Read
 	jmp		IRQ_Done
 
@@ -75,6 +80,9 @@ SndIRQ_Fill_Loop:
 	mov		r0, byte [0x13]		; Read status to clear interrupt
 	mov		ds, 0x0000
 
+	mov		ds, 0xC000
+	mov		byte [0x14], 0x00
+
 	jmp		IRQ_Done
 
 SndIRQ_Next:
@@ -89,7 +97,7 @@ SndIRQ_Next:
 	mov		byte [0x13], 0x20	; Read Sectors command
 
 	mov		ds, 0xC000
-	mov		byte [0x14], 0
+	mov		byte [0x14], 0x00
 
 	add		r1, 43
 	mov		ds, 0x0000
@@ -102,7 +110,7 @@ IRQ_Done:
 	pop		r0
 	rti
 
-sectorIdx: dw 0
+sectorIdx: dw 43
 bufferOff: dw 22050
 
 TestBoot:

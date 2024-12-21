@@ -272,6 +272,7 @@
                 switch (stage)
                 {
                     case 0: // 10.1.c
+                        Console.WriteLine($"[AtaDevice] ReadSectors; LBA = {lba}, count = {count}");
                         Device.StatusFlags |= SR_BSY;
                         stage = 1;
                         break;

@@ -9,6 +9,12 @@ namespace Emulator
     {
         public int ClockHz { get; set; }
 
+        public int TickIndex { get; set; }
+
+        //public readonly int ClockHz;
+
+        //public int TickIndex;
+
         public bool ShutdownWhenHalted { get; set; }
 
         public bool DebugOutput { get; set; }
@@ -29,6 +35,7 @@ namespace Emulator
         public Machine(MicrocodeRom microcode, Memory rom, IReadOnlyList<DeviceConfigBase> deviceConfigs)
         {
             ClockHz = 1_000_000;
+            TickIndex = 0;
             RAM = new Memory(16 * 1024 * 1024);
             CPU = new CPU(this, microcode);
             ROM = rom;
@@ -64,6 +71,9 @@ namespace Emulator
 
         public void Initialize()
         {
+            SDL.SDL_SetHint(SDL.SDL_HINT_RENDER_VSYNC, "0");
+            SDL.SDL_SetHint(SDL.SDL_HINT_FRAMEBUFFER_ACCELERATION, "1");
+
             if (SDL.SDL_Init(SDL.SDL_INIT_VIDEO | SDL.SDL_INIT_AUDIO | SDL.SDL_INIT_EVENTS) < 0)
                 throw new Exception($"SDL Init Error - {SDL.SDL_GetError()}");
 
@@ -81,69 +91,112 @@ namespace Emulator
 
         public void Run()
         {
-            const int TicksPerMs = 10000; // From Stopwatch class
-            const int HzPerMs = 1000;
-            var hzPerTick = TicksPerMs / (ClockHz / HzPerMs);
-            double statAvgIterationsPerLoop = 0;
-            double statTotalIterations = 0;
-            double statTotalLoops = 0;
+            //var thread = new Thread(EventPump);
+            //thread.Start();
 
+            int ticks = 0;
             var sw = Stopwatch.StartNew();
-            var lastTickTs = sw.ElapsedTicks;
-            while (IsPowered) // && statTotalIterations < ClockHz)
+            while (IsPowered)
             {
-                ++statTotalLoops;
-                var nowTickTs = sw.ElapsedTicks;
-                var ticks = nowTickTs - lastTickTs;
+                var ms = sw.ElapsedMilliseconds;
 
-                var iterations = ticks / hzPerTick;
-                if (iterations <= 0)
-                    continue;
+                Tick();
+                ++ticks;
 
-                statTotalIterations += iterations;
-                statAvgIterationsPerLoop += iterations;
-                while (iterations-- > 0 && IsPowered)
-                    Tick();
-
-                lastTickTs = nowTickTs;
-            }
-            sw.Stop();
-
-            statAvgIterationsPerLoop /= statTotalLoops;
-
-            if (DebugOutput)
-            {
-                Console.WriteLine(
-                    "STATS Ran {0}ms; AVG_ITR_PER_LOOP {1}; TOT_ITR {2}; TOT_LOOPS {3}",
-                    sw.ElapsedMilliseconds,
-                    statAvgIterationsPerLoop,
-                    statTotalIterations,
-                    statTotalLoops
-                );
+                if (ms >= 1000)
+                {
+                    Console.WriteLine($"[CPU] Ticked {ticks:N0} in {ms};");
+                    ticks = 0;
+                    sw.Restart();
+                }
             }
         }
+
+        //public void Run()
+        //{
+        //    const int TicksPerMs = 10000; // From Stopwatch class
+        //    const int HzPerMs = 1000;
+        //    var hzPerTick = TicksPerMs / (ClockHz / HzPerMs);
+        //    double statAvgIterationsPerLoop = 0;
+        //    double statTotalIterations = 0;
+        //    double statTotalLoops = 0;
+
+        //    var sw = Stopwatch.StartNew();
+        //    var lastTickTs = sw.ElapsedTicks;
+        //    while (IsPowered) // && statTotalIterations < ClockHz)
+        //    {
+        //        ++statTotalLoops;
+        //        var nowTickTs = sw.ElapsedTicks;
+        //        var ticks = nowTickTs - lastTickTs;
+
+        //        var iterations = ticks / hzPerTick;
+        //        if (iterations <= 0)
+        //            continue;
+
+        //        statTotalIterations += iterations;
+        //        statAvgIterationsPerLoop += iterations;
+        //        while (iterations-- > 0 && IsPowered)
+        //            Tick();
+
+        //        lastTickTs = nowTickTs;
+        //    }
+        //    sw.Stop();
+
+        //    statAvgIterationsPerLoop /= statTotalLoops;
+
+        //    if (DebugOutput)
+        //    {
+        //        Console.WriteLine(
+        //            "STATS Ran {0}ms; AVG_ITR_PER_LOOP {1}; TOT_ITR {2}; TOT_LOOPS {3}",
+        //            sw.ElapsedMilliseconds,
+        //            statAvgIterationsPerLoop,
+        //            statTotalIterations,
+        //            statTotalLoops
+        //        );
+        //    }
+        //}
+
+        //private void EventPump()
+        //{
+        //    while (true)
+        //    {
+        //        while (SDL.SDL_PollEvent(out var ev) == 1)
+        //        {
+        //            if (ev.type == SDL.SDL_EventType.SDL_QUIT)
+        //            {
+        //                IsPowered = false;
+        //                break;
+        //            }
+
+        //            foreach (var device in devices)
+        //                device.DispatchEvent(ev);
+        //        }
+        //    }
+        //}
 
         private void Tick()
         {
             var isCpuHalted = CPU.IsHalted;
+            
+            //while (SDL.SDL_PollEvent(out var ev) == 1)
+            //{
+            //    if (ev.type == SDL.SDL_EventType.SDL_QUIT)
+            //    {
+            //        IsPowered = false;
+            //        break;
+            //    }
 
-            while (SDL.SDL_PollEvent(out var ev) == 1)
-            {
-                if (ev.type == SDL.SDL_EventType.SDL_QUIT)
-                {
-                    IsPowered = false;
-                    break;
-                }
-
-                foreach (var device in devices)
-                    device.DispatchEvent(ev);
-            }
+            //    foreach (var device in devices)
+            //        device.DispatchEvent(ev);
+            //}
 
             IsInterruptAsserted = false;
             foreach (var device in devices)
                 IsInterruptAsserted |= device.Tick();
 
             CPU.Tick();
+
+            ++TickIndex;
 
             if (!isCpuHalted && CPU.IsHalted)
             {

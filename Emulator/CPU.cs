@@ -63,7 +63,7 @@ namespace Emulator
             ushort abusWord = 0;
             ushort aluaWord = 0;
             ushort alubWord = 0;
-            
+
             var cword = ResolveControlWord();
 
             if (cword == ControlWord.None)

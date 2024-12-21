@@ -5,13 +5,21 @@ namespace Emulator
     public abstract class DeviceBase<TConfig> : IDeviceBase
         where TConfig : DeviceConfigBase, new()
     {
-        public Machine Machine => ((IDeviceBase)this).Machine;
+        public Machine Machine { get; private set; }
 
-        public TConfig Config => (TConfig)((IDeviceBase)this).Config;
+        public TConfig Config { get; private set; }
 
-        Machine IDeviceBase.Machine { get; set; }
+        Machine IDeviceBase.Machine
+        {
+            get => Machine;
+            set => Machine = value;
+        }
 
-        DeviceConfigBase IDeviceBase.Config { get; set; }
+        DeviceConfigBase IDeviceBase.Config
+        {
+            get => Config;
+            set => Config = (TConfig)value;
+        }
 
         public abstract string Name { get; }
 

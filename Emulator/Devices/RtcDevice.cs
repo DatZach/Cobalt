@@ -20,21 +20,27 @@ namespace Emulator.Devices
         private const int CTRL_WDS = 0x01;
 
         private byte regCtrlB;
-
+        
         private DateTime timestamp;
-        private long lastTick;
+        private long lastTsTick;
 
         public RtcDevice()
         {
             timestamp = DateTime.Now;
+            lastTsTick = Stopwatch.GetTimestamp();
+            regCtrlB = CTRL_TE;
         }
 
         public override bool Tick()
         {
-            var nowTick = Stopwatch.GetTimestamp();
-            if ((regCtrlB & CTRL_TE) == CTRL_TE)
-                timestamp = timestamp.AddTicks(nowTick - lastTick);
-            lastTick = nowTick;
+            var machine = Machine;
+            if (machine.TickIndex % machine.ClockHz == 0)
+            {
+                var nowTsTick = Stopwatch.GetTimestamp();
+                if ((regCtrlB & CTRL_TE) == CTRL_TE)
+                    timestamp = timestamp.AddTicks(nowTsTick - lastTsTick);
+                lastTsTick = nowTsTick;
+            }
 
             return false;
         }

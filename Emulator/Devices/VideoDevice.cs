@@ -21,7 +21,8 @@ namespace Emulator.Devices
         public override short DevAddrLo => -1;
         public override short DevAddrHi => -1;
 
-        private DateTime lastFrameTime;
+        private Stopwatch swFrameTime;
+        //private DateTime lastFrameTime;
         private IntPtr window;
         private IntPtr renderer;
         private IntPtr texFont;
@@ -30,6 +31,7 @@ namespace Emulator.Devices
 
         public VideoDevice()
         {
+            swFrameTime = Stopwatch.StartNew();
             memory = new Memory(0xFFFF);
         }
 
@@ -52,7 +54,7 @@ namespace Emulator.Devices
             renderer = SDL.SDL_CreateRenderer(window, -1, SDL.SDL_RendererFlags.SDL_RENDERER_ACCELERATED);
             if (renderer == IntPtr.Zero)
                 throw new Exception($"SDL Init Error - {SDL.SDL_GetError()}");
-
+            
             var surfFont = SDL.SDL_LoadBMP("CobaltFont.bmp");
             texFont = SDL.SDL_CreateTextureFromSurface(renderer, surfFont);
         }
@@ -68,13 +70,20 @@ namespace Emulator.Devices
 
         public override bool Tick()
         {
+            return false;
+
             if (Config.Headless)
                 return false;
 
-            var nowFrameTime = DateTime.UtcNow;
-            if ((nowFrameTime - lastFrameTime).Milliseconds < 1000 / ScreenHz)
+            if (swFrameTime.ElapsedMilliseconds < 1000f / ScreenHz)
                 return false;
-            lastFrameTime = nowFrameTime;
+
+            swFrameTime.Restart();
+
+            //var nowFrameTime = DateTime.UtcNow;
+            //if ((nowFrameTime - lastFrameTime).Milliseconds < 1000 / ScreenHz)
+            //    return false;
+            //lastFrameTime = nowFrameTime;
 
             SDL.SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
             SDL.SDL_RenderClear(renderer);
