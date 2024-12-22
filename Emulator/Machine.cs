@@ -7,13 +7,11 @@ namespace Emulator
 {
     public sealed class Machine
     {
+        public int DEBUG_FPS { get; set; }
+
         public int ClockHz { get; set; }
 
         public int TickIndex { get; set; }
-
-        //public readonly int ClockHz;
-
-        //public int TickIndex;
 
         public bool ShutdownWhenHalted { get; set; }
 
@@ -66,7 +64,13 @@ namespace Emulator
         public T GetDevice<T>()
             where T : IDeviceBase
         {
-            return (T)devices.Single(x => x is T);
+            for (int i = devices.Count - 1; i >= 0; --i)
+            {
+                if (devices[i] is T t)
+                    return t;
+            }
+
+            throw new KeyNotFoundException($"No device '{typeof(T).Name}' found");
         }
 
         public void Initialize()
@@ -89,110 +93,134 @@ namespace Emulator
             SDL.SDL_Quit();
         }
 
-        public void Run()
+        public void Run_Uncapped()
         {
-            //var thread = new Thread(EventPump);
-            //thread.Start();
+            int machineTicks = 0;
 
-            int ticks = 0;
-            var sw = Stopwatch.StartNew();
+            var thread = new Thread(() =>
+            {
+                var sw = Stopwatch.StartNew();
+                while (true)
+                {
+                    var ms = sw.ElapsedMilliseconds;
+                    if (ms >= 1000)
+                    {
+                        Console.WriteLine($"[CPU] {machineTicks:N0} Ticks; FPS {DEBUG_FPS}; Period {ms}ms");
+                        DEBUG_FPS = 0;
+                        machineTicks = 0;
+                        sw.Restart();
+                    }
+
+                    Thread.Sleep(10);
+                }
+            });
+            thread.Start();
+
             while (IsPowered)
             {
-                var ms = sw.ElapsedMilliseconds;
-
                 Tick();
-                ++ticks;
-
-                if (ms >= 1000)
-                {
-                    Console.WriteLine($"[CPU] Ticked {ticks:N0} in {ms};");
-                    ticks = 0;
-                    sw.Restart();
-                }
+                ++machineTicks;
             }
         }
 
-        //public void Run()
-        //{
-        //    const int TicksPerMs = 10000; // From Stopwatch class
-        //    const int HzPerMs = 1000;
-        //    var hzPerTick = TicksPerMs / (ClockHz / HzPerMs);
-        //    double statAvgIterationsPerLoop = 0;
-        //    double statTotalIterations = 0;
-        //    double statTotalLoops = 0;
+        public void Run()
+        {
+            int machineTicks = 0;
 
-        //    var sw = Stopwatch.StartNew();
-        //    var lastTickTs = sw.ElapsedTicks;
-        //    while (IsPowered) // && statTotalIterations < ClockHz)
-        //    {
-        //        ++statTotalLoops;
-        //        var nowTickTs = sw.ElapsedTicks;
-        //        var ticks = nowTickTs - lastTickTs;
+            var thread = new Thread(() =>
+            {
+                var sw = Stopwatch.StartNew();
+                while (true)
+                {
+                    var ms = sw.ElapsedMilliseconds;
+                    if (ms >= 1000)
+                    {
+                        Console.WriteLine($"[CPU] {machineTicks:N0} Ticks; FPS {DEBUG_FPS}; Period {ms}ms");
+                        DEBUG_FPS = 0;
+                        machineTicks = 0;
+                        sw.Restart();
+                    }
 
-        //        var iterations = ticks / hzPerTick;
-        //        if (iterations <= 0)
-        //            continue;
+                    //Thread.Sleep(10);
+                }
+            });
+            thread.Start();
 
-        //        statTotalIterations += iterations;
-        //        statAvgIterationsPerLoop += iterations;
-        //        while (iterations-- > 0 && IsPowered)
-        //            Tick();
+            const int TicksPerMs = 10000; // From Stopwatch class
+            const int HzPerMs = 1000;
+            var hzPerTick = TicksPerMs / (ClockHz / HzPerMs);
+            double statAvgIterationsPerLoop = 0;
+            double statTotalIterations = 0;
+            double statTotalLoops = 0;
+            double accumulator = 0.0;
 
-        //        lastTickTs = nowTickTs;
-        //    }
-        //    sw.Stop();
+            var sw = Stopwatch.StartNew();
+            var lastTickTs = sw.ElapsedTicks;
+            while (IsPowered) // && statTotalIterations < ClockHz)
+            {
+                ++statTotalLoops;
+                var nowTickTs = sw.ElapsedTicks;
+                var ticks = nowTickTs - lastTickTs;
 
-        //    statAvgIterationsPerLoop /= statTotalLoops;
+                var dIterations = (double)ticks / hzPerTick;
+                var iterations = (long)dIterations;
+                accumulator += dIterations - iterations;
+                if (accumulator >= 1.0)
+                {
+                    var lAccumulator = (long)accumulator;
+                    iterations += lAccumulator;
+                    accumulator -= lAccumulator;
+                }
+                if (iterations <= 0)
+                    continue;
 
-        //    if (DebugOutput)
-        //    {
-        //        Console.WriteLine(
-        //            "STATS Ran {0}ms; AVG_ITR_PER_LOOP {1}; TOT_ITR {2}; TOT_LOOPS {3}",
-        //            sw.ElapsedMilliseconds,
-        //            statAvgIterationsPerLoop,
-        //            statTotalIterations,
-        //            statTotalLoops
-        //        );
-        //    }
-        //}
+                statTotalIterations += iterations;
+                statAvgIterationsPerLoop += iterations;
+                while (iterations-- > 0 && IsPowered)
+                {
+                    Tick();
+                    ++machineTicks;
+                }
 
-        //private void EventPump()
-        //{
-        //    while (true)
-        //    {
-        //        while (SDL.SDL_PollEvent(out var ev) == 1)
-        //        {
-        //            if (ev.type == SDL.SDL_EventType.SDL_QUIT)
-        //            {
-        //                IsPowered = false;
-        //                break;
-        //            }
+                lastTickTs = nowTickTs;
+            }
+            sw.Stop();
 
-        //            foreach (var device in devices)
-        //                device.DispatchEvent(ev);
-        //        }
-        //    }
-        //}
+            statAvgIterationsPerLoop /= statTotalLoops;
+
+            if (DebugOutput)
+            {
+                Console.WriteLine(
+                    "STATS Ran {0}ms; AVG_ITR_PER_LOOP {1}; TOT_ITR {2}; TOT_LOOPS {3}",
+                    sw.ElapsedMilliseconds,
+                    statAvgIterationsPerLoop,
+                    statTotalIterations,
+                    statTotalLoops
+                );
+            }
+        }
 
         private void Tick()
         {
             var isCpuHalted = CPU.IsHalted;
-            
-            //while (SDL.SDL_PollEvent(out var ev) == 1)
-            //{
-            //    if (ev.type == SDL.SDL_EventType.SDL_QUIT)
-            //    {
-            //        IsPowered = false;
-            //        break;
-            //    }
 
-            //    foreach (var device in devices)
-            //        device.DispatchEvent(ev);
-            //}
+            var canPollHostEvents = TickIndex % (ClockHz / 100) == 0;
+            while (canPollHostEvents && SDL.SDL_PollEvent(out var ev) == 1)
+            {
+                if (ev.type == SDL.SDL_EventType.SDL_QUIT)
+                {
+                    IsPowered = false;
+                    break;
+                }
 
-            IsInterruptAsserted = false;
-            foreach (var device in devices)
-                IsInterruptAsserted |= device.Tick();
+                foreach (var device in devices)
+                    device.DispatchEvent(ev);
+            }
+
+            var isInterruptAsserted = false;
+            for (var i = devices.Count - 1; i >= 0; --i)
+                isInterruptAsserted |= devices[i].Tick();
+            IsInterruptAsserted = isInterruptAsserted;
 
             CPU.Tick();
 

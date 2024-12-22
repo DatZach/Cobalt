@@ -70,15 +70,19 @@ namespace Emulator.Devices
 
         public override bool Tick()
         {
-            return false;
-
             if (Config.Headless)
                 return false;
 
-            if (swFrameTime.ElapsedMilliseconds < 1000f / ScreenHz)
+            var machine = Machine;
+            if (machine.TickIndex % (machine.ClockHz / ScreenHz) != 0)
                 return false;
 
-            swFrameTime.Restart();
+            //if (swFrameTime.ElapsedMilliseconds < 1000f / ScreenHz)
+            //    return false;
+
+            //swFrameTime.Restart();
+
+            ++Machine.DEBUG_FPS;
 
             //var nowFrameTime = DateTime.UtcNow;
             //if ((nowFrameTime - lastFrameTime).Milliseconds < 1000 / ScreenHz)

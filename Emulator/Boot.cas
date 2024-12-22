@@ -10,9 +10,9 @@ nop								; Required for CPU boot
 
 Main:
 	;; KEYBOARD TEST
-	mov		word [0x0000], KbdIRQ		; We cannot disable interrupts, set this immediately!!
-	mov		sp, 0x20 ; 0xEFF0			; Stack lives right below ROM space
-	jmp	EchoKeyboard
+	;mov		word [0x0000], KbdIRQ		; We cannot disable interrupts, set this immediately!!
+	;mov		sp, 0x20 ; 0xEFF0			; Stack lives right below ROM space
+	;jmp	EchoKeyboard
 
 	;; SOUND TEST
 	mov		word [0x0000], SndIRQ
