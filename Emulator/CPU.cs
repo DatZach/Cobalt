@@ -7,6 +7,7 @@ namespace Emulator
     {
         private static readonly Register Constant1 = new() { Word = 1 };
         private static readonly Register Constant2 = new() { Word = 2 };
+        private static readonly Register Constant4 = new() { Word = 4 };
         private const ushort iRTI_Hi = 0x08;
         private const ushort iINT_Hi = 0x0C;
 
@@ -14,6 +15,7 @@ namespace Emulator
 
         private int mci;
         private bool latchINT;
+        private bool latchINTEN;
 
         private readonly Register r0, r1, r2, r3, sp, ss, cs, ds, ta, tb, ip, flags, instruction, operand;
         private readonly Machine machine;
@@ -49,15 +51,17 @@ namespace Emulator
                 return;
 
             DoTick:
-            if (machine.IsInterruptAsserted && mci == 0 && !latchINT)
+            if (machine.IsInterruptAsserted && mci == 0)
+            {
+                latchINT = true;
+                ta.Word = 0;
+            }
+            
+            if (latchINT && latchINTEN)
             {
                 instruction.Word = iINT_Hi << 8;
                 mci = 1;
             }
-            if (instruction.HiByte == iINT_Hi)
-                latchINT = true;
-            if (instruction.HiByte == iRTI_Hi && mci == 5 /* TAO TAI */)
-                latchINT = false;
 
             ushort dbusWord = 0;
             ushort abusWord = 0;
@@ -141,6 +145,8 @@ namespace Emulator
                     reg = Constant1;
                 else if (bcword == ControlWord.Const2)
                     reg = Constant2;
+                else if (bcword == ControlWord.Const4)
+                    reg = Constant4;
                 else
                     throw new InvalidOperationException();
 
@@ -244,6 +250,10 @@ namespace Emulator
                     if (flags.Word == 0)
                         mci = (int)(cword & ControlWord.MASK_OPR) >> 16;
                 }
+                else if (ricword == ControlWord.INTLATCH)
+                    latchINT = (dbusWord & 1) == 1;
+                else if (ricword == ControlWord.INTENLATCH)
+                    latchINTEN = (dbusWord & 1) == 1;
                 else
                     throw new InvalidOperationException();
             }

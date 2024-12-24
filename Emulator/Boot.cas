@@ -9,6 +9,12 @@ origin 0x0000
 nop								; Required for CPU boot
 
 Main:
+	;; INTERRUPTS TEST
+	;mov		word [0x0000], IntIRQ
+	;mov		sp, 0x20
+	;sie		1
+	;jmp		TestINT
+
 	;; KEYBOARD TEST
 	;mov		word [0x0000], KbdIRQ		; We cannot disable interrupts, set this immediately!!
 	;mov		sp, 0x20 ; 0xEFF0			; Stack lives right below ROM space
@@ -17,7 +23,37 @@ Main:
 	;; SOUND TEST
 	mov		word [0x0000], SndIRQ
 	mov		sp, 0x20
+	sie		1
 	jmp		TestSND
+
+TestINT:
+	;db 0
+	ILLEGAL	r0, r0
+	brk
+	ret
+IntIRQ:
+	mov		r1, word [sp]
+	cmp		r1h, 0x00		; = Hardware Interrupt
+	jz		IntIRQ_HandleHardware
+	cmp		r1h, 0x01		; = Divide by 0
+	jz		IntIRQ_HandleDIV
+	cmp		r1h, 0x02		; = BRK
+	jz		IntIRQ_HandleBRK
+	cmp		r1h, 0x04		; = Invalid Opcode
+	jz		IntIRQ_HandleInvalidOpcode
+
+IntIRQ_HandleInvalidOpcode:
+	mov		r0, Main
+	mov		word [sp+2], r0
+	rti
+IntIRQ_HandleDIV:
+IntIRQ_HandleBRK:
+	hlt
+	rti
+
+IntIRQ_HandleHardware:
+	hlt
+	rti
 
 TestSND:
 	mov		ds, 0xC000

@@ -127,24 +127,24 @@ namespace Emulator
         {
             int machineTicks = 0;
 
-            var thread = new Thread(() =>
-            {
-                var sw = Stopwatch.StartNew();
-                while (true)
-                {
-                    var ms = sw.ElapsedMilliseconds;
-                    if (ms >= 1000)
-                    {
-                        Console.WriteLine($"[CPU] {machineTicks:N0} Ticks; FPS {DEBUG_FPS}; Period {ms}ms");
-                        DEBUG_FPS = 0;
-                        machineTicks = 0;
-                        sw.Restart();
-                    }
+            //var thread = new Thread(() =>
+            //{
+            //    var sw = Stopwatch.StartNew();
+            //    while (true)
+            //    {
+            //        var ms = sw.ElapsedMilliseconds;
+            //        if (ms >= 1000)
+            //        {
+            //            Console.WriteLine($"[CPU] {machineTicks:N0} Ticks; FPS {DEBUG_FPS}; Period {ms}ms");
+            //            DEBUG_FPS = 0;
+            //            machineTicks = 0;
+            //            sw.Restart();
+            //        }
 
-                    //Thread.Sleep(10);
-                }
-            });
-            thread.Start();
+            //        //Thread.Sleep(10);
+            //    }
+            //});
+            //thread.Start();
 
             const int TicksPerMs = 10000; // From Stopwatch class
             const int HzPerMs = 1000;

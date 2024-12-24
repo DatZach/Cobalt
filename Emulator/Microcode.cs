@@ -211,6 +211,7 @@ namespace Emulator
                                 "0" => ControlWord.None,
                                 "1" => ControlWord.Const1,
                                 "2" => ControlWord.Const2,
+                                "4" => ControlWord.Const4,
                                 _ => Enum.Parse<ControlWord>(subPart)
                             };
 
@@ -461,7 +462,7 @@ namespace Emulator
         FO      = 0x180,
         Const1  = 0x200,
         Const2  = 0x280,
-        B_XX_1  = 0x300, // UNUSED
+        Const4  = 0x300,
         B_XX_2  = 0x380, // UNUSED
         MASK_B  = 0x380,
         
@@ -470,8 +471,8 @@ namespace Emulator
         TBI     = 0xC00,
         SPI     = 0x1000,
         JNF     = 0x1400,
-        RI_XX_1 = 0x1800,
-        RI_XX_2 = 0x1C00,
+        INTLATCH= 0x1800,
+        INTENLATCH = 0x1C00,
         MASK_RI = 0x1C00,
         
         R       = 0x2000,
@@ -575,6 +576,8 @@ namespace Emulator
                 sb.Append("1 ");
             else if ((cw & ControlWord.MASK_B) == ControlWord.Const2)
                 sb.Append("2 ");
+            else if ((cw & ControlWord.MASK_B) == ControlWord.Const4)
+                sb.Append("4 ");
 
             if ((cw & ControlWord.MASK_RI) == ControlWord.RSI1)
                 sb.Append("RSI1 ");
@@ -590,6 +593,10 @@ namespace Emulator
                 sb.Append((int)(cw & ControlWord.MASK_OPR) >> 16);
                 sb.Append(' ');
             }
+            else if ((cw & ControlWord.MASK_RI) == ControlWord.INTLATCH)
+                sb.Append("INTLATCH ");
+            else if ((cw & ControlWord.MASK_RI) == ControlWord.INTENLATCH)
+                sb.Append("INTENLATCH ");
 
             if ((cw & ControlWord.MASK_IR) == ControlWord.II)
                 sb.Append("II ");
