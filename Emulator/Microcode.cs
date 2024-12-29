@@ -53,15 +53,16 @@ namespace Emulator
                     // OPCODE DECLARATION
                     int opcode = 0;
 
-                    var operandCount = int.Parse(parts[0]);
+                    var operandType = Convert.ToInt32(parts[0], 2) & 0x03;
                     var opcodeIndex = Convert.ToInt32(parts[1], 2) & 0x1F;
                     var opcodeName = parts[2].ToUpperInvariant();
                     var operandCombination = 0;
                     var isWildcard = false;
 
+                    opcodeIndex |= operandType << 4;
                     opcode |= opcodeIndex << 10;
 
-                    if (operandCount == 1)
+                    if (operandType is 0b10 or 0b11) // 1 Operand
                     {
                         var operand1 = ParseOperand(parts[3], i);
                         var hasZF = parts.Contains("+ZF") ? 0x0040 : 0;
@@ -69,7 +70,6 @@ namespace Emulator
                         var hasSF = parts.Contains("+SF") ? 0x0010 : 0;
                         isWildcard = parts[4] == "*";
                         
-                        opcode |= 0x8000;
                         opcode |= (int)operand1 << 7;
                         if (!isWildcard)
                         {
@@ -80,7 +80,7 @@ namespace Emulator
 
                         operandCombination = ((byte)operand1 << 4);
                     }
-                    else if (operandCount == 2)
+                    else if (operandType == 0b01) // 2 Operand
                     {
                         int k = 3;
                         var operandOrder = 0; // AB
@@ -100,18 +100,25 @@ namespace Emulator
 
                         operandCombination = (byte)operandOrder | ((byte)operand1 << 4) | (byte)operand2;
                     }
-                    else if (operandCount != 0)
-                        throw new AssemblyException(i, $"Illegal operand count {operandCount}");
+                    else if (operandType != 0)
+                        throw new AssemblyException(i, $"Illegal operand count {operandType}");
 
                     current = new Procedure(opcodeName, isWildcard);
-
+                    
                     if (!opcodesMetadata.TryGetValue(opcodeName, out var opcodeMetadata))
                     {
                         opcodeMetadata = new MicrocodeRom.Opcode
                         {
                             Name = opcodeName,
                             Index = opcodeIndex,
-                            OperandCount = operandCount,
+                            OperandCount = operandType switch
+                            {
+                                0b10 => 1,
+                                0b11 => 1,
+                                0b01 => 2,
+                                0b00 => 0,
+                                _ => 0
+                            },
                             OperandCombinations = new List<byte>()
                         };
                         opcodesMetadata.Add(opcodeName, opcodeMetadata);
@@ -206,14 +213,22 @@ namespace Emulator
                                 word |= ControlWord.ADDR;
                             }
 
-                            var cwPart = subPart switch
+                            ControlWord cwPart;
+                            try
                             {
-                                "0" => ControlWord.None,
-                                "1" => ControlWord.Const1,
-                                "2" => ControlWord.Const2,
-                                "4" => ControlWord.Const4,
-                                _ => Enum.Parse<ControlWord>(subPart)
-                            };
+                                cwPart = subPart switch
+                                {
+                                    "0" => ControlWord.None,
+                                    "1" => ControlWord.Const1,
+                                    "2" => ControlWord.Const2,
+                                    "4" => ControlWord.Const4,
+                                    _ => Enum.Parse<ControlWord>(subPart)
+                                };
+                            }
+                            catch (Exception ex)
+                            {
+                                throw new AssemblyException(i, ex.Message);
+                            }
 
                             if ((word & cwPart) != 0)
                                 throw new AssemblyException(i, $"Control signal {subPart} conflicts with another in this word");
@@ -236,11 +251,13 @@ namespace Emulator
             }
 
             var microcode = new ControlWord[MicrocodeRom.MaxControlWordCount];
-            foreach (var opcode in opcodes)
+            for (int addr = 0x0000; addr <= 0xFFF0; addr += 0x10)
             {
-                var addr = opcode.Key;
-                var code = opcode.Value.Code;
-                var codeLength = opcode.Value.CodeLength;
+                if (!opcodes.TryGetValue(addr, out var proc))
+                    proc = macros["ILLEGAL"] ?? throw new AssemblyException(-1, "Missing 'ILLEGAL' macro");
+
+                var code = proc.Code;
+                var codeLength = proc.CodeLength;
                 for (int i = 0; i < codeLength; ++i)
                 {
                     var romAddr = (addr | i);
@@ -263,11 +280,13 @@ namespace Emulator
             return value switch
             {
                 "REG" => OperandType.Reg,
+                "IMM8" => OperandType.Imm8,
                 "IMM16" => OperandType.Imm16,
-                "[REG+IMM16]" => OperandType.DerefWordRegPlusImm16,
-                "[IMM16]" => OperandType.DerefWordImm16,
-                "BYTE[REG+IMM16]" => OperandType.DerefByteRegPlusImm16,
-                "BYTE[IMM16]" => OperandType.DerefByteImm16,
+                "BYTE[SEG:REG+sIMM]" => OperandType.DerefByteSegRegPlusSImm,
+                "WORD[SEG:REG+sIMM]" => OperandType.DerefWordSegRegPlusSImm,
+                "BYTE[SEG:REG]" => OperandType.DerefByteSegReg,
+                "WORD[SEG:REG]" => OperandType.DerefWordSegReg,
+                "[SEG:uIMM16]" => OperandType.DerefSegUImm16,
                 _ => throw new AssemblyException(line, $"Illegal operand: {value}")
             };
         }
@@ -299,13 +318,16 @@ namespace Emulator
 
     public enum OperandType
     {
-        None,
-        Reg = 2,
+        Reg,
+        Imm8,
         Imm16,
-        DerefWordRegPlusImm16,
-        DerefWordImm16,
-        DerefByteRegPlusImm16,
-        DerefByteImm16
+        DerefByteSegRegPlusSImm,
+        DerefWordSegRegPlusSImm,
+        DerefByteSegReg,
+        DerefWordSegReg,
+        DerefSegUImm16,
+
+        None
     }
 
     public sealed class MicrocodeRom
@@ -313,7 +335,7 @@ namespace Emulator
         public const int Magic = 0x52434D43;
         public const int CurrentFileVersion = 1;
         public const int MaxControlWordCount = 0xFFFF; // 16 microcode instructions per opcode
-        public const int BytesPerControlWord = 3;
+        public const int BytesPerControlWord = 4;
 
         public int FileVersion { get; init; }
 
@@ -344,11 +366,13 @@ namespace Emulator
             var result = new byte[MaxControlWordCount * BytesPerControlWord];
             for (int i = 0; i < rom.Microcode.Length; ++i)
             {
-                var microcode = rom.Microcode[i];
-                var romAddr = i * 3;
-                result[romAddr + 2] = (byte)((int)microcode & 0xFF);
-                result[romAddr + 1] = (byte)(((int)microcode >> 8) & 0xFF);
-                result[romAddr + 0] = (byte)(((int)microcode >> 16) & 0xFF);
+                var microcode = (int)rom.Microcode[i];
+                var romAddr = i * BytesPerControlWord;
+                for (int j = BytesPerControlWord - 1; j >= 0; --j)
+                {
+                    result[romAddr + j] = (byte)(microcode & 0xFF);
+                    microcode >>= 8;
+                }
             }
 
             writer.Write(result);
@@ -389,10 +413,19 @@ namespace Emulator
             while (i < microcodeBytes.Length)
                 i += reader.Read(microcodeBytes, i, microcodeBytes.Length - i);
 
-            // TODO Technically, should not be hardcoded to read 3 bytes
             var microcode = new ControlWord[bytesPerBank];
             for (i = 0; i < MaxControlWordCount; ++i)
-                microcode[i] = (ControlWord)((microcodeBytes[i] << 24) | (rom[i + 1] << 8) | rom[i + 2]);
+            {
+                int cword = 0;
+                var romAddr = i * BytesPerControlWord;
+                for (int j = BytesPerControlWord - 1; j >= 0; --j)
+                {
+                    cword |= microcodeBytes[romAddr + j];
+                    cword <<= 8;
+                }
+
+                microcode[i] = (ControlWord)cword;
+            }
 
             var opcodeMetadata = new Dictionary<string, Opcode>();
             for (i = 0; i < opcodeCount; ++i)
@@ -441,67 +474,80 @@ namespace Emulator
     {
         None,
 
-        IPC1    = 0x01,
-        IPC2    = 0x02,
-        IPC4    = 0x03,
-        MASK_IPC= 0x03,
-        JMP     = 0x04,
+        IPC1        = 0x01,
+        IPC2        = 0x02,
+        IPC4        = 0x03,
+        IPCOPRW1    = 0x04,
+        IPCOPRW2    = 0x05,
+        IPC_XX_1    = 0x06,
+        IPC_XX_2    = 0x07,
+        MASK_IPC    = 0x07,
 
-        II      = 0x08,
-        OI      = 0x10,
-        FI      = 0x18,
-        MASK_IR = 0x18,
-        
-        RSO1    = 0x20,
-        TAO     = 0x40,
-        SPO     = 0x60,
-        MASK_A  = 0x60,
+        JMP         = 0x08,
 
-        RSO2    = 0x80,
-        TBO     = 0x100,
-        FO      = 0x180,
-        Const1  = 0x200,
-        Const2  = 0x280,
-        Const4  = 0x300,
-        B_XX_2  = 0x380, // UNUSED
-        MASK_B  = 0x380,
+        II          = 0x10,
+        OI          = 0x20,
+        FI          = 0x30,
+        MASK_IR     = 0x30,
         
-        RSI1    = 0x400,
-        TAI     = 0x800,
-        TBI     = 0xC00,
-        SPI     = 0x1000,
-        JNF     = 0x1400,
-        INTLATCH= 0x1800,
-        INTENLATCH = 0x1C00,
-        MASK_RI = 0x1C00,
-        
-        R       = 0x2000,
-        W       = 0x4000,
-        BYTE    = 0,
-        WORD    = 0x8000,
+        RSO1        = 0x40,
+        TAO         = 0x80,
+        SPO         = 0xC0,
+        MASK_A      = 0xC0,
 
-        ADD     = 0x10000,
-        SUB     = 0x20000,
-        OR      = 0x30000,
-        XOR     = 0x40000,
-        AND     = 0x50000,
-        SHL     = 0x60000,
-        SHR     = 0x70000,
-        MASK_ALU= 0x70000,
-        MASK_OPR= 0x70000,
+        RSO2        = 0x100,
+        TBO         = 0x200,
+        FO          = 0x300,
+        Const1      = 0x400,
+        Const2      = 0x500,
+        Const4      = 0x600,
+        B_XX_2      = 0x700, // UNUSED
+        MASK_B      = 0x700,
         
-        DATA    = 0,
-        ADDR    = 0x80000,
+        RSI1        = 0x800,
+        TAI         = 0x1000,
+        TBI         = 0x1800,
+        SPI         = 0x2000,
+        JNF         = 0x2800,
+        INTLATCH    = 0x3000,
+        INTENLATCH  = 0x3800,
+        MASK_RI     = 0x3800,
+        
+        R           = 0x4000,
+        W           = 0x8000,
 
-        CS      = 0x100000,
-        SS      = 0x200000,
-        DS      = 0x300000,
-        MASK_SEG= 0x300000,
+        BYTE        = 0,
+        WORD        = 0x10000,
+        OPRW1       = 0x20000,
+        OPRW2       = 0x30000,
+        MASK_BUSW   = 0x30000,
+
+        ADD         = 0x40000,
+        SUB         = 0x80000,
+        OR          = 0xC0000,
+        XOR         = 0x100000,
+        AND         = 0x140000,
+        SHL         = 0x180000,
+        SHR         = 0x1C0000,
+        MASK_ALU    = 0x1C0000,
+        MASK_OPR    = 0x1C0000,
         
-        IPO     = 0x400000,
-        HLT     = 0x800000,
-        RTN     = 0xC00000,
-        MASK_IP = 0xC00000
+        DATA        = 0,
+        ADDR        = 0x200000,
+
+        CS          = 0x400000,
+        SS          = 0x800000,
+        DS          = 0xC00000,
+        SEG1        = 0x1000000,
+        SEG2        = 0x1400000,
+        SEG_XX_1    = 0x1800000,
+        SEG_XX_2    = 0x1C00000,
+        MASK_SEG    = 0x1C00000,
+        
+        IPO         = 0x2000000,
+        HLT         = 0x4000000,
+        RTN         = 0x6000000,
+        MASK_IP     = 0x6000000
     }
 
     public static class MicrocodeUtility
@@ -518,8 +564,12 @@ namespace Emulator
                 sb.Append("W ");
             if (isRead || isWrite)
             {
-                if ((cw & ControlWord.WORD) != 0)
+                if ((cw & ControlWord.MASK_BUSW) == ControlWord.WORD)
                     sb.Append("WORD ");
+                else if ((cw & ControlWord.MASK_BUSW) == ControlWord.OPRW1)
+                    sb.Append("OPRW1 ");
+                else if ((cw & ControlWord.MASK_BUSW) == ControlWord.OPRW2)
+                    sb.Append("OPRW2 ");
                 else
                     sb.Append("BYTE ");
             }
@@ -530,6 +580,10 @@ namespace Emulator
                 sb.Append("SS:");
             else if ((cw & ControlWord.MASK_SEG) == ControlWord.DS)
                 sb.Append("DS:");
+            else if ((cw & ControlWord.MASK_SEG) == ControlWord.SEG1)
+                sb.Append("SEG1:");
+            else if ((cw & ControlWord.MASK_SEG) == ControlWord.SEG2)
+                sb.Append("SEG2:");
 
             if ((cw & ControlWord.ADDR) != 0)
                 sb.Append("$");
@@ -614,6 +668,10 @@ namespace Emulator
                 sb.Append("IPC2");
             else if ((cw & ControlWord.MASK_IPC) == ControlWord.IPC4)
                 sb.Append("IPC4");
+            else if ((cw & ControlWord.MASK_IPC) == ControlWord.IPCOPRW1)
+                sb.Append("IPCOPRW1");
+            else if ((cw & ControlWord.MASK_IPC) == ControlWord.IPCOPRW2)
+                sb.Append("IPCOPRW2");
 
             return sb.ToString();
         }

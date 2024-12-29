@@ -1,11 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection.Emit;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace Emulator
+﻿namespace Emulator
 {
     public sealed class Disassembler
     {
@@ -15,7 +8,7 @@ namespace Emulator
         public Disassembler(MicrocodeRom microcodeRom, Machine machine)
         {
             opcodeMetadata = microcodeRom?.OpcodeMetadata?.ToDictionary(
-                x => (x.Value.Index << 8) | (x.Value.OperandCount),
+                x => x.Value.Index,
                 x => x.Value
             ) ?? throw new ArgumentNullException(nameof(microcodeRom));
 
@@ -31,18 +24,18 @@ namespace Emulator
             var iword = machine.ReadWord(segment, offset);
             offset += 2;
 
-            int opcodeIndex = (iword & 0x7C00) >> 10;
-            int operandCount;
-            if ((iword & 0x8000) != 0)
-                operandCount = 1;
-            else if ((iword & 0x0300) == 0)
-                operandCount = 0;
-            else
-                operandCount = 2;
-
-            var idx = (opcodeIndex << 8) | operandCount;
-            if (!opcodeMetadata.TryGetValue(idx, out var metadata))
+            int opcodeIndex = (iword & 0xFC00) >> 10;
+            if (!opcodeMetadata.TryGetValue(opcodeIndex, out var metadata))
                 return $"; UNK {iword:X4}";
+
+            int operandCount = (opcodeIndex & 0x30) switch
+            {
+                0x30 => 1,
+                0x20 => 1,
+                0x10 => 2,
+                0x00 => 0,
+                _ => 0
+            };
 
             string? operandA = null;
             string? operandB = null;
@@ -58,6 +51,13 @@ namespace Emulator
                         operandA = ParseRegisterName(iword & 0x000F);
                         break;
 
+                    case OperandType.Imm8:
+                    {
+                        operandA = $"0x{machine.ReadByte(segment, offset):X2}";
+                        offset += 1;
+                        break;
+                    }
+
                     case OperandType.Imm16:
                     {
                         operandA = $"0x{machine.ReadWord(segment, offset):X4}";
@@ -65,23 +65,30 @@ namespace Emulator
                         break;
                     }
 
-                    case OperandType.DerefWordImm16:
-                    case OperandType.DerefByteImm16:
+                    case OperandType.DerefWordSegReg:
+                    case OperandType.DerefByteSegReg:
                     {
-                        var busWidthName = operand1Type == OperandType.DerefWordImm16 ? "WORD" : "BYTE";
+                        var busWidthName = operand1Type == OperandType.DerefWordSegReg ? "WORD" : "BYTE";
                         operandA = $"{busWidthName} [0x{machine.ReadWord(segment, offset):X4}]";
                         offset += 2;
                         break;
                     }
 
-                    case OperandType.DerefWordRegPlusImm16:
-                    case OperandType.DerefByteRegPlusImm16:
+                    case OperandType.DerefWordSegRegPlusSImm:
+                    case OperandType.DerefByteSegRegPlusSImm:
                     {
-                        var busWidthName = operand1Type == OperandType.DerefWordRegPlusImm16 ? "WORD" : "BYTE";
-                        var regName = ParseRegisterName(iword & 0x000F);
-                        //offset += 1;
-                        var immValue = (short)-machine.ReadWord(segment, offset);
-                        offset += 2;
+                        var operand = iword & 0x000F;
+                        var busWidthName = operand1Type == OperandType.DerefWordSegRegPlusSImm ? "WORD" : "BYTE";
+                        var regName = ParseSegRegIndex(operand);
+                        var immWidth = SelectOperandWidth(operand);
+
+                        short immValue;
+                        if (immWidth == 1)
+                            immValue = (short)-machine.ReadByte(segment, offset);
+                        else
+                            immValue = (short)-machine.ReadWord(segment, offset);
+                        offset += (ushort)immWidth;
+
                         if (immValue == 0)
                             operandA = $"{busWidthName} [{regName}]";
                         else
@@ -91,7 +98,17 @@ namespace Emulator
                         }
                         break;
                     }
-                    
+
+                    case OperandType.DerefSegUImm16:
+                    {
+                        var operand = iword & 0x000F;
+                        var segName = ParseSegmentIndex(operand);
+                        var immWidth = SelectOperandWidth(operand);
+                        var busWidthName = immWidth == 2 ? "WORD" : "BYTE";
+                        operandB = $"{busWidthName} [{segName}:0x{machine.ReadWord(segment, offset):X4}]";
+                        offset += 2;
+                        break;
+                    }
                 }
             }
 
@@ -105,6 +122,13 @@ namespace Emulator
                         offset += 1;
                         break;
 
+                    case OperandType.Imm8:
+                    {
+                        operandB = $"0x{machine.ReadByte(segment, offset):X2}";
+                        offset += 1;
+                        break;
+                    }
+
                     case OperandType.Imm16:
                     {
                         operandB = $"0x{machine.ReadWord(segment, offset):X4}";
@@ -112,23 +136,29 @@ namespace Emulator
                         break;
                     }
 
-                    case OperandType.DerefWordImm16:
-                    case OperandType.DerefByteImm16:
+                    case OperandType.DerefWordSegReg:
+                    case OperandType.DerefByteSegReg:
                     {
-                        var busWidthName = operand2Type == OperandType.DerefWordImm16 ? "WORD" : "BYTE";
+                        var busWidthName = operand2Type == OperandType.DerefWordSegReg ? "WORD" : "BYTE";
                         operandB = $"{busWidthName} [0x{machine.ReadWord(segment, offset):X4}]";
                         offset += 2;
                         break;
                     }
 
-                    case OperandType.DerefWordRegPlusImm16:
-                    case OperandType.DerefByteRegPlusImm16:
+                    case OperandType.DerefWordSegRegPlusSImm:
+                    case OperandType.DerefByteSegRegPlusSImm:
                     {
-                        var busWidthName = operand2Type == OperandType.DerefWordRegPlusImm16 ? "WORD" : "BYTE";
-                        var regName = ParseRegisterName(machine.ReadByte(segment, offset) & 0x0F);
+                        var operand = machine.ReadByte(segment, offset) & 0x0F;
+                        var busWidthName = operand2Type == OperandType.DerefWordSegRegPlusSImm ? "WORD" : "BYTE";
+                        var regName = ParseSegRegIndex(operand);
+                        var immWidth = SelectOperandWidth(operand);
                         offset += 1;
-                        var immValue = (short)-machine.ReadWord(segment, offset);
-                        offset += 2;
+                        short immValue;
+                        if (immWidth == 1)
+                            immValue = (short)-machine.ReadByte(segment, offset);
+                        else
+                            immValue = (short)-machine.ReadWord(segment, offset);
+                        offset += (ushort)immWidth;
                         if (immValue == 0)
                             operandB = $"{busWidthName} [{regName}]";
                         else
@@ -136,6 +166,17 @@ namespace Emulator
                             var signStr = (immValue & 0x8000) != 0 ? "" : "+";
                             operandB = $"{busWidthName} [{regName}{signStr}{immValue}]";
                         }
+                        break;
+                    }
+
+                    case OperandType.DerefSegUImm16:
+                    {
+                        var operand = machine.ReadByte(segment, offset) & 0x0F;
+                        var segName = ParseSegmentIndex(operand);
+                        var immWidth = SelectOperandWidth(operand);
+                        var busWidthName = immWidth == 2 ? "WORD" : "BYTE";
+                        operandB = $"{busWidthName} [{segName}:0x{machine.ReadWord(segment, offset):X4}]";
+                        offset += 2;
                         break;
                     }
                 }
@@ -175,5 +216,27 @@ namespace Emulator
         {
             return Registers[idx];
         }
+
+        private readonly static string[] SegRegs =
+        {
+            "DS:R0", "DS:R1", "DS:R2", "DS:R3", "SS:SP", "SS:R1", "CS:R2", "DS:R3",
+            "SS:R0", "CS:R0", "0XE000:R1", "0XC000:R1", "0X8000:R2", "0X4000:R2", "0X2000:R3", "0X0000:R3"
+        };
+        private static string ParseSegRegIndex(int idx)
+        {
+            return SegRegs[idx];
+        }
+
+        private readonly static string[] Segments =
+        {
+            "DS:", "DS:", "DS:", "DS:", "SS:", "SS:", "CS:", "DS:",
+            "SS:", "CS:", "0XE000:", "0XC000:", "0X8000:", "0X4000:", "0X2000:", "0X0000:"
+        };
+        private static string ParseSegmentIndex(int idx)
+        {
+            return Segments[idx];
+        }
+
+        private static int SelectOperandWidth(int index) => (index & 0xC) == 0x4 ? 1 : 2;
     }
 }

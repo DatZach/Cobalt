@@ -8,7 +8,6 @@ namespace Emulator
         private static readonly Register Constant1 = new() { Word = 1 };
         private static readonly Register Constant2 = new() { Word = 2 };
         private static readonly Register Constant4 = new() { Word = 4 };
-        private const ushort iRTI_Hi = 0x08;
         private const ushort iINT_Hi = 0x0C;
 
         public bool IsHalted { get; private set; }
@@ -114,7 +113,7 @@ namespace Emulator
             {
                 Register? reg;
                 if (acword == ControlWord.RSO1)
-                    reg = SelectRegister(instruction.Word & 0x000F);
+                    reg = SelectRegister(instruction.Word);
                 else if (acword == ControlWord.TAO)
                     reg = ta;
                 else if (acword == ControlWord.SPO)
@@ -136,7 +135,7 @@ namespace Emulator
             {
                 Register? reg;
                 if (bcword == ControlWord.RSO2)
-                    reg = SelectRegister(operand.Word & 0x000F);
+                    reg = SelectRegister(operand.Word);
                 else if (bcword == ControlWord.TBO)
                     reg = tb;
                 else if (bcword == ControlWord.FO)
@@ -192,19 +191,43 @@ namespace Emulator
                     ControlWord.CS => cs.Word,
                     ControlWord.SS => ss.Word,
                     ControlWord.DS => ds.Word,
+                    ControlWord.SEG1 => SelectSegment(instruction.Word),
+                    ControlWord.SEG2 => SelectSegment(operand.Word),
                     _ => 0
                 };
 
                 if (isRead) // Read
                 {
-                    if ((cword & ControlWord.WORD) != 0) // 16-bit
+                    if ((cword & ControlWord.MASK_BUSW) == ControlWord.OPRW1)
+                        dbusWord = SelectOperandWidth(instruction.Word) == 1
+                                 ? machine.ReadByte(seg, abusWord)
+                                 : machine.ReadWord(seg, abusWord);
+                    else if ((cword & ControlWord.MASK_BUSW) == ControlWord.OPRW2)
+                        dbusWord = SelectOperandWidth(operand.Word) == 1
+                                 ? machine.ReadByte(seg, abusWord)
+                                 : machine.ReadWord(seg, abusWord);
+                    else if ((cword & ControlWord.MASK_BUSW) == ControlWord.WORD) // 16-bit
                         dbusWord = machine.ReadWord(seg, abusWord);
                     else
                         dbusWord = machine.ReadByte(seg, abusWord);
                 }
                 else if (isWrite) // Write
                 {
-                    if ((cword & ControlWord.WORD) != 0) // 16-bit
+                    if ((cword & ControlWord.MASK_BUSW) == ControlWord.OPRW1)
+                    {
+                        if (SelectOperandWidth(instruction.Word) == 1)
+                            machine.WriteByte(seg, abusWord, (byte)(dbusWord & 0xFF));
+                        else
+                            machine.WriteWord(seg, abusWord, dbusWord);
+                    }
+                    else if ((cword & ControlWord.MASK_BUSW) == ControlWord.OPRW2)
+                    {
+                        if (SelectOperandWidth(operand.Word) == 1)
+                            machine.WriteByte(seg, abusWord, (byte)(dbusWord & 0xFF));
+                        else
+                            machine.WriteWord(seg, abusWord, dbusWord);
+                    }
+                    else if ((cword & ControlWord.MASK_BUSW) == ControlWord.WORD) // 16-bit
                         machine.WriteWord(seg, abusWord, dbusWord);
                     else
                         machine.WriteByte(seg, abusWord, (byte)(dbusWord & 0xFF));
@@ -236,7 +259,7 @@ namespace Emulator
             {
                 if (ricword == ControlWord.RSI1)
                 {
-                    var reg = SelectRegister(instruction.Word & 0x000F);
+                    var reg = SelectRegister(instruction.Word);
                     reg.Word = dbusWord;
                 }
                 else if (ricword == ControlWord.TAI)
@@ -271,26 +294,29 @@ namespace Emulator
                 ip.Word += 2;
             else if ((cword & ControlWord.MASK_IPC) == ControlWord.IPC4)
                 ip.Word += 4;
+            else if ((cword & ControlWord.MASK_IPC) == ControlWord.IPCOPRW1)
+                ip.Word += (ushort)SelectOperandWidth(instruction.Word);
+            else if ((cword & ControlWord.MASK_IPC) == ControlWord.IPCOPRW2)
+                ip.Word += (ushort)SelectOperandWidth(operand.Word);
         }
 
         private ControlWord ResolveControlWord()
         {
             var iword = instruction.Word;
-            int iaddr;
-            if ((iword & 0x8000) != 0)
-                iaddr = (iword & 0xFF80) | ((flags.LoByte & 0x07) << 4);
-            else if ((iword & 0x0300) != 0) // NOTE == 0 and flipping the branch gives us the 001 for use
-                iaddr = iword & 0xFFF0;
-            else
-                iaddr = iword & 0xFC00;
-            iaddr |= mci;
+            var iaddr = (iword & 0xC000) switch
+            {
+                0xC000 or 0x8000 => (iword & 0xFF80) | ((flags.LoByte & 0x07) << 4) | mci,
+                0x4000           => (iword & 0xFFF0) | mci,
+                0x0000           => (iword & 0xFC00) | mci,
+                _ => throw new ArgumentOutOfRangeException(nameof(iword), iword, "Illegal Instruction Encoding")
+            };
 
             return microcode[iaddr];
         }
 
         private Register SelectRegister(int index)
         {
-            return index switch
+            return (index & 0x0F) switch
             {
                 0 => r0,
                 1 => r1,
@@ -305,6 +331,32 @@ namespace Emulator
                 _ => throw new NotImplementedException()
             };
         }
+
+        private ushort SelectSegment(int index)
+        {
+            return (index & 0x0F) switch
+            {
+                0 => ds.Word,
+                1 => ds.Word,
+                2 => ds.Word,
+                3 => ds.Word,
+                4 => ss.Word,
+                5 => ss.Word,
+                6 => cs.Word,
+                7 => ds.Word,
+                8 => ss.Word,
+                9 => cs.Word,
+                10 => 0xE000,
+                11 => 0xC000,
+                12 => 0x8000,
+                13 => 0x4000,
+                14 => 0x2000,
+                15 => 0x0000,
+                _ => throw new ArgumentOutOfRangeException(nameof(index), index, "Illegal Segment Index")
+            };
+        }
+
+        private static int SelectOperandWidth(int index) => (index & 0xC) == 0x4 ? 1 : 2;
 
         public CpuState CaptureState()
         {

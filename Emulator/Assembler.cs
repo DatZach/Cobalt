@@ -74,7 +74,7 @@
                 else if (opcodeString == "ORIGIN")
                 {
                     var operandString = line[j..].ToUpperInvariant();
-                    TryParseImm16(operandString, -1, out var sOrigin);
+                    TryParseImm(operandString, -1, out _, out var sOrigin);
                     origin = sOrigin & 0xFFFF;
                     continue;
                 }
@@ -116,7 +116,8 @@
                     else
                     {
                         operandString = operandString[j..];
-                        TryParseImm16(operandString, -1, out var result);
+                        TryParseImm(operandString, -1, out var resultWidth, out var result);
+                        if (resultWidth != 1) throw new AssemblyException(i, $"The value {result:X16} does not fit within 1 byte of data.");
                         writer.Write((byte)(result & 0xFF));
                     }
                     continue;
@@ -124,7 +125,7 @@
                 else if (opcodeString == "DW")
                 {
                     var operandString = line[j..];
-                    TryParseImm16(operandString, -1, out var result);
+                    TryParseImm(operandString, -1, out _, out var result);
                     writer.Write((byte)(result >> 8));
                     writer.Write((byte)(result & 0xFF));
                     continue;
@@ -191,8 +192,10 @@
 
                 if (operandA != null)
                 {
-                    if (operandA.Type is OperandType.Reg or OperandType.DerefWordRegPlusImm16
-                                      or OperandType.DerefByteRegPlusImm16)
+                    if (operandA.Type is OperandType.Reg
+                                      or OperandType.DerefByteSegRegPlusSImm or OperandType.DerefWordSegRegPlusSImm
+                                      or OperandType.DerefByteSegReg or OperandType.DerefWordSegReg
+                                      or OperandType.DerefSegUImm16)
                         opcode |= (ushort)(operandA.Data1 & 0x000F);
                 }
 
@@ -203,54 +206,91 @@
                 if (operandA != null)
                 {
                     resolveFixupA?.Invoke(stream.Position);
+
+                    ushort data;
+                    int width;
+
                     switch (operandA.Type)
                     {
+                        case OperandType.Reg:
+                            data = 0;
+                            width = 0; // Already encoded in opcode
+                            break;
+
+                        case OperandType.Imm8:
+                            data = (ushort)operandA.Data1;
+                            width = 1;
+                            break;
                         case OperandType.Imm16:
-                        case OperandType.DerefWordImm16:
-                        case OperandType.DerefByteImm16:
-                        {
-                            var imm16 = (ushort)operandA.Data1;
-                            writer.Write((byte)(imm16 >> 8));
-                            writer.Write((byte)(imm16 & 0xFF));
+                            data = (ushort)operandA.Data1;
+                            width = 2;
                             break;
-                        }
-                        case OperandType.DerefWordRegPlusImm16:
-                        case OperandType.DerefByteRegPlusImm16:
-                        {
-                            var imm16 = (ushort)operandA.Data2;
-                            writer.Write((byte)(imm16 >> 8));
-                            writer.Write((byte)(imm16 & 0xFF));
+                        case OperandType.DerefByteSegRegPlusSImm:
+                        case OperandType.DerefWordSegRegPlusSImm:
+                            data = (ushort)operandA.Data2;
+                            width = (operandA.Data1 & 0x0C) == 0x04 ? 1 : 2;
                             break;
-                        }
+                        case OperandType.DerefByteSegReg:
+                        case OperandType.DerefWordSegReg:
+                            data = (ushort)operandA.Data2;
+                            width = (operandA.Data1 & 0x0C) == 0x04 ? 1 : 2;
+                            break;
+                        default:
+                            throw new AssemblyException(i, $"Unhandled operandA type {operandA.Type}");
+                    }
+
+                    if (width == 1)
+                        writer.Write((byte)data);
+                    else if (width == 2)
+                    {
+                        writer.Write((byte)(data >> 8));
+                        writer.Write((byte)(data & 0xFF));
                     }
                 }
 
                 if (operandB != null)
                 {
                     resolveFixupB?.Invoke(stream.Position);
+
+                    ushort data;
+                    int width;
+
                     switch (operandB.Type)
                     {
                         case OperandType.Reg:
-                            writer.Write((byte)operandB.Data1);
+                            data = 0;
+                            width = 1; // Already encoded in opcode
+                            break;
+
+                        case OperandType.Imm8:
+                            data = (ushort)operandB.Data1;
+                            width = 1;
                             break;
                         case OperandType.Imm16:
-                        case OperandType.DerefWordImm16:
-                        case OperandType.DerefByteImm16:
-                        {
-                            var imm16 = (ushort)operandB.Data1;
-                            writer.Write((byte)(imm16 >> 8));
-                            writer.Write((byte)(imm16 & 0xFF));
+                            data = (ushort)operandB.Data1;
+                            width = 2;
                             break;
-                        }
-                        case OperandType.DerefWordRegPlusImm16:
-                        case OperandType.DerefByteRegPlusImm16:
-                        {
+                        case OperandType.DerefByteSegRegPlusSImm:
+                        case OperandType.DerefWordSegRegPlusSImm:
+                            data = (ushort)operandB.Data2;
+                            width = (operandB.Data1 & 0x0C) == 0x04 ? 1 : 2;
+                            break;
+                        case OperandType.DerefByteSegReg:
+                        case OperandType.DerefWordSegReg:
                             writer.Write((byte)operandB.Data1);
-                            var imm16 = (ushort)operandB.Data2;
-                            writer.Write((byte)(imm16 >> 8));
-                            writer.Write((byte)(imm16 & 0xFF));
+                            data = (ushort)operandB.Data2;
+                            width = (operandB.Data1 & 0x0C) == 0x04 ? 1 : 2;
                             break;
-                        }
+                        default:
+                            throw new AssemblyException(i, $"Unhandled operandB type {operandB.Type}");
+                    }
+
+                    if (width == 1)
+                        writer.Write((byte)data);
+                    else if (width == 2)
+                    {
+                        writer.Write((byte)(data >> 8));
+                        writer.Write((byte)(data & 0xFF));
                     }
                 }
             }
@@ -273,28 +313,30 @@
         {
             if (metadata.OperandCount != operandCount)
                 throw new AssemblyException(line, $"Opcode '{metadata.Name}' expected {metadata.OperandCount} operands, received {operandCount} instead");
-            var operandCombination = (byte)(((byte)operand1 << 4) | (byte)operand2);
-            var operandCombinationIdx = metadata.OperandCombinations.FindIndex(x => (x & 0x7F) == operandCombination);
-            if (operandCombinationIdx == -1)
-                throw new AssemblyException(line, $"Opcode '{metadata.Name}' does not support the operand combination {operand1}, {operand2}");
-
+            
             int result = 0;
-
-            result |= (metadata.Index & 0x1F) << 10;
+            result |= (metadata.Index & 0x3F) << 10;
             result |= ((byte)operand1 & 0x07) << 7;
             result |= ((byte)operand2 & 0x07) << 4;
 
-            if (operandCount == 1)
-                result |= 0x8000;
-            else if (operandCount == 0)
-                result &= 0xFC00;
-            
-            return ((ushort)result, (metadata.OperandCombinations[operandCombinationIdx] & 0x80) != 0);
+            if (operandCount > 0)
+            {
+                var operandCombination = (byte)(((byte)((int)operand1 & 0x07) << 4) | (byte)((int)operand2 & 0x07));
+                var operandCombinationIdx =
+                    metadata.OperandCombinations.FindIndex(x => (x & 0x7F) == operandCombination);
+                if (operandCombinationIdx == -1)
+                    throw new AssemblyException(line,
+                        $"Opcode '{metadata.Name}' does not support the operand combination {operand1}, {operand2}");
+
+                return ((ushort)result, (metadata.OperandCombinations[operandCombinationIdx] & 0x80) != 0);
+            }
+            else
+                return ((ushort)result, false);
         }
 
         private Operand ParseOperand(int line, int operandIdx, string? operand)
         {
-            short data1;
+            short data1, data2;
             
             if (string.IsNullOrEmpty(operand))
                 return new Operand(OperandType.None);
@@ -303,18 +345,21 @@
             if (operand.Length >= 2 && operand[0] == '\'')
             {
                 // TODO Escape codes '^n
-                return new Operand(OperandType.Imm16, (short)operand[1]);
+                return new Operand(OperandType.Imm8, (byte)operand[1]);
             }
 
             // REG
             if ((data1 = ParseRegisterIndex(operand)) != -1)
                 return new Operand(OperandType.Reg, data1);
             
-            // IMM16
-            if (TryParseImm16(operand, operandIdx, out data1))
-                return new Operand(OperandType.Imm16, data1);
+            // IMM
+            if (TryParseImm(operand, operandIdx, out var data1Width, out data1))
+            {
+                var imm1Type = data1Width == 1 ? OperandType.Imm8 : OperandType.Imm16;
+                return new Operand(imm1Type, data1);
+            }
 
-            // [REG+IMM16] / [IMM16]
+            // [REG+IMM] / [IMM]
             bool isByte;
             if (operand.StartsWith("BYTE"))
             {
@@ -337,31 +382,46 @@
                 var indOperand = operand.Substring(1, operand.Length - 2);
                 var regOperand = operand.Substring(1, signIdx != -1 ? signIdx - 1 : operand.Length - 2);
 
-                // [REG+IMM16]
-                if ((data1 = ParseRegisterIndex(regOperand)) != -1)
+                // [SEG:REG] / [SEG:REG+sIMM]
+                ParseSegRegIndex(regOperand, out data1, out var data1ImmWidth);
+                if (data1 != -1)
                 {
-                    short data2;
+                    OperandType operandType;
+
                     if ((signIdx = indOperand.IndexOfAny(SignChars)) != -1)
                     {
+                        // [SEG:REG+sIMM]
                         var sign = indOperand[signIdx] == '-' ? -1 : 1;
                         var numberString = indOperand.Substring(signIdx + 1, indOperand.Length - signIdx - 1);
-                        if (!TryParseImm16(numberString, operandIdx, out data2))
+                        if (!TryParseImm(numberString, operandIdx, out var data2ImmWidth, out data2))
                             throw new AssemblyException(line, $"Illegal operand '{operand}'");
-
+                        if (data2ImmWidth > data1ImmWidth)
+                            throw new AssemblyException(line, $"Operand sImm would overflow {data2ImmWidth} > {data1ImmWidth}");
+                        
+                        operandType = isByte ? OperandType.DerefByteSegRegPlusSImm : OperandType.DerefWordSegRegPlusSImm;
                         data2 = (short)(data2 * -sign); // Negative sign because we SUB for sign purposes
                     }
                     else
+                    {
+                        // [SEG:REG]
+                        operandType = isByte ? OperandType.DerefByteSegReg : OperandType.DerefWordSegReg;
                         data2 = 0;
+                    }
 
-                    var operandType = isByte ? OperandType.DerefByteRegPlusImm16 : OperandType.DerefWordRegPlusImm16;
                     return new Operand(operandType, data1, data2);
                 }
 
-                // [IMM16]
-                if (TryParseImm16(indOperand, operandIdx, out data1))
+                // [SEG:uIMM16]
+                int colonIdx = operand.IndexOf(':');
+                var segOperand = operand.Substring(1, colonIdx);
+                var immOperand = operand.Substring(1, colonIdx != -1 ? colonIdx - 1 : operand.Length - 2);
+                data1 = ParseSegmentIndex(segOperand);
+
+                if (TryParseImm(immOperand, operandIdx, out _, out data2))
                 {
-                    var operandType = isByte ? OperandType.DerefByteImm16 : OperandType.DerefWordImm16;
-                    return new Operand(operandType, data1);
+                    if (isByte)
+                        data1 = (short)((data1 & 0x03) | 0x04);
+                    return new Operand(OperandType.DerefSegUImm16, data1, data2);
                 }
             }
 
@@ -377,9 +437,28 @@
         {
             return (short)Array.IndexOf(Registers, registerName);
         }
+        private readonly static string[] SegRegs =
+        {
+            "DS:R0", "DS:R1", "DS:R2", "DS:R3", "SS:SP", "SS:R1", "CS:R2", "DS:R3",
+            "SS:R0", "CS:R0", "0XE000:R1", "0XC000:R1", "0X8000:R2", "0X4000:R2", "0X2000:R3", "0X0000:R3"
+        };
+        private static void ParseSegRegIndex(string registerName, out short idx, out int width)
+        {
+            idx = (short)Array.IndexOf(SegRegs, registerName);
+            width = (idx & 0x0C) == 0x04 ? 1 : 2;
+        }
+        private readonly static string[] Segments =
+        {
+            "DS:", "DS:", "DS:", "DS:", "SS:", "SS:", "CS:", "DS:",
+            "SS:", "CS:", "0XE000:", "0XC000:", "0X8000:", "0X4000:", "0X2000:", "0X0000:"
+        };
+        private static short ParseSegmentIndex(string registerName)
+        {
+            return (short)Array.IndexOf(Segments, registerName);
+        }
 
         private readonly static char[] SignChars = { '+', '-' };
-        private bool TryParseImm16(string value, int operandIdx, out short result)
+        private bool TryParseImm(string value, int operandIdx, out int resultWidth, out short result)
         {
             int sign = value[0] == '-' ? -1 : 1;
             if (value[0] is '+' or '-')
@@ -387,14 +466,18 @@
 
             if (value.All(char.IsDigit))
             {
-                result = (short)(short.Parse(value) * sign);
+                var uResult = short.Parse(value);
+                resultWidth = uResult <= 0xFF ? 1 : 2;
+                result = (short)(uResult * sign);
                 return true;
             }
 
             if (value.Length >= 3 && value[0] == '0' && value[1] == 'X'
-                &&  value.Skip(2).All(IsHexDigit))
+            &&  value.Skip(2).All(IsHexDigit))
             {
-                result = (short)(Convert.ToInt16(value[2..], 16) * sign);
+                var uResult = Convert.ToInt16(value[2..], 16);
+                resultWidth = uResult <= 0xFF ? 1 : 2;
+                result = (short)(uResult * sign);
                 return true;
             }
 
@@ -406,6 +489,7 @@
                 if (labels.TryGetValue(value, out result))
                 {
                     result += (short)origin;
+                    resultWidth = 2; // TODO Wrong??
                     return true;
                 }
 
@@ -418,10 +502,12 @@
                     throw new ArgumentOutOfRangeException(nameof(operandIdx), operandIdx, "Must be 0 or 1");
                 
                 result = -1;
+                resultWidth = 0; // TODO Wrong??
                 return true;
             }
 
             result = 0;
+            resultWidth = 0;
             return false;
         }
 

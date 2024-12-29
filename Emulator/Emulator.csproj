@@ -10,15 +10,23 @@
 
   <ItemGroup>
     <None Remove="Boot.cas" />
+    <None Remove="Boot2.cas" />
     <None Remove="CobaltFont.bmp" />
     <None Remove="Microcode.cmc" />
+    <None Remove="Microcode2.cmc" />
   </ItemGroup>
 
   <ItemGroup>
     <Content Include="Boot.cas">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
+    <Content Include="Boot2.cas">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
     <Content Include="Microcode.cmc">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Microcode2.cmc">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

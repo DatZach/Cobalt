@@ -1,0 +1,19 @@
+;
+;	Cobalt Boot ROM
+;	0xF000 - 0xFFFF
+;
+
+format bin
+origin 0x0000
+
+nop								; Required for CPU boot
+
+Main:
+	sie		0
+
+	mov		r0, 0x1122
+	mov		r1, 0x33
+	mov		r1h, 0x44
+	mov		r2, r0
+
+	hlt
