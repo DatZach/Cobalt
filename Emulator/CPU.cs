@@ -318,17 +318,23 @@ namespace Emulator
         {
             return (index & 0x0F) switch
             {
-                0 => r0,
-                1 => r1,
-                2 => r2,
-                3 => r3,
-                4 => sp,
-                5 => ss,
-                6 => cs,
-                7 => ds,
-                10 => new Register { LoByte = r1.HiByte }, // TODO Readonly hack
-                11 => new Register { LoByte = r1.LoByte }, // TODO Readonly hack
-                _ => throw new NotImplementedException()
+                0  => r0,
+                1  => r1,
+                2  => r2,
+                3  => r3,
+                4  => sp,
+                5  => ss,
+                6  => cs,
+                7  => ds,
+                8  => r0.Hi,
+                9  => r0.Lo,
+                10 => r1.Hi,
+                11 => r1.Lo,
+                12 => r2.Hi,
+                13 => r2.Lo,
+                14 => r3.Hi,
+                15 => r3.Lo,
+                _  => throw new ArgumentOutOfRangeException(nameof(index), index, "Illegal Register Index")
             };
         }
 
@@ -336,23 +342,23 @@ namespace Emulator
         {
             return (index & 0x0F) switch
             {
-                0 => ds.Word,
-                1 => ds.Word,
-                2 => ds.Word,
-                3 => ds.Word,
-                4 => ss.Word,
-                5 => ss.Word,
-                6 => cs.Word,
-                7 => ds.Word,
-                8 => ss.Word,
-                9 => cs.Word,
+                0  => ds.Word,
+                1  => ds.Word,
+                2  => ds.Word,
+                3  => ds.Word,
+                4  => ss.Word,
+                5  => ss.Word,
+                6  => cs.Word,
+                7  => ds.Word,
+                8  => ss.Word,
+                9  => cs.Word,
                 10 => 0xE000,
                 11 => 0xC000,
                 12 => 0x8000,
                 13 => 0x4000,
                 14 => 0x2000,
                 15 => 0x0000,
-                _ => throw new ArgumentOutOfRangeException(nameof(index), index, "Illegal Segment Index")
+                _  => throw new ArgumentOutOfRangeException(nameof(index), index, "Illegal Segment Index")
             };
         }
 
@@ -430,9 +436,9 @@ namespace Emulator
     }
 
     [DebuggerDisplay("{ToString()}")]
-    public sealed class Register
+    public class Register
     {
-        public ushort Word { get; set; }
+        public virtual ushort Word { get; set; }
 
         public byte LoByte
         {
@@ -445,6 +451,12 @@ namespace Emulator
             get => (byte)((Word >> 8) & 0xFF);
             set => Word = (ushort)((value << 8) | LoByte);
         }
+
+        private RegisterFragment? loFragment;
+        public RegisterFragment Lo => loFragment ??= new RegisterFragment(this, 0);
+
+        private RegisterFragment? hiFragment;
+        public RegisterFragment Hi => hiFragment ??= new RegisterFragment(this, 8);
 
         public static implicit operator Register(int value)
         {
@@ -468,6 +480,24 @@ namespace Emulator
         public override string ToString()
         {
             return Word.ToString("X4");
+        }
+
+        public sealed class RegisterFragment : Register
+        {
+            public override ushort Word
+            {
+                get => (byte)((register.Word >> shift) & 0xFF);
+                set => register.Word = (ushort)((register.Word & (0xFF00 >> shift)) | ((value & 0xFF) << shift));
+            }
+
+            private readonly Register register;
+            private readonly int shift;
+
+            public RegisterFragment(Register register, int shift)
+            {
+                this.register = register ?? throw new ArgumentNullException(nameof(register));
+                this.shift = shift;
+            }
         }
     }
 }
