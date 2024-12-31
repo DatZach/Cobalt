@@ -231,7 +231,6 @@
                             data = 0;
                             width = 0; // Already encoded in opcode
                             break;
-
                         case OperandType.Imm8:
                             data = (ushort)operandA.Data1;
                             width = 1;
@@ -249,6 +248,10 @@
                         case OperandType.DerefWordSegReg:
                             data = 0;
                             width = 0;
+                            break;
+                        case OperandType.DerefSegUImm16:
+                            data = (ushort)operandA.Data2;
+                            width = 2;
                             break;
                         default:
                             throw new AssemblyException(i, $"Unhandled operandA type {operandA.Type}");
@@ -276,7 +279,6 @@
                             data = (ushort)operandB.Data1;
                             width = 1;
                             break;
-
                         case OperandType.Imm8:
                             data = (ushort)operandB.Data1;
                             width = 1;
@@ -287,6 +289,7 @@
                             break;
                         case OperandType.DerefByteSegRegPlusSImm:
                         case OperandType.DerefWordSegRegPlusSImm:
+                            writer.Write((byte)operandB.Data1);
                             data = (ushort)operandB.Data2;
                             width = (operandB.Data1 & 0x0C) == 0x04 ? 1 : 2;
                             break;
@@ -295,6 +298,11 @@
                             writer.Write((byte)operandB.Data1);
                             data = 0;
                             width = 0;
+                            break;
+                        case OperandType.DerefSegUImm16:
+                            writer.Write((byte)operandB.Data1);
+                            data = (ushort)operandB.Data2;
+                            width = 2;
                             break;
                         default:
                             throw new AssemblyException(i, $"Unhandled operandB type {operandB.Type}");
@@ -428,8 +436,8 @@
 
                 // [SEG:uIMM16]
                 int colonIdx = operand.IndexOf(':');
-                var segOperand = operand.Substring(1, colonIdx);
-                var immOperand = operand.Substring(1, colonIdx != -1 ? colonIdx - 1 : operand.Length - 2);
+                var segOperand = operand[1..colonIdx];
+                var immOperand = operand[(colonIdx + 1)..^1];
                 data1 = ParseSegmentIndex(segOperand);
 
                 if (TryParseImm(immOperand, operandIdx, out _, out data2))
@@ -464,8 +472,8 @@
         }
         private readonly static string[] Segments =
         {
-            "DS:", "DS:", "DS:", "DS:", "SS:", "SS:", "CS:", "DS:",
-            "SS:", "CS:", "0XE000:", "0XC000:", "0X8000:", "0X4000:", "0X2000:", "0X0000:"
+            "DS", "DS", "DS", "DS", "SS", "SS", "CS", "DS",
+            "SS", "CS", "0XE000", "0XC000", "0X8000", "0X4000", "0X2000", "0X0000"
         };
         private static short ParseSegmentIndex(string registerName)
         {

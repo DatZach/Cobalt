@@ -10,18 +10,37 @@ nop								; Required for CPU boot
 
 Main:
 	sie		0
+	;mov		word [0x0000:0x0000], IRQ
+	;sie		1
+	;db 0xF8						; TODO Interrupts do not dispatch?
 
-	mov		r0, 0x1122
-	mov		r1, 0x33
-	mov		r1h, 0x44
-	mov		r2, r0
-
-	mov		ds, 0x0000
 	mov		r0, 0x0020
-	mov		r3, 0x1234
-	mov		byte [ds:r0], r3l
+	mov		r1, 0x1234
+	mov		word [ds:r0], r1
 
-	mov		r0, 0x0024
-	mov		word [ds:r0], r3
+	mov		r2h, byte [ds:r0+1]
+	mov		r0, 0x0021
+	mov		r2l, byte [ds:r0-1]
 
+	;mov		r3, word [ds:r0-1]
+
+	mov		r3, 0x0000
+	mov		r3, word [ds:0x0020]
+
+	;mov		r0, 0x1122
+	;mov		r1, 0x33
+	;mov		r1h, 0x44
+	;mov		r2, r0
+
+	;mov		ds, 0x0000
+	;mov		r0, 0x0020
+	;mov		r3, 0x1234
+	;mov		byte [ds:r0], r3l
+
+	;mov		r0, 0x0024
+	;mov		word [ds:r0], r3
+
+	hlt
+
+IRQ:
 	hlt

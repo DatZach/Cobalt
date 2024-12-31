@@ -223,7 +223,7 @@
         private readonly static string[] SegRegs =
         {
             "DS:R0", "DS:R1", "DS:R2", "DS:R3", "SS:SP", "SS:R1", "CS:R2", "DS:R3",
-            "SS:R0", "CS:R0", "0XE000:R1", "0XC000:R1", "0X8000:R2", "0X4000:R2", "0X2000:R3", "0X0000:R3"
+            "SS:R0", "CS:R0", "0xE000:R1", "0xC000:R1", "0x8000:R2", "0x4000:R2", "0x2000:R3", "0x0000:R3"
         };
         private static string ParseSegRegIndex(int idx)
         {
@@ -232,8 +232,8 @@
 
         private readonly static string[] Segments =
         {
-            "DS:", "DS:", "DS:", "DS:", "SS:", "SS:", "CS:", "DS:",
-            "SS:", "CS:", "0XE000:", "0XC000:", "0X8000:", "0X4000:", "0X2000:", "0X0000:"
+            "DS", "DS", "DS", "DS", "SS", "SS", "CS", "DS",
+            "SS", "CS", "0xE000", "0xC000", "0x8000", "0x4000", "0x2000", "0x0000"
         };
         private static string ParseSegmentIndex(int idx)
         {
