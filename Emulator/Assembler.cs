@@ -438,14 +438,10 @@
                 int colonIdx = operand.IndexOf(':');
                 var segOperand = operand[1..colonIdx];
                 var immOperand = operand[(colonIdx + 1)..^1];
-                data1 = ParseSegmentIndex(segOperand);
+                data1 = ParseSegmentIndex(segOperand, isByte);
 
                 if (TryParseImm(immOperand, operandIdx, out _, out data2))
-                {
-                    if (isByte)
-                        data1 = (short)((data1 & 0x03) | 0x04);
                     return new Operand(OperandType.DerefSegUImm16, data1, data2);
-                }
             }
 
             throw new AssemblyException(line, $"Illegal operand '{operand}'");
@@ -460,6 +456,7 @@
         {
             return (short)Array.IndexOf(Registers, registerName);
         }
+
         private readonly static string[] SegRegs =
         {
             "DS:R0", "DS:R1", "DS:R2", "DS:R3", "SS:SP", "SS:R1", "CS:R2", "DS:R3",
@@ -470,14 +467,22 @@
             idx = (short)Array.IndexOf(SegRegs, registerName);
             width = (idx & 0x0C) == 0x04 ? 1 : 2;
         }
-        private readonly static string[] Segments =
+
+        private readonly static string[] ByteAddressingSegments =
         {
-            "DS", "DS", "DS", "DS", "SS", "SS", "CS", "DS",
+            "??", "??", "??", "??", "SS", "SS", "CS", "DS",
+            "??", "??", "??", "??", "??", "??", "??", "??"
+        };
+        private readonly static string[] WordAddressingSegments =
+        {
+            "DS", "DS", "DS", "DS", "??", "??", "??", "??",
             "SS", "CS", "0XE000", "0XC000", "0X8000", "0X4000", "0X2000", "0X0000"
         };
-        private static short ParseSegmentIndex(string registerName)
+        private static short ParseSegmentIndex(string registerName, bool isByte)
         {
-            return (short)Array.IndexOf(Segments, registerName);
+            return isByte
+                ? (short)Array.IndexOf(ByteAddressingSegments, registerName)
+                : (short)Array.IndexOf(WordAddressingSegments, registerName);
         }
 
         private readonly static char[] SignChars = { '+', '-' };

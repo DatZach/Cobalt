@@ -106,7 +106,7 @@
                         var segName = ParseSegmentIndex(operand);
                         var immWidth = SelectOperandWidth(operand);
                         var busWidthName = immWidth == 2 ? "WORD" : "BYTE";
-                        operandB = $"{busWidthName} [{segName}:0x{machine.ReadWord(segment, offset):X4}]";
+                        operandA = $"{busWidthName} [{segName}:0x{machine.ReadWord(segment, offset):X4}]";
                         offset += 2;
                         break;
                     }
