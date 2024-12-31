@@ -39,20 +39,35 @@
                 var colonIdx = line.IndexOf(':');
                 if (colonIdx >= 0)
                 {
-                    var labelName = line[..colonIdx].ToUpperInvariant();
-                    line = line[(colonIdx + 1)..];
-                    line = line.Trim();
+                    var labelName = line[..colonIdx].ToUpperInvariant().TrimStart();
 
-                    // TODO sublabels
-                    if (labels.ContainsKey(labelName))
-                        throw new AssemblyException(i, $"Redeclaration of label '{labelName}'");
+                    var isSubLabel = false;
+                    var isLabel = true;
+                    for (int k = 0; isLabel && k < labelName.Length; ++k)
+                    {
+                        var ch = labelName[k];
+                        if (k == 0 && ch == '.')
+                            isSubLabel = true;
+                        else if (!char.IsLetterOrDigit(ch) && ch != '_')
+                            isLabel = false;
+                    }
 
-                    // TODO Gotta find a better way to approach this because Cobalt technically supports
-                    //      a 32bit address space, but we can only page 16bits of it at a time...
-                    if (stream.Position > ushort.MaxValue)
-                        throw new AssemblyException(i, $"Label '{labelName}' would overflow address space");
+                    if (isLabel)
+                    {
+                        line = line[(colonIdx + 1)..];
+                        line = line.Trim();
 
-                    labels.Add(labelName, (short)stream.Position);
+                        // TODO sublabels
+                        if (labels.ContainsKey(labelName))
+                            throw new AssemblyException(i, $"Redeclaration of label '{labelName}'");
+
+                        // TODO Gotta find a better way to approach this because Cobalt technically supports
+                        //      a 32bit address space, but we can only page 16bits of it at a time...
+                        if (stream.Position > ushort.MaxValue)
+                            throw new AssemblyException(i, $"Label '{labelName}' would overflow address space");
+
+                        labels.Add(labelName, (short)stream.Position);
+                    }
                 }
 
                 if (string.IsNullOrEmpty(line))
@@ -154,8 +169,8 @@
                     operandCount = 0;
 
                 resolveFixup1 = resolveFixup2 = null;
-                var operand1 = ParseOperand(j, 0, operand1String);
-                var operand2 = ParseOperand(j, 1, operand2String);
+                var operand1 = ParseOperand(i, 0, operand1String);
+                var operand2 = ParseOperand(i, 1, operand2String);
                 
                 if (!opcodeMetadata.TryGetValue(opcodeString, out var metadata))
                     throw new AssemblyException(i, $"Unknown opcode '{opcodeString}'");
@@ -232,8 +247,8 @@
                             break;
                         case OperandType.DerefByteSegReg:
                         case OperandType.DerefWordSegReg:
-                            data = (ushort)operandA.Data2;
-                            width = (operandA.Data1 & 0x0C) == 0x04 ? 1 : 2;
+                            data = 0;
+                            width = 0;
                             break;
                         default:
                             throw new AssemblyException(i, $"Unhandled operandA type {operandA.Type}");
@@ -258,8 +273,8 @@
                     switch (operandB.Type)
                     {
                         case OperandType.Reg:
-                            data = 0;
-                            width = 1; // Already encoded in opcode
+                            data = (ushort)operandB.Data1;
+                            width = 1;
                             break;
 
                         case OperandType.Imm8:
@@ -278,8 +293,8 @@
                         case OperandType.DerefByteSegReg:
                         case OperandType.DerefWordSegReg:
                             writer.Write((byte)operandB.Data1);
-                            data = (ushort)operandB.Data2;
-                            width = (operandB.Data1 & 0x0C) == 0x04 ? 1 : 2;
+                            data = 0;
+                            width = 0;
                             break;
                         default:
                             throw new AssemblyException(i, $"Unhandled operandB type {operandB.Type}");
@@ -472,7 +487,7 @@
                 return true;
             }
 
-            if (value.Length >= 3 && value[0] == '0' && value[1] == 'X'
+            if (value.Length >= 3 && value[0] == '0' && value[1] is 'x' or 'X'
             &&  value.Skip(2).All(IsHexDigit))
             {
                 var uResult = Convert.ToInt16(value[2..], 16);

@@ -16,4 +16,12 @@ Main:
 	mov		r1h, 0x44
 	mov		r2, r0
 
+	mov		ds, 0x0000
+	mov		r0, 0x0020
+	mov		r3, 0x1234
+	mov		byte [ds:r0], r3l
+
+	mov		r0, 0x0024
+	mov		word [ds:r0], r3
+
 	hlt

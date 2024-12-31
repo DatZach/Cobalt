@@ -68,9 +68,10 @@
                     case OperandType.DerefWordSegReg:
                     case OperandType.DerefByteSegReg:
                     {
+                        var operand = iword & 0x000F;
                         var busWidthName = operand1Type == OperandType.DerefWordSegReg ? "WORD" : "BYTE";
-                        operandA = $"{busWidthName} [0x{machine.ReadWord(segment, offset):X4}]";
-                        offset += 2;
+                        var regName = ParseSegRegIndex(operand);
+                        operandA = $"{busWidthName} [{regName}]";
                         break;
                     }
 
@@ -139,9 +140,11 @@
                     case OperandType.DerefWordSegReg:
                     case OperandType.DerefByteSegReg:
                     {
+                        var operand = machine.ReadByte(segment, offset) & 0x0F;
                         var busWidthName = operand2Type == OperandType.DerefWordSegReg ? "WORD" : "BYTE";
-                        operandB = $"{busWidthName} [0x{machine.ReadWord(segment, offset):X4}]";
-                        offset += 2;
+                        var regName = ParseSegRegIndex(operand);
+                        operandB = $"{busWidthName} [{regName}]";
+                        offset += 1;
                         break;
                     }
 
