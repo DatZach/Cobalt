@@ -547,7 +547,9 @@ namespace Emulator
         IPO         = 0x2000000,
         HLT         = 0x4000000,
         RTN         = 0x6000000,
-        MASK_IP     = 0x6000000
+        MASK_IP     = 0x6000000,
+
+        BA          = 0x8000000 // EXPERIMENT
     }
 
     public static class MicrocodeUtility
@@ -573,6 +575,9 @@ namespace Emulator
                 else
                     sb.Append("BYTE ");
             }
+
+            if ((cw & ControlWord.BA) == ControlWord.BA)
+                sb.Append("BA ");
 
             if ((cw & ControlWord.MASK_SEG) == ControlWord.CS)
                 sb.Append("CS:");
