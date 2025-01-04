@@ -14,10 +14,15 @@ Main:
 	;sie		1
 	;db 0xF8						; TODO Interrupts do not dispatch?
 
-	mov		r0, 0x18
-	mov		byte [ds:r0], 0x7F
-	mov		r0, 0x10
-	mov		byte [ds:r0+4], byte [ds:r0+8]
+	;mov		r0, 0x18
+	;mov		byte [ds:r0], 0x7F
+	;mov		r0, 0x10
+	;mov		byte [ds:r0+4], byte [ds:r0+8]
+
+	;MOV BYTE[SEG:REG+sIMM] BYTE[SEG:REG]
+	mov		r0, 0x14
+	mov		byte [ds:r0], 0xAB
+	mov		byte [ds:r0+4], byte [ds:r0]
 
 	hlt
 

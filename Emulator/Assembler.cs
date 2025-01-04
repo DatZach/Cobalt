@@ -440,6 +440,9 @@
                 var immOperand = operand[(colonIdx + 1)..^1];
                 data1 = ParseSegmentIndex(segOperand, isByte);
 
+                if (data1 == -1)
+                    throw new AssemblyException(line, $"Illegal Addressing Mode for SEG:REG '{operand}'");
+
                 if (TryParseImm(immOperand, operandIdx, out _, out data2))
                     return new Operand(OperandType.DerefSegUImm16, data1, data2);
             }

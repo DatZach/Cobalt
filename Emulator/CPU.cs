@@ -74,7 +74,7 @@ namespace Emulator
 
             if (machine.DebugOutput)
             {
-                Console.Write($"{ip.Word:X4} {instruction.Word:X4} {(int)cword:X6} {cword.Disassemble()}");
+                Console.Write($"{ip.Word:X4} {instruction.Word:X4} {(int)cword:X8} {cword.Disassemble()}");
                 if (mci == 0)
                     Console.Write($"\t\t{disassembler.Disassemble(cs.Word, ip.Word)}");
                 Console.WriteLine();
