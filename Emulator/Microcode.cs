@@ -116,8 +116,7 @@ namespace Emulator
                                 0b10 => 1,
                                 0b11 => 1,
                                 0b01 => 2,
-                                0b00 => 0,
-                                _ => 0
+                                0b00 => 0
                             },
                             OperandCombinations = new List<byte>()
                         };

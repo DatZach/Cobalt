@@ -15,10 +15,12 @@
             try
             {
                 microcodeRom = Microcode.AssembleRom(config.MicrocodePath!);
-                var data = MicrocodeRom.ToRomBinary(microcodeRom);
 
                 if (config.ExportArtifacts)
+                {
+                    var data = MicrocodeRom.ToRomBinary(microcodeRom);
                     File.WriteAllBytes(@"C:\\Temp\\CobaltMicrocode.rom", data);
+                }
             }
             catch (AssemblyException ex)
             {

@@ -1,4 +1,6 @@
 ﻿using System.Diagnostics;
+using System.IO.Compression;
+using System.Runtime.InteropServices;
 using SDL2;
 
 namespace Emulator.Devices
@@ -21,8 +23,6 @@ namespace Emulator.Devices
         public override short DevAddrLo => -1;
         public override short DevAddrHi => -1;
 
-        private Stopwatch swFrameTime;
-        //private DateTime lastFrameTime;
         private IntPtr window;
         private IntPtr renderer;
         private IntPtr texFont;
@@ -31,7 +31,6 @@ namespace Emulator.Devices
 
         public VideoDevice()
         {
-            swFrameTime = Stopwatch.StartNew();
             memory = new Memory(0xFFFF);
         }
 
@@ -57,6 +56,8 @@ namespace Emulator.Devices
             
             var surfFont = SDL.SDL_LoadBMP("CobaltFont.bmp");
             texFont = SDL.SDL_CreateTextureFromSurface(renderer, surfFont);
+
+            //ExportCompressedFontBin(surfFont);
         }
 
         public override void Shutdown()
@@ -77,17 +78,7 @@ namespace Emulator.Devices
             if (machine.TickIndex % (machine.ClockHz / ScreenHz) != 0)
                 return false;
 
-            //if (swFrameTime.ElapsedMilliseconds < 1000f / ScreenHz)
-            //    return false;
-
-            //swFrameTime.Restart();
-
             ++Machine.DEBUG_FPS;
-
-            //var nowFrameTime = DateTime.UtcNow;
-            //if ((nowFrameTime - lastFrameTime).Milliseconds < 1000 / ScreenHz)
-            //    return false;
-            //lastFrameTime = nowFrameTime;
 
             SDL.SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
             SDL.SDL_RenderClear(renderer);
@@ -223,6 +214,51 @@ namespace Emulator.Devices
                 dstRect.h = 8;
                 SDL.SDL_RenderFillRect(renderer, ref dstRect);
             }
+        }
+
+        [Conditional("DEBUG")]
+        private void ExportCompressedFontBin(IntPtr surfFont)
+        {
+            using var fs = File.Create(@"C:\Temp\CobaltFont.bin");
+            using var gzFs = new GZipStream(fs, CompressionMode.Compress);
+            using var ms = new MemoryStream();
+            using var writer = new BinaryWriter(ms);
+
+            SDL.SDL_LockSurface(surfFont);
+            byte value = 0;
+            int idx = 0;
+            var sSurf = Marshal.PtrToStructure<SDL.SDL_Surface>(surfFont);
+            for (int ch = 33; ch < 129; ++ch)
+            {
+                for (int y = 0; y < GlyphHeight; ++y)
+                {
+                    for (int x = 0; x < GlyphWidth; ++x)
+                    {
+                        var xx = ch * GlyphWidth + x;
+                        var yy = y;
+                        var a = Marshal.ReadByte(sSurf.pixels, (yy * sSurf.pitch) + xx * 4 + 3);
+
+                        value |= (byte)(a == 0 ? 0 : 1);
+                        value <<= 1;
+                        if (++idx >= 8)
+                        {
+                            writer.Write(value);
+                            value = 0;
+                            idx = 0;
+                        }
+                    }
+                }
+            }
+
+            if (idx > 0)
+                writer.Write(value);
+            writer.Flush();
+
+            var buffer = ms.GetBuffer();
+            gzFs.Write(buffer, 0, buffer.Length);
+            gzFs.Flush();
+
+            SDL.SDL_UnlockSurface(surfFont);
         }
 
         private static void IndexedColorToRGB(byte idx, out byte r, out byte g, out byte b)

@@ -201,11 +201,11 @@ namespace Emulator
 
                 if (isRead) // Read
                 {
-                    if ((cword & ControlWord.MASK_BUSW) == ControlWord.OPRW1)
+                    if ((cword & ControlWord.MASK_BUSW) == ControlWord.ORW1)
                         dbusWord = SelectOperandWidth(instruction.Word) == 1
                                  ? machine.ReadByte(seg, abusWord)
                                  : machine.ReadWord(seg, abusWord);
-                    else if ((cword & ControlWord.MASK_BUSW) == ControlWord.OPRW2)
+                    else if ((cword & ControlWord.MASK_BUSW) == ControlWord.ORW2)
                         dbusWord = SelectOperandWidth(operand.Word) == 1
                                  ? machine.ReadByte(seg, abusWord)
                                  : machine.ReadWord(seg, abusWord);
@@ -216,14 +216,14 @@ namespace Emulator
                 }
                 else if (isWrite) // Write
                 {
-                    if ((cword & ControlWord.MASK_BUSW) == ControlWord.OPRW1)
+                    if ((cword & ControlWord.MASK_BUSW) == ControlWord.ORW1)
                     {
                         if (SelectOperandWidth(instruction.Word) == 1)
                             machine.WriteByte(seg, abusWord, (byte)(dbusWord & 0xFF));
                         else
                             machine.WriteWord(seg, abusWord, dbusWord);
                     }
-                    else if ((cword & ControlWord.MASK_BUSW) == ControlWord.OPRW2)
+                    else if ((cword & ControlWord.MASK_BUSW) == ControlWord.ORW2)
                     {
                         if (SelectOperandWidth(operand.Word) == 1)
                             machine.WriteByte(seg, abusWord, (byte)(dbusWord & 0xFF));
@@ -297,9 +297,9 @@ namespace Emulator
                 ip.Word += 2;
             else if ((cword & ControlWord.MASK_IPC) == ControlWord.IPC4)
                 ip.Word += 4;
-            else if ((cword & ControlWord.MASK_IPC) == ControlWord.IPCOPRW1)
+            else if ((cword & ControlWord.MASK_IPC) == ControlWord.IPCORW1)
                 ip.Word += (ushort)SelectOperandWidth(instruction.Word);
-            else if ((cword & ControlWord.MASK_IPC) == ControlWord.IPCOPRW2)
+            else if ((cword & ControlWord.MASK_IPC) == ControlWord.IPCORW2)
                 ip.Word += (ushort)SelectOperandWidth(operand.Word);
         }
 
