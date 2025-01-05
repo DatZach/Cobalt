@@ -9,7 +9,7 @@ namespace EmulatorTests
 
         public InstructionTests()
         {
-            microcodeRom = Microcode.AssembleRom("Microcode.cmc");
+            microcodeRom = Microcode.AssembleRom("Microcode2.cmc");
         }
 
         [TestMethod]
@@ -40,7 +40,7 @@ namespace EmulatorTests
                 mov sp, 0x1234
                 mov ss, 0x4321
                 mov ds, 0x0001
-                mov cs, 0x0000
+                mov cs, 0x4000
                 ",
                 new CpuState
                 {
@@ -50,24 +50,24 @@ namespace EmulatorTests
                     r3 = 0x4321,
                     sp = 0x1234,
                     ss = 0x4321,
-                    cs = 0x0000,
+                    cs = 0x4000,
                     ds = 0x0001,
                 }
             );
         }
 
         [TestMethod]
-        public void MOV_REG_dREGIMM16()
+        public void MOV_REG_dSEGuIMM16()
         {
             AssertState(
                 @"
-                mov [0x80], 0x1234
-                mov [0x90], 0x1234
+                mov word[ds:0x80], 0x1234
+                mov word[ds:0x90], 0x1234
                 mov r0, 0x80
-                mov r1, [r0]
-                mov r2, [r0+0x10]
+                mov r1, word[ds:r0]
+                mov r2, word:[ds:r0+0x10]
                 mov r0, 0xA0
-                mov r3, [r0-0x10]
+                mov r3, word:[ds:r0-0x10]
                 ",
                 new MachineState
                 {
@@ -92,8 +92,8 @@ namespace EmulatorTests
         {
             AssertState(
                 @"
-                mov [0x80], 0x1234
-                mov r0, [0x80]
+                mov word[ds:0x80], 0x1234
+                mov r0, word[ds:0x80]
                 ",
                 new MachineState
                 {
@@ -115,7 +115,7 @@ namespace EmulatorTests
             AssertState(
                 @"
                 mov r0, 0x1234
-                mov [0x80], r0
+                mov word[ds:0x80], r0
                 ",
                 new MachineState
                 {
@@ -136,7 +136,7 @@ namespace EmulatorTests
         {
             AssertState(
                 @"
-                mov [0x80], 0x1234
+                mov word[ds:0x80], 0x1234
                 ",
                 new MachineState
                 {
@@ -154,10 +154,10 @@ namespace EmulatorTests
             AssertState(
                 @"
                 mov r0, 0x100
-                mov [0x110], 0x1234
-                mov [0x80], [r0+0x10]
+                mov word[ds:0x110], 0x1234
+                mov word[ds:0x80], word[ds:r0+0x10]
                 mov r0, 0x120
-                mov [0x90], [r0-0x10]
+                mov word[ds:0x90], word[ds:r0-0x10]
                 ",
                 new MachineState
                 {
@@ -176,8 +176,8 @@ namespace EmulatorTests
         {
             AssertState(
                 @"
-                mov [0x100], 0x1234
-                mov [0x110], [0x100]
+                mov word[ds:0x100], 0x1234
+                mov word[ds:0x110], [word:0x100]
                 ",
                 new MachineState
                 {
@@ -197,9 +197,9 @@ namespace EmulatorTests
                 @"
                 mov r0, 0x100
                 mov r1, 0x1234
-                mov [r0+0x10], r1
+                mov word[ds:r0+0x10], r1
                 mov r0, 0x130
-                mov [r0-0x10], r1
+                mov word[ds:r0-0x10], r1
                 ",
                 new MachineState
                 {
@@ -222,12 +222,12 @@ namespace EmulatorTests
         {
             AssertState(
                 @"
-                mov [0x80], 0x1234
-                mov [0x60], 0x1234
+                mov word[ds:0x80], 0x1234
+                mov word[ds:0x60], 0x1234
                 mov r0, 0x40
                 mov r1, 0x70
-                mov [r0+0x10], [r1+0x10]
-                mov [r0-0x10], [r1-0x10]
+                mov word[ds:r0+0x10], word[ds:r1+0x10]
+                mov word[ds:r0-0x10], word[ds:r1-0x10]
                 ",
                 new MachineState
                 {
@@ -285,10 +285,10 @@ namespace EmulatorTests
         {
             AssertState(
                 @"
-                mov [0x80], 0x100
+                mov word[ds:0x80], 0x100
                 mov r0, 0x50
                 mov r1, 0x50
-                add r0, [r1+0x30]
+                add r0, word[ds:r1+0x30]
                 ",
                 new MachineState
                 {
@@ -307,18 +307,29 @@ namespace EmulatorTests
 
         private void AssertState(string source, MachineState expectedState)
         {
-            var machine = new Machine(microcodeRom, null, null)
+            var devices = new List<DeviceConfigBase>();
+            var bootRom = new Memory(0x0FFF);
+
+            var assembler = new Assembler(microcodeRom);
+            var program = assembler.AssembleSource(
+                "nop\n" +
+                "sie 0\n" +
+                source
+            );
+            var hlt = assembler.AssembleSource("hlt");
+            for (ushort i = 0; i < bootRom.Size; ++i)
+            {
+                var value = i < program.Length ? program[i] : hlt[0];
+                bootRom.WriteByte(0, i, value);
+            }
+
+            var machine = new Machine(microcodeRom, bootRom, devices)
             {
                 ShutdownWhenHalted = true,
                 DebugOutput = true
             };
 
-            var assembler = new Assembler(microcodeRom);
-            var program = assembler.AssembleSource("nop\n" + source + "\nhlt");
-            for (ushort i = 0; i < program.Length; ++i)
-                machine.WriteByte(0, i, program[i]);
-
-            machine.Run();
+            machine.Run(); // machine.Run_Uncapped();
 
             var actualState = machine.CaptureState();
             if (!actualState.IsEqual(expectedState))
