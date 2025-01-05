@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+	<dict>
+		<key>fileTypes</key>
+		<array>
+			<string>cas</string>
+		</array>
+		<key>firstLineMatch</key>
+		<string></string>
+		<key>name</key>
+		<string>Cobalt Assembly</string>
+		<key>patterns</key>
+		<array>
+			
+		</array>
+		<key>repository</key>
+		<dict>
+			
+		</dict>
+		<key>scopeName</key>
+		<string>source.cas</string>
+		<key>uuid</key>
+		<string>eab4f175-5da8-4952-a741-31629cdcf0d6</string>
+	</dict>
+</plist>

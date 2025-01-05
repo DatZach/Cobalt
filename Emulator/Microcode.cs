@@ -477,8 +477,8 @@ namespace Emulator
         IPC1        = 0x01,
         IPC2        = 0x02,
         IPC4        = 0x03,
-        IPCOPRW1    = 0x04,
-        IPCOPRW2    = 0x05,
+        IPCORW1    = 0x04,
+        IPCORW2    = 0x05,
         IPC_XX_1    = 0x06,
         IPC_XX_2    = 0x07,
         MASK_IPC    = 0x07,
@@ -518,8 +518,8 @@ namespace Emulator
 
         BYTE        = 0,
         WORD        = 0x10000,
-        OPRW1       = 0x20000,
-        OPRW2       = 0x30000,
+        ORW1       = 0x20000,
+        ORW2       = 0x30000,
         MASK_BUSW   = 0x30000,
 
         ADD         = 0x40000,
@@ -568,9 +568,9 @@ namespace Emulator
             {
                 if ((cw & ControlWord.MASK_BUSW) == ControlWord.WORD)
                     sb.Append("WORD ");
-                else if ((cw & ControlWord.MASK_BUSW) == ControlWord.OPRW1)
+                else if ((cw & ControlWord.MASK_BUSW) == ControlWord.ORW1)
                     sb.Append("OPRW1 ");
-                else if ((cw & ControlWord.MASK_BUSW) == ControlWord.OPRW2)
+                else if ((cw & ControlWord.MASK_BUSW) == ControlWord.ORW2)
                     sb.Append("OPRW2 ");
                 else
                     sb.Append("BYTE ");
@@ -673,9 +673,9 @@ namespace Emulator
                 sb.Append("IPC2");
             else if ((cw & ControlWord.MASK_IPC) == ControlWord.IPC4)
                 sb.Append("IPC4");
-            else if ((cw & ControlWord.MASK_IPC) == ControlWord.IPCOPRW1)
+            else if ((cw & ControlWord.MASK_IPC) == ControlWord.IPCORW1)
                 sb.Append("IPCOPRW1");
-            else if ((cw & ControlWord.MASK_IPC) == ControlWord.IPCOPRW2)
+            else if ((cw & ControlWord.MASK_IPC) == ControlWord.IPCORW2)
                 sb.Append("IPCOPRW2");
 
             return sb.ToString();
