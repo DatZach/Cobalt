@@ -159,9 +159,6 @@ namespace Emulator
             int zf = 0, cf = 0, sf = 0;
             if (isALUOperation)
             {
-                if ((cword & ControlWord.BA) == ControlWord.BA)
-                    (aluaWord, alubWord) = (alubWord, aluaWord);
-
                 int alucWord = 0;
                 if ((cword & ControlWord.MASK_ALU) == ControlWord.ADD)
                     alucWord = aluaWord + alubWord;

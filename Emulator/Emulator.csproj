@@ -14,6 +14,7 @@
     <None Remove="CobaltFont.bmp" />
     <None Remove="Microcode.cmc" />
     <None Remove="Microcode2.cmc" />
+    <None Remove="Microcode3.cmc" />
   </ItemGroup>
 
   <ItemGroup>
@@ -27,6 +28,9 @@
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
     <Content Include="Microcode2.cmc">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Microcode3.cmc">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

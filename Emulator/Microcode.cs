@@ -8,8 +8,9 @@ namespace Emulator
         public static MicrocodeRom AssembleRom(string microcodeFilePath)
         {
             var macros = new Dictionary<string, Procedure>();
-            var opcodes = new Dictionary<int, Procedure>();
-            var opcodesMetadata = new Dictionary<string, MicrocodeRom.Opcode>();
+            //var opcodes = new Dictionary<int, Procedure>();
+            //var opcodesMetadata = new Dictionary<string, MicrocodeRom.Opcode>();
+            var procedures = new List<Procedure>();
             int revision = -1;
 
             var lines = File.ReadAllLines(microcodeFilePath);
@@ -38,7 +39,7 @@ namespace Emulator
                         if (macros.ContainsKey(macroName))
                             throw new AssemblyException(i, $"Macro '{macroName}' already declared");
 
-                        current = new Procedure(macroName, false);
+                        current = new Procedure { Name = macroName };
                         macros[macroName] = current;
                         continue;
                     }
@@ -51,98 +52,117 @@ namespace Emulator
                     }
 
                     // OPCODE DECLARATION
-                    int opcode = 0;
+                    //int opcode = 0;
 
                     var operandType = Convert.ToInt32(parts[0], 2) & 0x03;
                     var opcodeIndex = Convert.ToInt32(parts[1], 2) & 0x1F;
                     var opcodeName = parts[2].ToUpperInvariant();
-                    var operandCombination = 0;
-                    var isWildcard = false;
+                    //var operandCombination = 0;
+                    var operandOrder = false;
+                    var operand1 = OperandType.None;
+                    var operand2 = OperandType.None;
+                    var isFlagWildcard = false;
+                    var hasZF = false;
+                    var hasCF = false;
+                    var hasSF = false;
 
                     opcodeIndex |= operandType << 4;
-                    opcode |= opcodeIndex << 10;
+                    //opcode |= opcodeIndex << 10;
 
                     if (operandType is 0b10 or 0b11) // 1 Operand
                     {
-                        var operand1 = ParseOperand(parts[3], i);
-                        var hasZF = parts.Contains("+ZF") ? 0x0040 : 0;
-                        var hasCF = parts.Contains("+CF") ? 0x0020 : 0;
-                        var hasSF = parts.Contains("+SF") ? 0x0010 : 0;
-                        isWildcard = parts[4] == "*";
+                        operand1 = ParseOperand(parts[3], i);
+                        hasZF = parts.Contains("+ZF");// ? 0x0040 : 0;
+                        hasCF = parts.Contains("+CF");// ? 0x0020 : 0;
+                        hasSF = parts.Contains("+SF");// ? 0x0010 : 0;
+                        isFlagWildcard = parts[4] == "*";
                         
-                        opcode |= (int)operand1 << 7;
-                        if (!isWildcard)
-                        {
-                            opcode |= hasZF;
-                            opcode |= hasCF;
-                            opcode |= hasSF;
-                        }
+                        //opcode |= (int)operand1 << 7;
+                        //if (!isWildcard)
+                        //{
+                        //    opcode |= hasZF;
+                        //    opcode |= hasCF;
+                        //    opcode |= hasSF;
+                        //}
 
-                        operandCombination = ((byte)operand1 << 4);
+                        //operandCombination = ((byte)operand1 << 4);
                     }
                     else if (operandType == 0b01) // 2 Operand
                     {
                         int k = 3;
-                        var operandOrder = 0; // AB
                         if (parts[3] == "BA")
                         {
-                            operandOrder = 0x80;
+                            operandOrder = true;
                             ++k;
                         }
                         else if (parts[3] == "AB")
                             ++k;
 
-                        var operand1 = ParseOperand(parts[k++], i);
-                        var operand2 = ParseOperand(parts[k++], i);
+                        operand1 = ParseOperand(parts[k++], i);
+                        operand2 = ParseOperand(parts[k++], i);
 
-                        opcode |= (int)operand1 << 7;
-                        opcode |= (int)operand2 << 4;
+                        //opcode |= (int)operand1 << 7;
+                        //opcode |= (int)operand2 << 4;
 
-                        operandCombination = (byte)operandOrder | ((byte)operand1 << 4) | (byte)operand2;
+                        //operandCombination = (byte)operandOrder | ((byte)operand1 << 4) | (byte)operand2;
                     }
                     else if (operandType != 0)
                         throw new AssemblyException(i, $"Illegal operand count {operandType}");
 
-                    current = new Procedure(opcodeName, isWildcard);
+                    current = new Procedure
+                    {
+                        DeclarationLine = i,
+                        Name = opcodeName,
+                        Index = opcodeIndex,
+                        OperandOrder = operandOrder,
+                        Operand1 = operand1,
+                        Operand2 = operand2,
+                        IsFlagWildcard = isFlagWildcard,
+                        ZF = hasZF,
+                        CF = hasCF,
+                        SF = hasSF
+                    };
                     
-                    if (!opcodesMetadata.TryGetValue(opcodeName, out var opcodeMetadata))
-                    {
-                        opcodeMetadata = new MicrocodeRom.Opcode
-                        {
-                            Name = opcodeName,
-                            Index = opcodeIndex,
-                            OperandCount = operandType switch
-                            {
-                                0b10 => 1,
-                                0b11 => 1,
-                                0b01 => 2,
-                                0b00 => 0
-                            },
-                            OperandCombinations = new List<byte>()
-                        };
-                        opcodesMetadata.Add(opcodeName, opcodeMetadata);
-                    }
+                    procedures.Add(current);
 
-                    opcodeMetadata.OperandCombinations.Add((byte)operandCombination);
+                    //if (!opcodesMetadata.TryGetValue(opcodeName, out var opcodeMetadata))
+                    //{
+                    //    opcodeMetadata = new MicrocodeRom.Opcode
+                    //    {
+                    //        Name = opcodeName,
+                    //        Index = opcodeIndex,
+                    //        OperandCount = operandType switch
+                    //        {
+                    //            0b10 => 1,
+                    //            0b11 => 1,
+                    //            0b01 => 2,
+                    //            0b00 => 0
+                    //        },
+                    //        OperandCombinations = new List<byte>()
+                    //    };
+                    //    opcodesMetadata.Add(opcodeName, opcodeMetadata);
+                    //}
 
-                    if (isWildcard)
-                    {
-                        for (int j = 0; j < 8; ++j)
-                        {
-                            var wcOpcode = opcode | (j << 4);
-                            if (opcodes.TryGetValue(wcOpcode, out var existing) && !existing.IsWildcard)
-                                throw new AssemblyException(i, $"Opcode '{opcodeName}' is already declared without wildcard");
+                    //opcodeMetadata.OperandCombinations.Add((byte)operandCombination);
 
-                            opcodes[wcOpcode] = current;
-                        }
-                    }
-                    else
-                    {
-                        if (opcodes.TryGetValue(opcode, out var existing) && !existing.IsWildcard)
-                            throw new AssemblyException(i, $"Opcode '{opcodeName}' is already declared without wildcard");
+                    //if (isWildcard)
+                    //{
+                    //    for (int j = 0; j < 8; ++j)
+                    //    {
+                    //        var wcOpcode = opcode | (j << 4);
+                    //        if (opcodes.TryGetValue(wcOpcode, out var existing) && !existing.IsWildcard)
+                    //            throw new AssemblyException(i, $"Opcode '{opcodeName}' is already declared without wildcard");
 
-                        opcodes[opcode] = current;
-                    }
+                    //        opcodes[wcOpcode] = current;
+                    //    }
+                    //}
+                    //else
+                    //{
+                    //    if (opcodes.TryGetValue(opcode, out var existing) && !existing.IsWildcard)
+                    //        throw new AssemblyException(i, $"Opcode '{opcodeName}' is already declared without wildcard");
+
+                    //    opcodes[opcode] = current;
+                    //}
                 }
                 else
                 {
@@ -249,6 +269,105 @@ namespace Emulator
                 }
             }
 
+            // PROCESS PROCEDURES INTO OPCODES
+            var opcodes = new Dictionary<int, Procedure>();
+            var opcodesMetadata = new Dictionary<string, MicrocodeRom.Opcode>();
+            for (var i = 0; i < procedures.Count; ++i)
+            {
+                var procedure = procedures[i];
+
+                if (procedure.Operand1 == OperandType.Imm)
+                {
+                    procedures.Add(procedure with { Operand1 = OperandType.Imm8, Code = ConcretizeMacroCode(procedure, ControlWord.SIZ1, ControlWord.BYTE) });
+                    procedures.Add(procedure with { Operand1 = OperandType.Imm16, Code = ConcretizeMacroCode(procedure, ControlWord.SIZ1, ControlWord.WORD) });
+                    continue;
+                }
+                else if (procedure.Operand1 == OperandType.DerefSizeSegRegPlusSImm)
+                {
+                    procedures.Add(procedure with { Operand1 = OperandType.DerefByteSegRegPlusSImm, Code = ConcretizeMacroCode(procedure, ControlWord.SIZ1, ControlWord.BYTE) });
+                    procedures.Add(procedure with { Operand1 = OperandType.DerefWordSegRegPlusSImm, Code = ConcretizeMacroCode(procedure, ControlWord.SIZ1, ControlWord.WORD) });
+                    continue;
+                }
+                else if (procedure.Operand1 == OperandType.DerefSizeSegReg)
+                {
+                    procedures.Add(procedure with { Operand1 = OperandType.DerefByteSegReg, Code = ConcretizeMacroCode(procedure, ControlWord.SIZ1, ControlWord.BYTE) });
+                    procedures.Add(procedure with { Operand1 = OperandType.DerefWordSegReg, Code = ConcretizeMacroCode(procedure, ControlWord.SIZ1, ControlWord.WORD) });
+                    continue;
+                }
+                else if (procedure.Operand2 == OperandType.Imm)
+                {
+                    procedures.Add(procedure with { Operand2 = OperandType.Imm8, Code = ConcretizeMacroCode(procedure, ControlWord.SIZ1, ControlWord.BYTE) });
+                    procedures.Add(procedure with { Operand2 = OperandType.Imm16, Code = ConcretizeMacroCode(procedure, ControlWord.SIZ1, ControlWord.WORD) });
+                    continue;
+                }
+                else if (procedure.Operand2 == OperandType.DerefSizeSegRegPlusSImm)
+                {
+                    procedures.Add(procedure with { Operand2 = OperandType.DerefByteSegRegPlusSImm, Code = ConcretizeMacroCode(procedure, ControlWord.SIZ1, ControlWord.BYTE) });
+                    procedures.Add(procedure with { Operand2 = OperandType.DerefWordSegRegPlusSImm, Code = ConcretizeMacroCode(procedure, ControlWord.SIZ1, ControlWord.WORD) });
+                    continue;
+                }
+                else if (procedure.Operand2 == OperandType.DerefSizeSegReg)
+                {
+                    procedures.Add(procedure with { Operand2 = OperandType.DerefByteSegReg, Code = ConcretizeMacroCode(procedure, ControlWord.SIZ1, ControlWord.BYTE) });
+                    procedures.Add(procedure with { Operand2 = OperandType.DerefWordSegReg, Code = ConcretizeMacroCode(procedure, ControlWord.SIZ1, ControlWord.WORD) });
+                    continue;
+                }
+
+                var addr = 0;
+                addr |= procedure.Index << 10;
+
+                if (procedure.Operand1 != OperandType.None && procedure.Operand2 == OperandType.None)
+                {
+                    addr |= ((int)procedure.Operand1 & 0x07) << 7;
+
+                    // TODO Handle wildcards
+                    addr |= procedure.ZF ? 0x0040 : 0;
+                    addr |= procedure.CF ? 0x0020 : 0;
+                    addr |= procedure.SF ? 0x0010 : 0;
+                }
+                else if (procedure.Operand1 != OperandType.None && procedure.Operand2 != OperandType.None)
+                {
+                    addr |= ((int)procedure.Operand1 & 0x07) << 7;
+                    addr |= ((int)procedure.Operand2 & 0x07) << 4;
+                }
+
+                if (!opcodes.TryAdd(addr, procedure))
+                {
+                    throw new AssemblyException(
+                        procedure.DeclarationLine,
+                        $"Duplicate declaration of {procedure.Name} {procedure.Operand1} {procedure.Operand2}"
+                    );
+                }
+
+                if (!opcodesMetadata.TryGetValue(procedure.Name, out var opcodeMetadata))
+                {
+                    opcodeMetadata = new MicrocodeRom.Opcode
+                    {
+                        Name = procedure.Name,
+                        Index = procedure.Index,
+                        OperandCount = procedure.Operand2 switch // Extremely normal expression, don't worry about it
+                        {
+                            OperandType.None => procedure.Operand1 switch
+                            {
+                                OperandType.None => 0,
+                                _ => 1
+                            },
+                            _ => 2
+                        },
+                        OperandCombinations = new List<byte>()
+                    };
+                    opcodesMetadata.Add(procedure.Name, opcodeMetadata);
+                }
+
+                opcodeMetadata.OperandCombinations.Add((byte)(
+                      (procedure.OperandOrder ? 0x80 : 0)
+                    | (((int)procedure.Operand1 & 0x03) << 4)
+                    |  ((int)procedure.Operand2 & 0x03)
+                ));
+            }
+
+
+            // SERIALIZE OPCODES & MICROCODE
             var microcode = new ControlWord[MicrocodeRom.MaxControlWordCount];
             for (int addr = 0x0000; addr <= 0xFFF0; addr += 0x10)
             {
@@ -286,28 +405,71 @@ namespace Emulator
                 "BYTE[SEG:REG]" => OperandType.DerefByteSegReg,
                 "WORD[SEG:REG]" => OperandType.DerefWordSegReg,
                 "[SEG:uIMM16]" => OperandType.DerefSegUImm16,
+
+                "IMM" => OperandType.Imm,
+                "SIZE[SEG:REG+sIMM]" => OperandType.DerefSizeSegRegPlusSImm,
+                "SIZE[SEG:REG]" => OperandType.DerefSizeSegReg,
+                
                 _ => throw new AssemblyException(line, $"Illegal operand: {value}")
             };
         }
 
-        private sealed class Procedure
+        private static bool IsMacroOperandType(OperandType type) => type is OperandType.Imm
+                                                                         or OperandType.DerefSizeSegRegPlusSImm
+                                                                         or OperandType.DerefSizeSegReg;
+
+        private static ControlWord[] ConcretizeMacroCode(Procedure procedure, ControlWord mask, ControlWord value)
+        {
+            var code = new ControlWord[procedure.CodeLength];
+            Array.Copy(procedure.Code, code, code.Length);
+
+            for (int j = 0; j < code.Length; ++j)
+            {
+                var cword = code[j];
+                if ((cword & mask) == mask)
+                {
+                    cword &= ~mask;
+                    cword |= value;
+                }
+
+                code[j] = cword;
+            }
+
+            return code;
+        }
+
+        private sealed record Procedure
         {
             public const int MaxMicrocodeCount = 16;
 
-            public string Name { get; }
+            public int DeclarationLine { get; init; }
 
-            public bool IsWildcard { get; }
+            public string Name { get; init; }
 
-            public ControlWord[] Code { get; }
+            public int Index { get; init; }
+
+            public bool OperandOrder { get; init; } // AB = false; BA = true
+
+            public OperandType Operand1 { get; init; }
+
+            public OperandType Operand2 { get; init;  }
+
+            public bool IsFlagWildcard { get; init; }
+
+            public bool ZF { get; init; }
+
+            public bool CF { get; init; }
+
+            public bool SF { get; init; }
+
+            public ControlWord[] Code { get; init; }
 
             public int CodeLength { get; set; }
 
             public Dictionary<string, int> Labels { get; }
 
-            public Procedure(string name, bool isWildcard)
+            public Procedure()
             {
-                Name = name;
-                IsWildcard = isWildcard;
                 Code = new ControlWord[MaxMicrocodeCount];
                 CodeLength = 0;
                 Labels = new Dictionary<string, int>();
@@ -326,7 +488,10 @@ namespace Emulator
         DerefWordSegReg,
         DerefSegUImm16,
 
-        None
+        None,
+        Imm,
+        DerefSizeSegRegPlusSImm,
+        DerefSizeSegReg
     }
 
     public sealed class MicrocodeRom
@@ -548,7 +713,11 @@ namespace Emulator
         RTN         = 0x6000000,
         MASK_IP     = 0x6000000,
 
-        BA          = 0x8000000 // EXPERIMENT
+        // NOTE Not real control words
+        SIZ1        = 0x8000000,
+        SIZ2        = 0x10000000,
+        IPCSIZ1     = 0x20000000,
+        IPCSIZ2     = 0x40000000,
     }
 
     public static class MicrocodeUtility
@@ -574,9 +743,6 @@ namespace Emulator
                 else
                     sb.Append("BYTE ");
             }
-
-            if ((cw & ControlWord.BA) == ControlWord.BA)
-                sb.Append("BA ");
 
             if ((cw & ControlWord.MASK_SEG) == ControlWord.CS)
                 sb.Append("CS:");
