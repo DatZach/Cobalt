@@ -39,175 +39,166 @@
 
             string? operandA = null;
             string? operandB = null;
-            var operand1Type = OperandType.None;
-            var operand2Type = OperandType.None;
-
-            if (operandCount >= 1)
-            {
-                operand1Type = (OperandType)((iword & 0x0380) >> 7);
-                switch (operand1Type)
-                {
-                    case OperandType.Reg:
-                        operandA = ParseRegisterName(iword & 0x000F);
-                        break;
-
-                    case OperandType.Imm8:
-                    {
-                        operandA = $"0x{machine.ReadByte(segment, offset):X2}";
-                        offset += 1;
-                        break;
-                    }
-
-                    case OperandType.Imm16:
-                    {
-                        operandA = $"0x{machine.ReadWord(segment, offset):X4}";
-                        offset += 2;
-                        break;
-                    }
-
-                    case OperandType.DerefWordSegReg:
-                    case OperandType.DerefByteSegReg:
-                    {
-                        var operand = iword & 0x000F;
-                        var busWidthName = operand1Type == OperandType.DerefWordSegReg ? "WORD" : "BYTE";
-                        var regName = ParseSegRegIndex(operand);
-                        operandA = $"{busWidthName} [{regName}]";
-                        break;
-                    }
-
-                    case OperandType.DerefWordSegRegPlusSImm:
-                    case OperandType.DerefByteSegRegPlusSImm:
-                    {
-                        var operand = iword & 0x000F;
-                        var busWidthName = operand1Type == OperandType.DerefWordSegRegPlusSImm ? "WORD" : "BYTE";
-                        var regName = ParseSegRegIndex(operand);
-                        var immWidth = SelectOperandWidth(operand);
-
-                        short immValue;
-                        if (immWidth == 1)
-                            immValue = (short)-machine.ReadByte(segment, offset);
-                        else
-                            immValue = (short)-machine.ReadWord(segment, offset);
-                        offset += (ushort)immWidth;
-
-                        if (immValue == 0)
-                            operandA = $"{busWidthName} [{regName}]";
-                        else
-                        {
-                            var signStr = (immValue & 0x8000) != 0 ? "" : "+";
-                            operandA = $"{busWidthName} [{regName}{signStr}{immValue}]";
-                        }
-                        break;
-                    }
-
-                    case OperandType.DerefSegUImm16:
-                    {
-                        var operand = iword & 0x000F;
-                        var segName = ParseSegmentIndex(operand);
-                        var immWidth = SelectOperandWidth(operand);
-                        var busWidthName = immWidth == 2 ? "WORD" : "BYTE";
-                        operandA = $"{busWidthName} [{segName}:0x{machine.ReadWord(segment, offset):X4}]";
-                        offset += 2;
-                        break;
-                    }
-                }
-            }
+            var operand1Type = operandCount >= 1 ? (OperandType)((iword & 0x0380) >> 7) : OperandType.None;
+            var operand2Type = operandCount >= 2 ? (OperandType)((iword & 0x0070) >> 4) : OperandType.None;
+            var isFlipped = false;
 
             if (operandCount >= 2)
             {
-                operand2Type = (OperandType)((iword & 0x0070) >> 4);
-                switch (operand2Type)
-                {
-                    case OperandType.Reg:
-                        operandB = ParseRegisterName(machine.ReadByte(segment, offset) & 0x0F);
-                        offset += 1;
-                        break;
-
-                    case OperandType.Imm8:
-                    {
-                        operandB = $"0x{machine.ReadByte(segment, offset):X2}";
-                        offset += 1;
-                        break;
-                    }
-
-                    case OperandType.Imm16:
-                    {
-                        operandB = $"0x{machine.ReadWord(segment, offset):X4}";
-                        offset += 2;
-                        break;
-                    }
-
-                    case OperandType.DerefWordSegReg:
-                    case OperandType.DerefByteSegReg:
-                    {
-                        var operand = machine.ReadByte(segment, offset) & 0x0F;
-                        var busWidthName = operand2Type == OperandType.DerefWordSegReg ? "WORD" : "BYTE";
-                        var regName = ParseSegRegIndex(operand);
-                        operandB = $"{busWidthName} [{regName}]";
-                        offset += 1;
-                        break;
-                    }
-
-                    case OperandType.DerefWordSegRegPlusSImm:
-                    case OperandType.DerefByteSegRegPlusSImm:
-                    {
-                        var operand = machine.ReadByte(segment, offset) & 0x0F;
-                        var busWidthName = operand2Type == OperandType.DerefWordSegRegPlusSImm ? "WORD" : "BYTE";
-                        var regName = ParseSegRegIndex(operand);
-                        var immWidth = SelectOperandWidth(operand);
-                        offset += 1;
-                        short immValue;
-                        if (immWidth == 1)
-                            immValue = (short)-machine.ReadByte(segment, offset);
-                        else
-                            immValue = (short)-machine.ReadWord(segment, offset);
-                        offset += (ushort)immWidth;
-                        if (immValue == 0)
-                            operandB = $"{busWidthName} [{regName}]";
-                        else
-                        {
-                            var signStr = (immValue & 0x8000) != 0 ? "" : "+";
-                            operandB = $"{busWidthName} [{regName}{signStr}{immValue}]";
-                        }
-                        break;
-                    }
-
-                    case OperandType.DerefSegUImm16:
-                    {
-                        var operand = machine.ReadByte(segment, offset) & 0x0F;
-                        var segName = ParseSegmentIndex(operand);
-                        var immWidth = SelectOperandWidth(operand);
-                        var busWidthName = immWidth == 2 ? "WORD" : "BYTE";
-                        operandB = $"{busWidthName} [{segName}:0x{machine.ReadWord(segment, offset):X4}]";
-                        offset += 2;
-                        break;
-                    }
-                }
+                var operandCombination = (byte)(((byte)operand1Type << 4) | (byte)operand2Type);
+                var operandCombinationIdx = metadata.OperandCombinations.FindIndex(x => (x & 0x7F) == operandCombination);
+                isFlipped = operandCombinationIdx != -1
+                         && (metadata.OperandCombinations[operandCombinationIdx] & 0x80) != 0;
             }
 
-            switch (operandCount)
+            if (isFlipped)
+                (operand1Type, operand2Type) = (operand2Type, operand1Type);
+
+            switch (operand1Type)
             {
-                case 0:
-                    return metadata.Name;
+                case OperandType.Reg:
+                    operandA = ParseRegisterName(iword & 0x000F);
+                    break;
 
-                case 1:
-                    return $"{metadata.Name} {operandA}";
-
-                case 2:
+                case OperandType.Imm8:
                 {
-                    var operandCombination = (byte)(((byte)operand1Type << 4) | (byte)operand2Type);
-                    var operandCombinationIdx = metadata.OperandCombinations.FindIndex(x => (x & 0x7F) == operandCombination);
-                    if (operandCombinationIdx != -1
-                        && (metadata.OperandCombinations[operandCombinationIdx] & 0x80) != 0)
+                    operandA = $"0x{machine.ReadByte(segment, offset):X2}";
+                    offset += 1;
+                    break;
+                }
+
+                case OperandType.Imm16:
+                {
+                    operandA = $"0x{machine.ReadWord(segment, offset):X4}";
+                    offset += 2;
+                    break;
+                }
+
+                case OperandType.DerefWordSegReg:
+                case OperandType.DerefByteSegReg:
+                {
+                    var operand = iword & 0x000F;
+                    var busWidthName = operand1Type == OperandType.DerefWordSegReg ? "WORD" : "BYTE";
+                    var regName = ParseSegRegIndex(operand);
+                    operandA = $"{busWidthName} [{regName}]";
+                    break;
+                }
+
+                case OperandType.DerefWordSegRegPlusSImm:
+                case OperandType.DerefByteSegRegPlusSImm:
+                {
+                    var operand = iword & 0x000F;
+                    var busWidthName = operand1Type == OperandType.DerefWordSegRegPlusSImm ? "WORD" : "BYTE";
+                    var regName = ParseSegRegIndex(operand);
+                    var immWidth = SelectOperandWidth(operand);
+
+                    short immValue;
+                    if (immWidth == 1)
+                        immValue = (short)-machine.ReadByte(segment, offset);
+                    else
+                        immValue = (short)-machine.ReadWord(segment, offset);
+                    offset += (ushort)immWidth;
+
+                    if (immValue == 0)
+                        operandA = $"{busWidthName} [{regName}]";
+                    else
                     {
-                        return $"{metadata.Name} {operandB}, {operandA}";
+                        var signStr = (immValue & 0x8000) != 0 ? "" : "+";
+                        operandA = $"{busWidthName} [{regName}{signStr}{immValue}]";
                     }
-                    
-                    return $"{metadata.Name} {operandA}, {operandB}";
+                    break;
+                }
+
+                case OperandType.DerefSegUImm16:
+                {
+                    var operand = iword & 0x000F;
+                    var segName = ParseSegmentIndex(operand);
+                    var immWidth = SelectOperandWidth(operand);
+                    var busWidthName = immWidth == 2 ? "WORD" : "BYTE";
+                    operandA = $"{busWidthName} [{segName}:0x{machine.ReadWord(segment, offset):X4}]";
+                    offset += 2;
+                    break;
                 }
             }
 
-            return $"; UNK {iword:X4}";
+            switch (operand2Type)
+            {
+                case OperandType.Reg:
+                    operandB = ParseRegisterName(machine.ReadByte(segment, offset) & 0x0F);
+                    offset += 1;
+                    break;
+
+                case OperandType.Imm8:
+                {
+                    operandB = $"0x{machine.ReadByte(segment, offset):X2}";
+                    offset += 1;
+                    break;
+                }
+
+                case OperandType.Imm16:
+                {
+                    operandB = $"0x{machine.ReadWord(segment, offset):X4}";
+                    offset += 2;
+                    break;
+                }
+
+                case OperandType.DerefWordSegReg:
+                case OperandType.DerefByteSegReg:
+                {
+                    var operand = machine.ReadByte(segment, offset) & 0x0F;
+                    var busWidthName = operand2Type == OperandType.DerefWordSegReg ? "WORD" : "BYTE";
+                    var regName = ParseSegRegIndex(operand);
+                    operandB = $"{busWidthName} [{regName}]";
+                    offset += 1;
+                    break;
+                }
+
+                case OperandType.DerefWordSegRegPlusSImm:
+                case OperandType.DerefByteSegRegPlusSImm:
+                {
+                    var operand = machine.ReadByte(segment, offset) & 0x0F;
+                    var busWidthName = operand2Type == OperandType.DerefWordSegRegPlusSImm ? "WORD" : "BYTE";
+                    var regName = ParseSegRegIndex(operand);
+                    var immWidth = SelectOperandWidth(operand);
+                    offset += 1;
+                    short immValue;
+                    if (immWidth == 1)
+                        immValue = (short)-machine.ReadByte(segment, offset);
+                    else
+                        immValue = (short)-machine.ReadWord(segment, offset);
+                    offset += (ushort)immWidth;
+                    if (immValue == 0)
+                        operandB = $"{busWidthName} [{regName}]";
+                    else
+                    {
+                        var signStr = (immValue & 0x8000) != 0 ? "" : "+";
+                        operandB = $"{busWidthName} [{regName}{signStr}{immValue}]";
+                    }
+                    break;
+                }
+
+                case OperandType.DerefSegUImm16:
+                {
+                    var operand = machine.ReadByte(segment, offset) & 0x0F;
+                    var segName = ParseSegmentIndex(operand);
+                    var immWidth = SelectOperandWidth(operand);
+                    var busWidthName = immWidth == 2 ? "WORD" : "BYTE";
+                    operandB = $"{busWidthName} [{segName}:0x{machine.ReadWord(segment, offset):X4}]";
+                    offset += 2;
+                    break;
+                }
+            }
+
+            if (isFlipped)
+                (operandA, operandB) = (operandB, operandA);
+
+            return operandCount switch
+            {
+                0 => metadata.Name,
+                1 => $"{metadata.Name} {operandA}",
+                2 => $"{metadata.Name} {operandA}, {operandB}",
+                _ => $"; UNK {iword:X4}"
+            };
         }
 
         private readonly static string[] Registers =
