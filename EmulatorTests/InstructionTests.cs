@@ -9,7 +9,7 @@ namespace EmulatorTests
 
         public InstructionTests()
         {
-            microcodeRom = Microcode.AssembleRom("Microcode2.cmc");
+            microcodeRom = Microcode.AssembleRom("Microcode3.cmc");
         }
 
         [TestMethod]
@@ -24,6 +24,34 @@ namespace EmulatorTests
                 {
                     r0 = 0x1234,
                     r1 = 0x1234
+                }
+            );
+        }
+
+        [TestMethod]
+        public void MOV_REG_IMM8()
+        {
+            AssertState(
+                @"
+                mov r0, 0xFFFF
+                mov r0, 0x12
+                mov r1, 0x34
+                mov r2h, 0x12
+                mov r2l, 0x34
+                mov r3h, 0x56
+                mov sp, 0x0F
+                mov ss, 0x80
+                mov ds, 0x01
+                ",
+                new CpuState
+                {
+                    r0 = 0x0012,
+                    r1 = 0x0034,
+                    r2 = 0x1234,
+                    r3 = 0x5600,
+                    sp = 0x000F,
+                    ss = 0x0080,
+                    ds = 0x0001,
                 }
             );
         }
@@ -52,6 +80,38 @@ namespace EmulatorTests
                     ss = 0x4321,
                     cs = 0x4000,
                     ds = 0x0001,
+                }
+            );
+        }
+
+        [TestMethod]
+        public void MOV_REG_sizeSEGREGplusIMM()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov word[ds:0x90], 0x1234
+                mov r0, 0x70
+                mov r1, word[ds:r0+0x10]
+                mov r2, byte[ds:r0+0x11]
+                mov r0, 0xA0
+                mov r3, word[ds:r0-0x10]
+                mov r0, byte[ds:r0-0x0F]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x0034,
+                        r1 = 0x1234,
+                        r2 = 0x0034,
+                        r3 = 0x1234
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234,
+                        [0x90] = 0x1234
+                    }
                 }
             );
         }
