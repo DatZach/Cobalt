@@ -108,8 +108,9 @@ namespace Emulator
                 else
                 {
                     var word = ControlWord.None;
-                    foreach (var part in parts)
+                    for (var p = 0; p < parts.Length; p++)
                     {
+                        var part = parts[p];
                         if (part == "END")
                         {
                             current = null;
@@ -132,14 +133,15 @@ namespace Emulator
                             {
                                 var k = current.CodeLength++;
                                 if (k >= Procedure.MaxMicrocodeCount)
-                                    throw new AssemblyException(i, $"Microcode exceeds {Procedure.MaxMicrocodeCount} words");
-                                
+                                    throw new AssemblyException(i,
+                                        $"Microcode exceeds {Procedure.MaxMicrocodeCount} words");
+
                                 current.Code[k] = macroCode[j];
                             }
 
                             break;
                         }
-                        
+
                         // LABELS
                         if (part[^1] == ':')
                         {
@@ -150,6 +152,7 @@ namespace Emulator
                             current.Labels.Add(labelName, current.CodeLength);
                             continue;
                         }
+
                         if (part[0] == '@')
                         {
                             var labelName = part[1..];
@@ -171,6 +174,14 @@ namespace Emulator
                             {
                                 subPart = subPart[1..];
                                 word |= ControlWord.ADDR;
+
+                                subPart = subPart switch
+                                {
+                                    "RSO1" => "aRSO1",
+                                    "RSO2" => "aRSO2",
+                                    "TBO" => "aTBO",
+                                    _ => subPart
+                                };
                             }
 
                             ControlWord cwPart;
@@ -182,6 +193,9 @@ namespace Emulator
                                     "1" => ControlWord.Const1,
                                     "2" => ControlWord.Const2,
                                     "4" => ControlWord.Const4,
+                                    "RSO1" => IsAluOp(parts, p + 1) ? ControlWord.aRSO1 : ControlWord.bRSO1,
+                                    "RSO2" => IsAluOp(parts, p + 1) ? ControlWord.aRSO2 : ControlWord.bRSO2,
+                                    "TBO" => IsAluOp(parts, p + 1) ? ControlWord.aTBO : ControlWord.bTBO,
                                     _ => Enum.Parse<ControlWord>(subPart)
                                 };
                             }
@@ -191,7 +205,8 @@ namespace Emulator
                             }
 
                             if ((word & cwPart) != 0)
-                                throw new AssemblyException(i, $"Control signal {subPart} conflicts with another in this word");
+                                throw new AssemblyException(i,
+                                    $"Control signal {subPart} conflicts with another in this word");
 
                             // TODO Validate that multiple bus OUTs aren't in a single word
 
@@ -363,6 +378,11 @@ namespace Emulator
                 
                 _ => throw new AssemblyException(line, $"Illegal operand: {value}")
             };
+        }
+
+        private static bool IsAluOp(string[] parts, int i)
+        {
+            return i < parts.Length && (Enum.Parse<ControlWord>(parts[i]) & ControlWord.MASK_ALU) != 0;
         }
 
         private static ControlWord[] ConcretizeMacroCode(
@@ -592,86 +612,88 @@ namespace Emulator
     {
         None,
 
-        IPC1        = 0x01,
-        IPC2        = 0x02,
-        IPC4        = 0x03,
-        IPCORW1    = 0x04,
-        IPCORW2    = 0x05,
-        IPC_XX_1    = 0x06,
-        IPC_XX_2    = 0x07,
-        MASK_IPC    = 0x07,
+        IPC1        = 0b00000000_00000000_00000000_00000001,
+        IPC2        = 0b00000000_00000000_00000000_00000010,
+        IPC4        = 0b00000000_00000000_00000000_00000011,
+        IPCORW1     = 0b00000000_00000000_00000000_00000100,
+        IPCORW2     = 0b00000000_00000000_00000000_00000101,
+        IPC_XX_1    = 0b00000000_00000000_00000000_00000110,
+        JMP         = 0b00000000_00000000_00000000_00000111,
+        MASK_IPC    = 0b00000000_00000000_00000000_00000111,
 
-        JMP         = 0x08,
-
-        II          = 0x10,
-        OI          = 0x20,
-        FI          = 0x30,
-        MASK_IR     = 0x30,
+        II          = 0b00000000_00000000_00000000_00001000,
+        OI          = 0b00000000_00000000_00000000_00010000,
+        FI          = 0b00000000_00000000_00000000_00011000,
+        MASK_IR     = 0b00000000_00000000_00000000_00011000,
         
-        RSO1        = 0x40,
-        TAO         = 0x80,
-        SPO         = 0xC0,
-        MASK_A      = 0xC0,
+        aRSO1       = 0b00000000_00000000_00000000_00100000,
+        aRSO2       = 0b00000000_00000000_00000000_01000000,
+        TAO         = 0b00000000_00000000_00000000_01100000,
+        aTBO        = 0b00000000_00000000_00000000_10000000,
+        SPO         = 0b00000000_00000000_00000000_10100000,
+        A_XX_1      = 0b00000000_00000000_00000000_11000000,
+        A_XX_2      = 0b00000000_00000000_00000000_11100000,
+        MASK_A      = 0b00000000_00000000_00000000_11100000,
 
-        RSO2        = 0x100,
-        TBO         = 0x200,
-        FO          = 0x300,
-        Const1      = 0x400,
-        Const2      = 0x500,
-        Const4      = 0x600,
-        B_XX_2      = 0x700, // UNUSED
-        MASK_B      = 0x700,
+        bRSO2       = 0b00000000_00000000_00000001_00000000,
+        bRSO1       = 0b00000000_00000000_00000010_00000000,
+        bTBO        = 0b00000000_00000000_00000011_00000000,
+        FO          = 0b00000000_00000000_00000100_00000000,
+        Const1      = 0b00000000_00000000_00000101_00000000,
+        Const2      = 0b00000000_00000000_00000110_00000000,
+        Const4      = 0b00000000_00000000_00000111_00000000,
+        MASK_B      = 0b00000000_00000000_00000111_00000000,
         
-        RSI1        = 0x800,
-        TAI         = 0x1000,
-        TBI         = 0x1800,
-        SPI         = 0x2000,
-        JNF         = 0x2800,
-        INTLATCH    = 0x3000,
-        INTENLATCH  = 0x3800,
-        MASK_RI     = 0x3800,
+        RSI1        = 0b00000000_00000000_00001000_00000000,
+        TAI         = 0b00000000_00000000_00010000_00000000,
+        TBI         = 0b00000000_00000000_00011000_00000000,
+        SPI         = 0b00000000_00000000_00100000_00000000,
+        JNF         = 0b00000000_00000000_00101000_00000000,
+        INTLATCH    = 0b00000000_00000000_00110000_00000000,
+        INTENLATCH  = 0b00000000_00000000_00111000_00000000,
+        MASK_RI     = 0b00000000_00000000_00111000_00000000,
         
-        R           = 0x4000,
-        W           = 0x8000,
+        R           = 0b00000000_00000000_01000000_00000000,
+        W           = 0b00000000_00000000_10000000_00000000,
 
-        BYTE        = 0,
-        WORD        = 0x10000,
-        ORW1       = 0x20000,
-        ORW2       = 0x30000,
-        MASK_BUSW   = 0x30000,
+        BYTE        = 0b00000000_00000000_00000000_00000000,
+        WORD        = 0b00000000_00000001_00000000_00000000,
+        ORW1        = 0b00000000_00000010_00000000_00000000,
+        ORW2        = 0b00000000_00000011_00000000_00000000,
+        MASK_BUSW   = 0b00000000_00000011_00000000_00000000,
 
-        ADD         = 0x40000,
-        SUB         = 0x80000,
-        OR          = 0xC0000,
-        XOR         = 0x100000,
-        AND         = 0x140000,
-        SHL         = 0x180000,
-        SHR         = 0x1C0000,
-        MASK_ALU    = 0x1C0000,
-        MASK_OPR    = 0x1C0000,
+        ADD         = 0b00000000_00000100_00000000_00000000,
+        SUB         = 0b00000000_00001000_00000000_00000000,
+        OR          = 0b00000000_00001100_00000000_00000000,
+        XOR         = 0b00000000_00010000_00000000_00000000,
+        AND         = 0b00000000_00010100_00000000_00000000,
+        SHL         = 0b00000000_00011000_00000000_00000000,
+        SHR         = 0b00000000_00011100_00000000_00000000,
+        MASK_ALU    = 0b00000000_00011100_00000000_00000000,
+        MASK_OPR    = 0b00000000_00011100_00000000_00000000,
         
-        DATA        = 0,
-        ADDR        = 0x200000,
+        DATA        = 0b00000000_00000000_00000000_00000000,
+        ADDR        = 0b00000000_00100000_00000000_00000000,
 
-        CS          = 0x400000,
-        SS          = 0x800000,
-        DS          = 0xC00000,
-        SEG1        = 0x1000000,
-        SEG2        = 0x1400000,
-        SEG_XX_1    = 0x1800000,
-        SEG_XX_2    = 0x1C00000,
-        MASK_SEG    = 0x1C00000,
+        CS          = 0b00000000_01000000_00000000_00000000,
+        SS          = 0b00000000_10000000_00000000_00000000,
+        SEG1        = 0b00000000_11000000_00000000_00000000,
+        SEG2        = 0b00000001_00000000_00000000_00000000,
+        SEG_XX_1    = 0b00000001_01000000_00000000_00000000,
+        SEG_XX_2    = 0b00000001_10000000_00000000_00000000,
+        SEG_XX_3    = 0b00000001_11000000_00000000_00000000,
+        MASK_SEG    = 0b00000001_11000000_00000000_00000000,
         
-        IPO         = 0x2000000,
-        HLT         = 0x4000000,
-        RTN         = 0x6000000,
-        MASK_IP     = 0x6000000,
+        IPO         = 0b00000010_00000000_00000000_00000000,
+        HLT         = 0b00000100_00000000_00000000_00000000,
+        RTN         = 0b00000110_00000000_00000000_00000000,
+        MASK_IP     = 0b00000110_00000000_00000000_00000000,
 
         // NOTE Not real control words
-        SIZ1        = 0x8000000,
-        SIZ2        = 0x10000000,
-        IPCSIZ1     = 0x20000000,
-        IPCSIZ2     = 0x40000000,
+        SIZ1        = 0b00001000_00000000_00000000_00000000,
+        SIZ2        = 0b00010000_00000000_00000000_00000000,
+        IPCSIZ1     = 0b00100000_00000000_00000000_00000000,
+        IPCSIZ2     = 0b01000000_00000000_00000000_00000000,
     }
 
     public static class MicrocodeUtility
@@ -691,9 +713,9 @@ namespace Emulator
                 if ((cw & ControlWord.MASK_BUSW) == ControlWord.WORD)
                     sb.Append("WORD ");
                 else if ((cw & ControlWord.MASK_BUSW) == ControlWord.ORW1)
-                    sb.Append("OPRW1 ");
+                    sb.Append("ORW1 ");
                 else if ((cw & ControlWord.MASK_BUSW) == ControlWord.ORW2)
-                    sb.Append("OPRW2 ");
+                    sb.Append("ORW2 ");
                 else
                     sb.Append("BYTE ");
             }
@@ -702,8 +724,6 @@ namespace Emulator
                 sb.Append("CS:");
             else if ((cw & ControlWord.MASK_SEG) == ControlWord.SS)
                 sb.Append("SS:");
-            else if ((cw & ControlWord.MASK_SEG) == ControlWord.DS)
-                sb.Append("DS:");
             else if ((cw & ControlWord.MASK_SEG) == ControlWord.SEG1)
                 sb.Append("SEG1:");
             else if ((cw & ControlWord.MASK_SEG) == ControlWord.SEG2)
@@ -719,10 +739,14 @@ namespace Emulator
             else if ((cw & ControlWord.MASK_IP) == ControlWord.RTN)
                 sb.Append("RTN ");
 
-            if ((cw & ControlWord.MASK_A) == ControlWord.RSO1)
+            if ((cw & ControlWord.MASK_A) == ControlWord.aRSO1)
                 sb.Append("RSO1 ");
+            else if ((cw & ControlWord.MASK_A) == ControlWord.aRSO2)
+                sb.Append("RSO2 ");
             else if ((cw & ControlWord.MASK_A) == ControlWord.TAO)
                 sb.Append("TAO ");
+            else if ((cw & ControlWord.MASK_A) == ControlWord.aTBO)
+                sb.Append("TBO ");
             else if ((cw & ControlWord.MASK_A) == ControlWord.SPO)
                 sb.Append("SPO ");
 
@@ -744,9 +768,11 @@ namespace Emulator
                     sb.Append("SHR ");
             }
 
-            if ((cw & ControlWord.MASK_B) == ControlWord.RSO2)
+            if ((cw & ControlWord.MASK_B) == ControlWord.bRSO2)
                 sb.Append("RSO2 ");
-            else if ((cw & ControlWord.MASK_B) == ControlWord.TBO)
+            else if ((cw & ControlWord.MASK_B) == ControlWord.bRSO1)
+                sb.Append("RSO1 ");
+            else if ((cw & ControlWord.MASK_B) == ControlWord.bTBO)
                 sb.Append("TBO ");
             else if ((cw & ControlWord.MASK_B) == ControlWord.FO)
                 sb.Append("FO ");
@@ -783,9 +809,6 @@ namespace Emulator
             else if ((cw & ControlWord.MASK_IR) == ControlWord.FI)
                 sb.Append("FI ");
 
-            if ((cw & ControlWord.JMP) != 0)
-                sb.Append("JMP ");
-
             if ((cw & ControlWord.MASK_IPC) == ControlWord.IPC1)
                 sb.Append("IPC1");
             else if ((cw & ControlWord.MASK_IPC) == ControlWord.IPC2)
@@ -793,9 +816,11 @@ namespace Emulator
             else if ((cw & ControlWord.MASK_IPC) == ControlWord.IPC4)
                 sb.Append("IPC4");
             else if ((cw & ControlWord.MASK_IPC) == ControlWord.IPCORW1)
-                sb.Append("IPCOPRW1");
+                sb.Append("IPCORW1");
             else if ((cw & ControlWord.MASK_IPC) == ControlWord.IPCORW2)
-                sb.Append("IPCOPRW2");
+                sb.Append("IPCORW2");
+            else if ((cw & ControlWord.MASK_IPC) == ControlWord.JMP)
+                sb.Append("JMP");
 
             return sb.ToString();
         }

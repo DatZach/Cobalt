@@ -117,49 +117,53 @@ namespace EmulatorTests
         }
 
         [TestMethod]
-        public void MOV_REG_dSEGuIMM16()
+        public void MOV_REG_sizeSEGREG()
         {
             AssertState(
                 @"
                 mov word[ds:0x80], 0x1234
-                mov word[ds:0x90], 0x1234
                 mov r0, 0x80
                 mov r1, word[ds:r0]
-                mov r2, word:[ds:r0+0x10]
-                mov r0, 0xA0
-                mov r3, word:[ds:r0-0x10]
+                mov r2, byte[ds:r0]
+                mov r3h, byte[ds:r0]
+                mov r0, 0x81
+                mov r3l, byte[ds:r0]
                 ",
                 new MachineState
                 {
                     CPU = new CpuState
                     {
-                        r0 = 0x00A0,
+                        r0 = 0x0081,
                         r1 = 0x1234,
-                        r2 = 0x1234,
+                        r2 = 0x0012,
                         r3 = 0x1234
                     },
                     RAMChecks = new()
                     {
-                        [0x80] = 0x1234,
-                        [0x90] = 0x1234
+                        [0x80] = 0x1234
                     }
                 }
             );
         }
 
         [TestMethod]
-        public void MOV_REG_dIMM16()
+        public void MOV_REG_sizeSEGuIMM16()
         {
             AssertState(
                 @"
                 mov word[ds:0x80], 0x1234
                 mov r0, word[ds:0x80]
+                mov r1, byte[ds:0x80]
+                mov r2h, byte[ds:0x80]
+                mov r2l, byte[ds:0x81]
                 ",
                 new MachineState
                 {
                     CPU = new CpuState
                     {
-                        r0 = 0x1234
+                        r0 = 0x1234,
+                        r1 = 0x0012,
+                        r2 = 0x1234
                     },
                     RAMChecks = new()
                     {
@@ -170,200 +174,152 @@ namespace EmulatorTests
         }
 
         [TestMethod]
-        public void MOV_dIMM16_REG()
+        public void MOV_sizeSEGREGplusIMM_REG()
         {
             AssertState(
                 @"
                 mov r0, 0x1234
-                mov word[ds:0x80], r0
+                mov r1, 0x40
+                mov word[ds:r1+0x10], r0
+                mov byte[ds:r1+0x20], r0
+                mov byte[ds:r1+0x30], r0h
+                mov byte[ds:r1+0x31], r0l
+                mov word[ds:r1-0x10], r0
+                mov byte[ds:r1-0x20], r0
+                mov byte[ds:r1-0x30], r0h
+                mov byte[ds:r1-0x2F], r0l
                 ",
                 new MachineState
                 {
                     CPU = new CpuState
                     {
-                        r0 = 0x1234
+                        r0 = 0x1234,
+                        r1 = 0x0040
                     },
                     RAMChecks = new()
                     {
-                        [0x80] = 0x1234
+                        [0x50] = 0x1234,
+                        [0x60] = 0x3400,
+                        [0x70] = 0x1234,
+                        [0x30] = 0x1234,
+                        [0x20] = 0x3400,
+                        [0x10] = 0x1234
                     }
                 }
             );
         }
 
         [TestMethod]
-        public void MOV_dIMM16_IMM16()
+        public void MOV_sizeSEGREGplusIMM_IMM()
         {
             AssertState(
                 @"
-                mov word[ds:0x80], 0x1234
+                mov r0, 0x1234
+                mov r1, 0x40
+                mov word[ds:r1+0x10], r0
+                mov byte[ds:r1+0x20], r0
+                mov byte[ds:r1+0x30], r0h
+                mov byte[ds:r1+0x31], r0l
+                mov word[ds:r1-0x10], r0
+                mov byte[ds:r1-0x20], r0
+                mov byte[ds:r1-0x30], r0h
+                mov byte[ds:r1-0x2F], r0l
                 ",
                 new MachineState
                 {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x1234,
+                        r1 = 0x0040
+                    },
                     RAMChecks = new()
                     {
-                        [0x80] = 0x1234
+                        [0x50] = 0x1234,
+                        [0x60] = 0x3400,
+                        [0x70] = 0x1234,
+                        [0x30] = 0x1234,
+                        [0x20] = 0x3400,
+                        [0x10] = 0x1234
                     }
                 }
             );
         }
 
         [TestMethod]
-        public void MOV_dIMM16_dREGIMM16() // TODO VERIFY
+        public void MOV_sizeSEGREGplusIMM_sizeSEGREG()
         {
             AssertState(
                 @"
-                mov r0, 0x100
-                mov word[ds:0x110], 0x1234
-                mov word[ds:0x80], word[ds:r0+0x10]
-                mov r0, 0x120
-                mov word[ds:0x90], word[ds:r0-0x10]
+                mov r0, 0x80
+                mov r1, 0x40
+                mov word[ds:r0], 0x1234
+                mov word[ds:r1+0x10], word[ds:r0]
+                mov word[ds:r1+0x20], byte[ds:r0]
+                mov byte[ds:r1+0x30], byte[ds:r0]
+                mov word[ds:r1-0x10], word[ds:r0]
+                mov word[ds:r1-0x20], byte[ds:r0]
+                mov byte[ds:r1-0x30], byte[ds:r0]
                 ",
                 new MachineState
                 {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x0080,
+                        r1 = 0x0040
+                    },
                     RAMChecks = new()
                     {
                         [0x80] = 0x1234,
-                        [0x90] = 0x1234,
-                        [0x110] = 0x1234
-                    }
-                }
-            );
-        }
-
-        [TestMethod]
-        public void MOV_dIMM16_dIMM16()
-        {
-            AssertState(
-                @"
-                mov word[ds:0x100], 0x1234
-                mov word[ds:0x110], [word:0x100]
-                ",
-                new MachineState
-                {
-                    RAMChecks = new()
-                    {
-                        [0x100] = 0x1234,
-                        [0x110] = 0x1234
-                    }
-                }
-            );
-        }
-
-        [TestMethod]
-        public void MOV_dREGIMM16_REG()
-        {
-            AssertState(
-                @"
-                mov r0, 0x100
-                mov r1, 0x1234
-                mov word[ds:r0+0x10], r1
-                mov r0, 0x130
-                mov word[ds:r0-0x10], r1
-                ",
-                new MachineState
-                {
-                    CPU = new CpuState
-                    {
-                        r1 = 0x1234
-                    },
-                    RAMChecks = new()
-                    {
-                        [0x110] = 0x1234,
-                        [0x120] = 0x1234
-                    }
-                }
-            );
-        }
-
-        // TODO
-        [TestMethod]
-        public void MOV_dREGIMM16_dREGIMM16()
-        {
-            AssertState(
-                @"
-                mov word[ds:0x80], 0x1234
-                mov word[ds:0x60], 0x1234
-                mov r0, 0x40
-                mov r1, 0x70
-                mov word[ds:r0+0x10], word[ds:r1+0x10]
-                mov word[ds:r0-0x10], word[ds:r1-0x10]
-                ",
-                new MachineState
-                {
-                    RAMChecks = new()
-                    {
-                        [0x30] = 0x1234,
                         [0x50] = 0x1234,
-                        [0x60] = 0x1234,
-                        [0x80] = 0x1234
+                        [0x60] = 0x3400,
+                        [0x70] = 0x1200,
+                        [0x30] = 0x1234,
+                        [0x20] = 0x3400,
+                        [0x10] = 0x1200
                     }
                 }
             );
         }
 
         [TestMethod]
-        public void ADD_REG_REG()
+        public void MOV_sizeSEGREGplusIMM_sizeSEGuIMM16()
         {
             AssertState(
                 @"
-                mov r0, 0x100
-                mov r1, 0x200
-                add r0, r1
+                mov r0, 0x80
+                mov r1, 0x40
+                mov word[ds:r0], 0x1234
+                mov word[ds:r1+0x10], word[ds:0x80]
+                mov word[ds:r1+0x20], byte[ds:0x80]
+                mov byte[ds:r1+0x30], byte[ds:0x80]
+                mov word[ds:r1-0x10], word[ds:0x80]
+                mov word[ds:r1-0x20], byte[ds:0x80]
+                mov byte[ds:r1-0x30], byte[ds:0x80]
+                mov word[ds:r1-0x40], word[0x0000:0x80]
                 ",
                 new MachineState
                 {
                     CPU = new CpuState
                     {
-                        r0 = 0x300,
-                        r1 = 0x200
-                    }
-                }
-            );
-        }
-
-        [TestMethod]
-        public void ADD_REG_IMM16()
-        {
-            AssertState(
-                @"
-                mov r0, 0x100
-                add r0, 0x050
-                ",
-                new MachineState
-                {
-                    CPU = new CpuState
-                    {
-                        r0 = 0x150
-                    }
-                }
-            );
-        }
-
-        [TestMethod]
-        public void ADD_REG_dREGIMM16()
-        {
-            AssertState(
-                @"
-                mov word[ds:0x80], 0x100
-                mov r0, 0x50
-                mov r1, 0x50
-                add r0, word[ds:r1+0x30]
-                ",
-                new MachineState
-                {
-                    CPU = new CpuState
-                    {
-                        r0 = 0x150,
-                        r1 = 0x030
+                        r0 = 0x0080,
+                        r1 = 0x0040
                     },
-                    RAMChecks = new Dictionary<ushort, short>
+                    RAMChecks = new()
                     {
-                        [0x80] = 0x100
+                        [0x80] = 0x1234,
+                        [0x50] = 0x1234,
+                        [0x60] = 0x0012,
+                        [0x70] = 0x1200,
+                        [0x30] = 0x1234,
+                        [0x20] = 0x0012,
+                        [0x10] = 0x1200,
+                        [0x00] = 0x1234
                     }
                 }
             );
         }
+
+        // TODO mov size[seg:reg+sImm], size[seg:reg+sImm]
 
         private void AssertState(string source, MachineState expectedState)
         {

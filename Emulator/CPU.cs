@@ -112,10 +112,14 @@ namespace Emulator
             if (acword != 0)
             {
                 Register? reg;
-                if (acword == ControlWord.RSO1)
+                if (acword == ControlWord.aRSO1)
                     reg = SelectRegister(instruction.Word);
+                else if (acword == ControlWord.aRSO2)
+                    reg = SelectRegister(operand.Word);
                 else if (acword == ControlWord.TAO)
                     reg = ta;
+                else if (acword == ControlWord.aTBO)
+                    reg = tb;
                 else if (acword == ControlWord.SPO)
                     reg = sp;
                 else
@@ -134,9 +138,11 @@ namespace Emulator
             if (bcword != 0)
             {
                 Register? reg;
-                if (bcword == ControlWord.RSO2)
+                if (bcword == ControlWord.bRSO2)
                     reg = SelectRegister(operand.Word);
-                else if (bcword == ControlWord.TBO)
+                else if (bcword == ControlWord.bRSO1)
+                    reg = SelectRegister(instruction.Word);
+                else if (bcword == ControlWord.bTBO)
                     reg = tb;
                 else if (bcword == ControlWord.FO)
                     reg = flags;
@@ -190,7 +196,6 @@ namespace Emulator
                 {
                     ControlWord.CS => cs.Word,
                     ControlWord.SS => ss.Word,
-                    ControlWord.DS => ds.Word,
                     ControlWord.SEG1 => SelectSegment(instruction.Word),
                     ControlWord.SEG2 => SelectSegment(operand.Word),
                     _ => 0
@@ -281,8 +286,8 @@ namespace Emulator
                     throw new InvalidOperationException();
             }
 
-            if ((cword & ControlWord.JMP) != 0)
-                ip.Word = dbusWord;
+            //if ((cword & ControlWord.JMP) != 0)
+            //    ip.Word = dbusWord;
 
             // CLOCK
             mci = (mci + 1) & 0x0F;
@@ -298,6 +303,8 @@ namespace Emulator
                 ip.Word += (ushort)SelectOperandWidth(instruction.Word);
             else if ((cword & ControlWord.MASK_IPC) == ControlWord.IPCORW2)
                 ip.Word += (ushort)SelectOperandWidth(operand.Word);
+            else if ((cword & ControlWord.MASK_IPC) == ControlWord.JMP)
+                ip.Word = dbusWord;
         }
 
         private ControlWord ResolveControlWord()
