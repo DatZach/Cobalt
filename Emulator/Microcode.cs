@@ -269,6 +269,8 @@ namespace Emulator
                     continue;
                 }
 
+                // TODO Validate that SIZ* macro controlwords are not present after processing
+
                 var addr = 0;
                 addr |= procedure.Index << 10;
 
@@ -300,7 +302,7 @@ namespace Emulator
                 else
                 {
                     if (opcodes.TryGetValue(addr, out var existing) && !existing.IsFlagWildcard)
-                        throw new AssemblyException(i, $"Opcode '{procedure.Name}' is already declared without wildcard");
+                        throw new AssemblyException(i, $"Opcode '{procedure.Name} {procedure.Operand1} {procedure.Operand2}' is already declared without wildcard");
 
                     opcodes[addr] = procedure;
                 }

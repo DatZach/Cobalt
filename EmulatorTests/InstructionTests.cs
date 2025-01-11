@@ -29,13 +29,13 @@ namespace EmulatorTests
         }
 
         [TestMethod]
-        public void MOV_REG_IMM8()
+        public void MOV_REG_IMM()
         {
             AssertState(
                 @"
                 mov r0, 0xFFFF
                 mov r0, 0x12
-                mov r1, 0x34
+                mov r1, 0x1234
                 mov r2h, 0x12
                 mov r2l, 0x34
                 mov r3h, 0x56
@@ -46,39 +46,11 @@ namespace EmulatorTests
                 new CpuState
                 {
                     r0 = 0x0012,
-                    r1 = 0x0034,
+                    r1 = 0x1234,
                     r2 = 0x1234,
                     r3 = 0x5600,
                     sp = 0x000F,
                     ss = 0x0080,
-                    ds = 0x0001,
-                }
-            );
-        }
-
-        [TestMethod]
-        public void MOV_REG_IMM16()
-        {
-            AssertState(
-                @"
-                mov r0, 0x1234
-                mov r1, 0x4321
-                mov r2, 0x1234
-                mov r3, 0x4321
-                mov sp, 0x1234
-                mov ss, 0x4321
-                mov ds, 0x0001
-                mov cs, 0x4000
-                ",
-                new CpuState
-                {
-                    r0 = 0x1234,
-                    r1 = 0x4321,
-                    r2 = 0x1234,
-                    r3 = 0x4321,
-                    sp = 0x1234,
-                    ss = 0x4321,
-                    cs = 0x4000,
                     ds = 0x0001,
                 }
             );
@@ -246,6 +218,43 @@ namespace EmulatorTests
         }
 
         [TestMethod]
+        public void MOV_sizeSEGREGplusIMM_sizeSEGREGplusIMM()
+        {
+            AssertState(
+                @"
+                mov r0, 0x90
+                mov r1, 0x40
+                mov word[ds:0x80], 0x1234
+                mov word[ds:r1+0x10], word[ds:r0-0x10]
+                mov word[ds:r1+0x20], byte[ds:r0-0x10]
+                mov byte[ds:r1+0x30], byte[ds:r0-0x10]
+                mov r0, 0x70
+                mov word[ds:r1-0x10], word[ds:r0+0x10]
+                mov word[ds:r1-0x20], byte[ds:r0+0x10]
+                mov byte[ds:r1-0x30], byte[ds:r0+0x10]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x0070,
+                        r1 = 0x0040
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234,
+                        [0x50] = 0x1234,
+                        [0x60] = 0x0012,
+                        [0x70] = 0x1200,
+                        [0x30] = 0x1234,
+                        [0x20] = 0x0012,
+                        [0x10] = 0x1200
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
         public void MOV_sizeSEGREGplusIMM_sizeSEGREG()
         {
             AssertState(
@@ -319,7 +328,306 @@ namespace EmulatorTests
             );
         }
 
-        // TODO mov size[seg:reg+sImm], size[seg:reg+sImm]
+        [TestMethod]
+        public void MOV_sizeSEGREG_REG()
+        {
+            AssertState(
+                @"
+                mov r0, 0x80
+                mov r1, 0x1234
+                mov word[ds:r0], r1
+                mov r0, 0x40
+                mov byte[ds:r0], r1l
+                mov r0, 0x41
+                mov byte[ds:r0], r1h
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x0041,
+                        r1 = 0x1234
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234,
+                        [0x40] = 0x3412
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void MOV_sizeSEGREG_IMM()
+        {
+            AssertState(
+                @"
+                mov r0, 0x80
+                mov word[ds:r0], 0x1234
+                mov r0, 0x50
+                mov byte[ds:r0], 0x12
+                mov r0, 0x51
+                mov byte[ds:r0], 0x34
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x0051
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234,
+                        [0x50] = 0x1234
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void MOV_sizeSEGREG_sizeSEGREGplusIMM()
+        {
+            AssertState(
+                @"
+                mov r0, 0x80
+                mov r1, 0x40
+                mov r2, 0x90
+                mov r3, 0xA0
+                mov word[ds:0x50], 0x1234
+                mov word[ds:0x60], 0x1234
+                mov word[ds:r0], word[ds:r1+0x10]
+                mov word[ds:r2], byte[ds:r1+0x20]
+                mov byte[ds:r3], byte[ds:r1+0x20]
+                mov r3, 0xA1
+                mov r1, 0x52
+                mov byte[ds:r3], byte[ds:r1-0x01]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x0080,
+                        r1 = 0x0052,
+                        r2 = 0x0090,
+                        r3 = 0x00A1
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x50] = 0x1234,
+                        [0x60] = 0x1234,
+                        [0x80] = 0x1234,
+                        [0x90] = 0x0012,
+                        [0xA0] = 0x1234
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void MOV_sizeSEGREG_sizeSEGREG()
+        {
+            AssertState(
+                @"
+                mov r0, 0x80
+                mov r1, 0x40
+                mov r2, 0x90
+                mov r3, 0xA0
+                mov word[ds:0x40], 0x1234
+                mov word[ds:0x60], 0x1234
+                mov word[ds:r0], word[ds:r1]
+                mov word[ds:r2], byte[ds:r1]
+                mov byte[ds:r3], byte[ds:r1]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x0080,
+                        r1 = 0x0040,
+                        r2 = 0x0090,
+                        r3 = 0x00A0
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x40] = 0x1234,
+                        [0x60] = 0x1234,
+                        [0x80] = 0x1234,
+                        [0x90] = 0x0012,
+                        [0xA0] = 0x1200
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void MOV_sizeSEGREG_sizeSEGuIMM16()
+        {
+            AssertState(
+                @"
+                mov r0, 0x80
+                mov r1, 0x90
+                mov r2, 0xA0
+                mov word[ds:0x40], 0x1234
+                mov word[ds:r0], word[ds:0x40]
+                mov word[ds:r1], byte[ds:0x40]
+                mov byte[ds:r2], byte[ds:0x40]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x0080,
+                        r1 = 0x0090,
+                        r2 = 0x00A0
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x40] = 0x1234,
+                        [0x80] = 0x1234,
+                        [0x90] = 0x0012,
+                        [0xA0] = 0x1200
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void MOV_sizeSEGuIMM16_REG()
+        {
+            AssertState(
+                @"
+                mov r0, 0x1234
+                mov word[ds:0x40], r0
+                mov word[ds:0x50], r0h
+                mov byte[ds:0x60], r0l
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x1234
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x40] = 0x1234,
+                        [0x50] = 0x0012,
+                        [0x60] = 0x3400
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void MOV_sizeSEGuIMM16_IMM()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x40], 0x1234
+                mov word[ds:0x50], 0x12
+                mov byte[ds:0x60], 0x34
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x40] = 0x1234,
+                        [0x50] = 0x0012,
+                        [0x60] = 0x3400
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void MOV_sizeSEGuIMM16_sizeSEGREGplusIMM()
+        {
+            AssertState(
+                @"
+                mov r0, 0x80
+                mov r1, 0x90
+                mov word[ds:r1], 0x1234
+                mov word[ds:0x40], word[ds:r0+0x10]
+                mov word[ds:0x50], byte[ds:r0+0x10]
+                mov byte[ds:0x60], byte[ds:r0+0x10]
+                mov r0, 0xA0
+                mov byte[ds:0x61], byte[ds:r0-0x0F]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x00A0,
+                        r1 = 0x0090
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x90] = 0x1234,
+                        [0x40] = 0x1234,
+                        [0x50] = 0x0012,
+                        [0x60] = 0x1234,
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void MOV_sizeSEGuIMM16_sizeSEGREG()
+        {
+            AssertState(
+                @"
+                mov r0, 0x80
+                mov word[ds:0x80], 0x1234
+                mov word[ds:0x40], word[ds:r0]
+                mov word[ds:0x50], byte[ds:r0]
+                mov byte[ds:0x60], byte[ds:r0]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x0080
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234,
+                        [0x40] = 0x1234,
+                        [0x50] = 0x0012,
+                        [0x60] = 0x1200,
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void MOV_sizeSEGuIMM16_sizeSEGuIMM16()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov word[ds:0x40], word[ds:0x80]
+                mov word[ds:0x50], byte[ds:0x80]
+                mov byte[ds:0x60], byte[ds:0x80]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234,
+                        [0x40] = 0x1234,
+                        [0x50] = 0x0012,
+                        [0x60] = 0x1200,
+                    }
+                }
+            );
+        }
 
         private void AssertState(string source, MachineState expectedState)
         {
@@ -349,7 +657,7 @@ namespace EmulatorTests
 
             var actualState = machine.CaptureState();
             if (!actualState.IsEqual(expectedState))
-                Assert.Fail($"\nEXPECTED\n{expectedState}\n\nACTUAL\n{actualState}");
+                Assert.Fail($"\nEXPECTED\n{expectedState}\n\nACTUAL\n{actualState}\n{bootRom.ToString(0, 64)}");
         }
     }
 }
