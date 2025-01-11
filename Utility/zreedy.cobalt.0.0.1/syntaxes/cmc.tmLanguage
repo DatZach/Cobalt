@@ -39,7 +39,7 @@
 			</dict>
 			<dict>
 				<key>match</key>
-				<string>(\d{2})(\s\d{4})(\s[a-zA-Z0-9_]*)(\sBA)?(\s(REG|IMM8|IMM16|(BYTE|WORD)\[SEG\:REG(\+sIMM)?\]|\[SEG\:uIMM16\]))?(\s(REG|IMM8|IMM16|(BYTE|WORD)\[SEG\:REG(\+sIMM)?\]|\[SEG\:uIMM16\]))?(.*((\-|\+)(ZF|CF|SF)|\*))?$</string>
+				<string>(\d{2})(\s\d{4})(\s[a-zA-Z0-9_]*)(\sBA)?(\s(REG|IMM|IMM8|IMM16|(BYTE|WORD|SIZE)\[SEG\:REG(\+sIMM)?\]|\[SEG\:uIMM16\]))?(\s(REG|IMM|IMM8|IMM16|(BYTE|WORD|SIZE)\[SEG\:REG(\+sIMM)?\]|\[SEG\:uIMM16\]))?(.*((\-|\+)(ZF|CF|SF)|\*))?$</string>
 				<key>captures</key>
 				<dict>
 					<key>1</key>
@@ -104,19 +104,19 @@
 			</dict>
 			<dict>
 				<key>match</key>
-				<string>(?i)\b(R|W|BYTE|WORD|ORW1|ORW2)\b</string>
+				<string>(?i)\b(R|W|BYTE|WORD|ORW1|ORW2|SIZ1|SIZ2)\b</string>
 				<key>name</key>
 				<string>storage.type.cmc</string>
 			</dict>
 			<dict>
 				<key>match</key>
-				<string>(?i)(CS|DS|SS|SEG1|SEG2|\:|(\$[A-Za-z0-9_]*))</string>
+				<string>(?i)(CS|SS|SEG1|SEG2|\:|(\$[A-Za-z0-9_]*))</string>
 				<key>name</key>
 				<string>constant.numeric.cmc</string>
 			</dict>
 			<dict>
 				<key>match</key>
-				<string>(?i)\b(IPC1|IPC2|IPC4|IPCORW1|IPCORW2|JMP|RTN|JNF)\b</string>
+				<string>(?i)\b(IPC1|IPC2|IPC4|IPCORW1|IPCORW2|IPCSIZ1|IPCSIZ2|JMP|RTN|JNF)\b</string>
 				<key>name</key>
 				<string>string.quoted.cmc</string>
 			</dict>
