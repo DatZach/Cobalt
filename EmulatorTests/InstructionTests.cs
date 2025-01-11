@@ -629,6 +629,41 @@ namespace EmulatorTests
             );
         }
 
+        [TestMethod]
+        public void ADD_REG_REG()
+        {
+            AssertState(
+                @"
+                mov r0, 0x1234
+                mov r1, 0x4321
+                add r0, r1
+                ",
+                new CpuState
+                {
+                    r0 = 0x5555,
+                    r1 = 0x4321
+                }
+            );
+        }
+
+        [TestMethod]
+        public void ADD_REG_IMM()
+        {
+            AssertState(
+                @"
+                mov r1, 0x1234
+                add r1, 0x21
+                mov r0, 0x1234
+                add r0, 0x4321
+                ",
+                new CpuState
+                {
+                    r0 = 0x5555,
+                    r1 = 0x1255
+                }
+            );
+        }
+
         private void AssertState(string source, MachineState expectedState)
         {
             var devices = new List<DeviceConfigBase>();
