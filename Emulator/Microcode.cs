@@ -632,8 +632,8 @@ namespace Emulator
         aRSO2       = 0b00000000_00000000_00000000_01000000,
         TAO         = 0b00000000_00000000_00000000_01100000,
         aTBO        = 0b00000000_00000000_00000000_10000000,
-        SPO         = 0b00000000_00000000_00000000_10100000,
-        A_XX_1      = 0b00000000_00000000_00000000_11000000,
+        TCO         = 0b00000000_00000000_00000000_10100000,
+        SPO         = 0b00000000_00000000_00000000_11000000,
         A_XX_2      = 0b00000000_00000000_00000000_11100000,
         MASK_A      = 0b00000000_00000000_00000000_11100000,
 
@@ -649,10 +649,10 @@ namespace Emulator
         RSI1        = 0b00000000_00000000_00001000_00000000,
         TAI         = 0b00000000_00000000_00010000_00000000,
         TBI         = 0b00000000_00000000_00011000_00000000,
-        SPI         = 0b00000000_00000000_00100000_00000000,
-        JNF         = 0b00000000_00000000_00101000_00000000,
-        INTLATCH    = 0b00000000_00000000_00110000_00000000,
-        INTENLATCH  = 0b00000000_00000000_00111000_00000000,
+        TCI         = 0b00000000_00000000_00100000_00000000,
+        SPI         = 0b00000000_00000000_00101000_00000000,
+        INTENLATCH  = 0b00000000_00000000_00110000_00000000,
+        JNF         = 0b00000000_00000000_00111000_00000000,
         MASK_RI     = 0b00000000_00000000_00111000_00000000,
         
         R           = 0b00000000_00000000_01000000_00000000,
@@ -682,8 +682,8 @@ namespace Emulator
         SEG1        = 0b00000000_11000000_00000000_00000000,
         SEG2        = 0b00000001_00000000_00000000_00000000,
         SEG_XX_1    = 0b00000001_01000000_00000000_00000000,
-        SEG_XX_2    = 0b00000001_10000000_00000000_00000000,
-        SEG_XX_3    = 0b00000001_11000000_00000000_00000000,
+        INTLATCH    = 0b00000001_10000000_00000000_00000000,
+        SEG_XX_2    = 0b00000001_11000000_00000000_00000000,
         MASK_SEG    = 0b00000001_11000000_00000000_00000000,
         
         IPO         = 0b00000010_00000000_00000000_00000000,
@@ -730,6 +730,8 @@ namespace Emulator
                 sb.Append("SEG1:");
             else if ((cw & ControlWord.MASK_SEG) == ControlWord.SEG2)
                 sb.Append("SEG2:");
+            else if ((cw & ControlWord.MASK_SEG) == ControlWord.INTLATCH)
+                sb.Append("INTLATCH ");
 
             if ((cw & ControlWord.ADDR) != 0)
                 sb.Append("$");
@@ -749,6 +751,8 @@ namespace Emulator
                 sb.Append("TAO ");
             else if ((cw & ControlWord.MASK_A) == ControlWord.aTBO)
                 sb.Append("TBO ");
+            else if ((cw & ControlWord.MASK_A) == ControlWord.TCO)
+                sb.Append("TCO ");
             else if ((cw & ControlWord.MASK_A) == ControlWord.SPO)
                 sb.Append("SPO ");
 
@@ -791,18 +795,18 @@ namespace Emulator
                 sb.Append("TAI ");
             else if ((cw & ControlWord.MASK_RI) == ControlWord.TBI)
                 sb.Append("TBI ");
+            else if ((cw & ControlWord.MASK_RI) == ControlWord.TCI)
+                sb.Append("TCI ");
             else if ((cw & ControlWord.MASK_RI) == ControlWord.SPI)
                 sb.Append("SPI ");
+            else if ((cw & ControlWord.MASK_RI) == ControlWord.INTENLATCH)
+                sb.Append("INTENLATCH ");
             else if ((cw & ControlWord.MASK_RI) == ControlWord.JNF)
             {
                 sb.Append("JNF ");
                 sb.Append((int)(cw & ControlWord.MASK_OPR) >> 16);
                 sb.Append(' ');
             }
-            else if ((cw & ControlWord.MASK_RI) == ControlWord.INTLATCH)
-                sb.Append("INTLATCH ");
-            else if ((cw & ControlWord.MASK_RI) == ControlWord.INTENLATCH)
-                sb.Append("INTENLATCH ");
 
             if ((cw & ControlWord.MASK_IR) == ControlWord.II)
                 sb.Append("II ");

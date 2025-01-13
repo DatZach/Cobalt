@@ -16,7 +16,7 @@ namespace Emulator
         private bool latchINT;
         private bool latchINTEN;
 
-        private readonly Register r0, r1, r2, r3, sp, ss, cs, ds, ta, tb, ip, flags, instruction, operand;
+        private readonly Register r0, r1, r2, r3, sp, ss, cs, ds, ta, tb, tc, ip, flags, instruction, operand;
         private readonly Machine machine;
         private readonly ControlWord[] microcode;
         private readonly Disassembler disassembler;
@@ -37,6 +37,7 @@ namespace Emulator
             ds = new Register();
             ta = new Register();
             tb = new Register();
+            tc = new Register();
             ip = new Register();
             flags = new Register();
             instruction = new Register();
@@ -120,6 +121,8 @@ namespace Emulator
                     reg = ta;
                 else if (acword == ControlWord.aTBO)
                     reg = tb;
+                else if (acword == ControlWord.TCO)
+                    reg = tc;
                 else if (acword == ControlWord.SPO)
                     reg = sp;
                 else
@@ -271,23 +274,23 @@ namespace Emulator
                     ta.Word = dbusWord;
                 else if (ricword == ControlWord.TBI)
                     tb.Word = dbusWord;
+                else if (ricword == ControlWord.TCI)
+                    tc.Word = dbusWord;
                 else if (ricword == ControlWord.SPI)
                     sp.Word = dbusWord;
+                else if (ricword == ControlWord.INTENLATCH)
+                    latchINTEN = (dbusWord & 1) == 1;
                 else if (ricword == ControlWord.JNF)
                 {
                     if (flags.Word == 0)
                         mci = (int)(cword & ControlWord.MASK_OPR) >> 16;
                 }
-                else if (ricword == ControlWord.INTLATCH)
-                    latchINT = (dbusWord & 1) == 1;
-                else if (ricword == ControlWord.INTENLATCH)
-                    latchINTEN = (dbusWord & 1) == 1;
                 else
                     throw new InvalidOperationException();
             }
 
-            //if ((cword & ControlWord.JMP) != 0)
-            //    ip.Word = dbusWord;
+            if ((cword & ControlWord.MASK_SEG) == ControlWord.INTLATCH)
+                latchINT = (dbusWord & 1) == 1;
 
             // CLOCK
             mci = (mci + 1) & 0x0F;
@@ -378,7 +381,7 @@ namespace Emulator
                 r0 = r0, r1 = r1, r2 = r2, r3 = r3,
                 sp = sp, ss = ss, cs = cs, ds = ds,
                 ip = ip, flags = flags,
-                ta = ta, tb = tb
+                ta = ta, tb = tb, tc = tc
             };
         }
     }
@@ -409,6 +412,8 @@ namespace Emulator
 
         public Register? tb { get; init; }
 
+        public Register? tc { get; init; }
+
         public override string ToString()
         {
             var sb = new StringBuilder(128);
@@ -437,6 +442,7 @@ namespace Emulator
 
             if (ta != null) sb.Append($"ta = {ta} ");
             if (tb != null) sb.Append($"tb = {tb} ");
+            if (tc != null) sb.Append($"tc = {tc} ");
 
             return sb.ToString().TrimEnd();
         }
