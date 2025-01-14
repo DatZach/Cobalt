@@ -837,7 +837,7 @@ namespace Emulator
         public int Line { get; }
             
         public AssemblyException(int line, string message)
-            : base(message)
+            : base($"Line {line + 1}: {message}")
         {
             Line = line + 1;
         }
