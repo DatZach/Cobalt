@@ -113,6 +113,16 @@ namespace Emulator
                         var part = parts[p];
                         if (part == "END")
                         {
+                            foreach (var fixup in current.LabelFixups)
+                            {
+                                var fixupAddress = fixup.Key;
+                                var labelName = fixup.Value;
+                                if (!current.Labels.TryGetValue(labelName, out var labelAddress))
+                                    throw new AssemblyException(i, $"Reference to undeclared label '{labelName}'");
+
+                                current.Code[fixupAddress] |= (ControlWord)((labelAddress << 16) & (int)ControlWord.MASK_OPR);
+                            }
+
                             current = null;
                             break;
                         }
@@ -157,7 +167,7 @@ namespace Emulator
                         {
                             var labelName = part[1..];
                             if (!current.Labels.TryGetValue(labelName, out var labelAddress))
-                                throw new AssemblyException(i, $"Reference to undeclared label '{labelName}'");
+                                current.LabelFixups[current.CodeLength] = labelName;
                             if ((word & ControlWord.MASK_OPR) != 0)
                                 throw new AssemblyException(i, $"Cannot reference label '{labelName}' here");
 
@@ -444,11 +454,14 @@ namespace Emulator
 
             public Dictionary<string, int> Labels { get; }
 
+            public Dictionary<int, string> LabelFixups { get; }
+
             public Procedure()
             {
                 Code = new ControlWord[MaxMicrocodeCount];
                 CodeLength = 0;
                 Labels = new Dictionary<string, int>();
+                LabelFixups = new Dictionary<int, string>();
             }
         }
     }

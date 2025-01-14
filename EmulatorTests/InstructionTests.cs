@@ -1171,6 +1171,32 @@ namespace EmulatorTests
             );
         }
 
+        [TestMethod]
+        public void LNZ_REG_IMM16()
+        {
+            AssertState(
+                @"
+                mov r3, 10
+                mov r0, 32
+                loop:
+                    add r0, 1
+                    lnz r3, loop
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 42,
+                        r3 = 0
+                    },
+                    RAMChecks = new()
+                    {
+                        
+                    }
+                }
+            );
+        }
+
         private void AssertState(string source, MachineState expectedState)
         {
             var devices = new List<DeviceConfigBase>();
