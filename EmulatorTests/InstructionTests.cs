@@ -1258,6 +1258,127 @@ namespace EmulatorTests
             );
         }
 
+        [TestMethod]
+        public void CALL_IMM()
+        {
+            AssertState(
+                @"
+                mov r0, 0x20
+                mov r1, 0x3A
+                call subroutine
+                hlt
+
+                subroutine:
+                    add r0, r1
+                    ret
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x5A,
+                        r1 = 0x3A
+                    },
+                    RAMChecks = new()
+                    {
+                        
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void PUSH_REG()
+        {
+            AssertState(
+                @"
+                mov r0, 0x1234
+                push r0
+                pop r1
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x1234,
+                        r1 = 0x1234
+                    },
+                    RAMChecks = new()
+                    {
+                        
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void POP_REG()
+        {
+            AssertState(
+                @"
+                mov r0, 0x1234
+                push r0
+                pop r1
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x1234,
+                        r1 = 0x1234
+                    },
+                    RAMChecks = new()
+                    {
+                        
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void DEC_REG()
+        {
+            AssertState(
+                @"
+                mov r0, 0x10
+                dec r0
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x0F
+                    },
+                    RAMChecks = new()
+                    {
+                        
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void INC_REG()
+        {
+            AssertState(
+                @"
+                mov r0, 0x10
+                inc r0
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x11
+                    },
+                    RAMChecks = new()
+                    {
+                        
+                    }
+                }
+            );
+        }
+
         private void AssertState(string source, MachineState expectedState)
         {
             var devices = Array.Empty<DeviceConfigBase>();
