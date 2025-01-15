@@ -1172,6 +1172,122 @@ namespace EmulatorTests
         }
 
         [TestMethod]
+        public void CMP_REG_REG()
+        {
+            AssertState(
+                @"
+                mov r0, 0x1234
+                mov r1, 0x4321
+                cmp r0, r1
+                ",
+                new CpuState
+                {
+                    r0 = 0x1234,
+                    r1 = 0x4321,
+                    flags = 0x03        // zf CF SF
+                }
+            );
+
+            AssertState(
+                @"
+                mov r0, 0x1234
+                mov r1, 0x1234
+                cmp r0, r1
+                ",
+                new CpuState
+                {
+                    r0 = 0x1234,
+                    r1 = 0x1234,
+                    flags = 0x04        // ZF cf sf
+                }
+            );
+        }
+
+        [TestMethod]
+        public void CMP_REG_IMM()
+        {
+            AssertState(
+                @"
+                mov r0, 0x1234
+                cmp r0, 0x4321
+                ",
+                new CpuState
+                {
+                    r0 = 0x1234,
+                    flags = 0x03        // zf CF SF
+                }
+            );
+
+            AssertState(
+                @"
+                mov r0, 0x1234
+                cmp r0, 0x1234
+                ",
+                new CpuState
+                {
+                    r0 = 0x1234,
+                    flags = 0x04        // ZF cf sf
+                }
+            );
+
+            AssertState(
+                @"
+                mov r0, 0x12
+                cmp r0, 0x43
+                ",
+                new CpuState
+                {
+                    r0 = 0x0012,
+                    flags = 0x03        // zf CF SF
+                }
+            );
+
+            AssertState(
+                @"
+                mov r0, 0x12
+                cmp r0, 0x12
+                ",
+                new CpuState
+                {
+                    r0 = 0x0012,
+                    flags = 0x04        // ZF cf sf
+                }
+            );
+        }
+
+        [TestMethod]
+        public void BIT_REG_REG()
+        {
+            AssertState(
+                @"
+                mov r0, 0x1234
+                mov r1, 0x02
+                bit r0, r1
+                ",
+                new CpuState
+                {
+                    r0 = 0x1234,
+                    r1 = 0x0002,
+                    flags = 0x04        // ZF cf sf
+                }
+            );
+
+            AssertState(
+                @"
+                mov r0, 0x1234
+                mov r1, 0x04
+                bit r0, r1
+                ",
+                new CpuState
+                {
+                    r0 = 0x1234,
+                    r1 = 0x0004,
+                    flags = 0x00        // zf cf sf
+                }
+            );
+        }
+
+        [TestMethod]
         public void BCMP_sizeSEGREG_IMM()
         {
             AssertState(
