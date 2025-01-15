@@ -1199,7 +1199,7 @@ namespace EmulatorTests
 
         private void AssertState(string source, MachineState expectedState)
         {
-            var devices = new List<DeviceConfigBase>();
+            var devices = Array.Empty<DeviceConfigBase>();
             var bootRom = new Memory(0x0FFF);
 
             var assembler = new Assembler(microcodeRom);

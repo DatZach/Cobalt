@@ -143,8 +143,7 @@ namespace Emulator
                             {
                                 var k = current.CodeLength++;
                                 if (k >= Procedure.MaxMicrocodeCount)
-                                    throw new AssemblyException(i,
-                                        $"Microcode exceeds {Procedure.MaxMicrocodeCount} words");
+                                    throw new AssemblyException(i, $"Microcode exceeds {Procedure.MaxMicrocodeCount} words");
 
                                 current.Code[k] = macroCode[j];
                             }
