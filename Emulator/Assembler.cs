@@ -106,7 +106,7 @@
                                 var escapeCode = operandString[++j];
                                 if (escapeCode == 'x')
                                 {
-                                    ch = (char)Convert.ToInt16(operandString.Substring(++j, 2), 16);
+                                    ch = (char)Convert.ToInt16(operandString.Substring(j + 1, 2), 16);
                                     j += 2;
                                 }
                                 else
@@ -409,6 +409,9 @@
                 ParseSegRegIndex(regOperand, out data1, out var data1ImmWidth);
                 if (data1 != -1)
                 {
+                    //if (data1ImmWidth != (isByte ? 1 : 2))
+                    //    throw new AssemblyException(line,  $"Illegal Addressing Mode for SEG:REG '{operand}'");
+
                     OperandType operandType;
 
                     if ((signIdx = indOperand.IndexOfAny(SignChars)) != -1)
@@ -468,7 +471,7 @@
         private static void ParseSegRegIndex(string registerName, out short idx, out int width)
         {
             idx = (short)Array.IndexOf(SegRegs, registerName);
-            width = (idx & 0x0C) == 0x04 ? 1 : 2;
+            width = SelectOperandWidth(idx);
         }
 
         private readonly static string[] ByteAddressingSegments =
@@ -487,6 +490,8 @@
                 ? (short)Array.IndexOf(ByteAddressingSegments, registerName)
                 : (short)Array.IndexOf(WordAddressingSegments, registerName);
         }
+
+        private static int SelectOperandWidth(int index) => (index & 0xC) == 0x4 ? 1 : 2;
 
         private readonly static char[] SignChars = { '+', '-' };
         private bool TryParseImm(string value, int operandIdx, out int resultWidth, out short result)

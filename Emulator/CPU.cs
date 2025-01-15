@@ -5,6 +5,7 @@ namespace Emulator
 {
     public sealed class CPU
     {
+        private static readonly Register Constant0 = new() { Word = 0 };
         private static readonly Register Constant1 = new() { Word = 1 };
         private static readonly Register Constant2 = new() { Word = 2 };
         private static readonly Register Constant4 = new() { Word = 4 };
@@ -114,9 +115,9 @@ namespace Emulator
             {
                 Register? reg;
                 if (acword == ControlWord.aRSO1)
-                    reg = SelectRegister(instruction.Word);
+                    reg = SelectRegister(instruction.Word, (instruction.Word & 0x380) >> 7);
                 else if (acword == ControlWord.aRSO2)
-                    reg = SelectRegister(operand.Word);
+                    reg = SelectRegister(operand.Word, (instruction.Word & 0x70) >> 4);
                 else if (acword == ControlWord.TAO)
                     reg = ta;
                 else if (acword == ControlWord.aTBO)
@@ -125,6 +126,8 @@ namespace Emulator
                     reg = tc;
                 else if (acword == ControlWord.SPO)
                     reg = sp;
+                else if (acword == ControlWord.INTENLATCH)
+                    reg = Constant0;
                 else
                     throw new InvalidOperationException();
 
@@ -142,9 +145,9 @@ namespace Emulator
             {
                 Register? reg;
                 if (bcword == ControlWord.bRSO2)
-                    reg = SelectRegister(operand.Word);
+                    reg = SelectRegister(operand.Word, (instruction.Word & 0x70) >> 4);
                 else if (bcword == ControlWord.bRSO1)
-                    reg = SelectRegister(instruction.Word);
+                    reg = SelectRegister(instruction.Word, (instruction.Word & 0x380) >> 7);
                 else if (bcword == ControlWord.bTBO)
                     reg = tb;
                 else if (bcword == ControlWord.FO)
@@ -267,7 +270,12 @@ namespace Emulator
             {
                 if (ricword == ControlWord.RSI1)
                 {
-                    var reg = SelectRegister(instruction.Word);
+                    var reg = SelectRegister(instruction.Word, (instruction.Word & 0x380) >> 7);
+                    reg.Word = dbusWord;
+                }
+                else if (ricword == ControlWord.RSI2)
+                {
+                    var reg = SelectRegister(operand.Word, (instruction.Word & 0x70) >> 4);
                     reg.Word = dbusWord;
                 }
                 else if (ricword == ControlWord.TAI)
@@ -278,8 +286,6 @@ namespace Emulator
                     tc.Word = dbusWord;
                 else if (ricword == ControlWord.SPI)
                     sp.Word = dbusWord;
-                else if (ricword == ControlWord.INTENLATCH)
-                    latchINTEN = (dbusWord & 1) == 1;
                 else if (ricword == ControlWord.JNF)
                 {
                     if (flags.Word == 0)
@@ -291,6 +297,8 @@ namespace Emulator
 
             if ((cword & ControlWord.MASK_SEG) == ControlWord.INTLATCH)
                 latchINT = (dbusWord & 1) == 1;
+            if ((cword & ControlWord.MASK_A) == ControlWord.INTENLATCH)
+                latchINTEN = (dbusWord & 1) == 1;
 
             // CLOCK
             mci = (mci + 1) & 0x0F;
@@ -324,27 +332,57 @@ namespace Emulator
             return microcode[iaddr];
         }
 
-        private Register SelectRegister(int index)
+        private Register SelectRegister(int index, int operandType)
         {
-            return (index & 0x0F) switch
+            return (operandType & 0x07) switch
             {
-                0  => r0,
-                1  => r1,
-                2  => r2,
-                3  => r3,
-                4  => sp,
-                5  => ss,
-                6  => cs,
-                7  => ds,
-                8  => r0.Hi,
-                9  => r0.Lo,
-                10 => r1.Hi,
-                11 => r1.Lo,
-                12 => r2.Hi,
-                13 => r2.Lo,
-                14 => r3.Hi,
-                15 => r3.Lo,
-                _  => throw new ArgumentOutOfRangeException(nameof(index), index, "Illegal Register Index")
+                0b000 => (index & 0x0F) switch
+                {
+                    0  => r0,
+                    1  => r1,
+                    2  => r2,
+                    3  => r3,
+                    4  => sp,
+                    5  => ss,
+                    6  => cs,
+                    7  => ds,
+                    8  => r0.Hi,
+                    9  => r0.Lo,
+                    10 => r1.Hi,
+                    11 => r1.Lo,
+                    12 => r2.Hi,
+                    13 => r2.Lo,
+                    14 => r3.Hi,
+                    15 => r3.Lo,
+                    _  => throw new ArgumentOutOfRangeException(nameof(index), index, "Illegal Register Index")
+                },
+                0b001 or
+                0b010 => throw new ArgumentOutOfRangeException(nameof(operandType), operandType, "Illegal Operand Type"),
+                0b011 or
+                0b100 or
+                0b101 or
+                0b110 or
+                0b111 => (index & 0x0F) switch
+                {
+                    0 => r0,
+                    1 => r1,
+                    2 => r2,
+                    3 => r3,
+                    4 => sp,
+                    5 => r1,
+                    6 => r2,
+                    7 => r3,
+                    8 => r0,
+                    9 => r0,
+                    10 => r1,
+                    11 => r1,
+                    12 => r2,
+                    13 => r2,
+                    14 => r3,
+                    15 => r3,
+                    _  => throw new ArgumentOutOfRangeException(nameof(index), index, "Illegal Register Index")
+                }
+
             };
         }
 

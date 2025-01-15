@@ -1172,6 +1172,67 @@ namespace EmulatorTests
         }
 
         [TestMethod]
+        public void BCMP_sizeSEGREG_IMM()
+        {
+            AssertState(
+                @"
+                mov r2, data
+            a:  bcmp byte[cs:r2], 0
+                jnz a
+                sub r2, data
+                hlt
+
+                data: db ""Hello, World!^0""
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r2 = 14
+                    },
+                    RAMChecks = new()
+                    {
+                        
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void BMOV_sizeSEGREG_sizeSEGREG()
+        {
+            AssertState(
+                @"
+                mov r2, data
+                mov r0, 0x40
+                mov r1, 8
+            a:  bmov byte[ds:r0], byte[cs:r2]
+                lnz r1, a
+                sub r2, data
+                hlt
+
+                data: db ""^x12^x34^x56^x78^x9A^xBC^xDE^xF0""
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x48,
+                        r1 = 0x00,
+                        r2 = 0x08
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x40] = 0x1234,
+                        [0x42] = 0x5678,
+                        [0x44] = 0x9ABC,
+                        [0x46] = 0xDEF0,
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
         public void LNZ_REG_IMM16()
         {
             AssertState(

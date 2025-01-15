@@ -318,7 +318,7 @@ namespace Emulator
 
         public Memory? RAM { get; init; }
 
-        public Dictionary<ushort, short>? RAMChecks { get; init; } // For Unit Tests
+        public Dictionary<ushort, ushort>? RAMChecks { get; init; } // For Unit Tests
 
         public bool IsEqual(MachineState? other)
         {

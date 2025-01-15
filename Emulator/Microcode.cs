@@ -646,7 +646,7 @@ namespace Emulator
         aTBO        = 0b00000000_00000000_00000000_10000000,
         TCO         = 0b00000000_00000000_00000000_10100000,
         SPO         = 0b00000000_00000000_00000000_11000000,
-        A_XX_2      = 0b00000000_00000000_00000000_11100000,
+        INTENLATCH  = 0b00000000_00000000_00000000_11100000,
         MASK_A      = 0b00000000_00000000_00000000_11100000,
 
         bRSO2       = 0b00000000_00000000_00000001_00000000,
@@ -659,11 +659,11 @@ namespace Emulator
         MASK_B      = 0b00000000_00000000_00000111_00000000,
         
         RSI1        = 0b00000000_00000000_00001000_00000000,
-        TAI         = 0b00000000_00000000_00010000_00000000,
-        TBI         = 0b00000000_00000000_00011000_00000000,
-        TCI         = 0b00000000_00000000_00100000_00000000,
-        SPI         = 0b00000000_00000000_00101000_00000000,
-        INTENLATCH  = 0b00000000_00000000_00110000_00000000,
+        RSI2        = 0b00000000_00000000_00010000_00000000,
+        TAI         = 0b00000000_00000000_00011000_00000000,
+        TBI         = 0b00000000_00000000_00100000_00000000,
+        TCI         = 0b00000000_00000000_00101000_00000000,
+        SPI         = 0b00000000_00000000_00110000_00000000,
         JNF         = 0b00000000_00000000_00111000_00000000,
         MASK_RI     = 0b00000000_00000000_00111000_00000000,
         
@@ -767,6 +767,8 @@ namespace Emulator
                 sb.Append("TCO ");
             else if ((cw & ControlWord.MASK_A) == ControlWord.SPO)
                 sb.Append("SPO ");
+            else if ((cw & ControlWord.MASK_A) == ControlWord.INTENLATCH)
+                sb.Append("INTENLATCH ");
 
             if ((cw & ControlWord.MASK_RI) != ControlWord.JNF)
             {
@@ -804,6 +806,8 @@ namespace Emulator
             if ((cw & ControlWord.MASK_RI) == ControlWord.RSI1)
                 sb.Append("RSI1 ");
             else if ((cw & ControlWord.MASK_RI) == ControlWord.TAI)
+                sb.Append("RSI2 ");
+            else if ((cw & ControlWord.MASK_RI) == ControlWord.TAI)
                 sb.Append("TAI ");
             else if ((cw & ControlWord.MASK_RI) == ControlWord.TBI)
                 sb.Append("TBI ");
@@ -811,8 +815,6 @@ namespace Emulator
                 sb.Append("TCI ");
             else if ((cw & ControlWord.MASK_RI) == ControlWord.SPI)
                 sb.Append("SPI ");
-            else if ((cw & ControlWord.MASK_RI) == ControlWord.INTENLATCH)
-                sb.Append("INTENLATCH ");
             else if ((cw & ControlWord.MASK_RI) == ControlWord.JNF)
             {
                 sb.Append("JNF ");

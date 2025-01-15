@@ -1,11 +1,16 @@
 {
 	"name": "cobalt",
-	"version": "0.0.1",
+	"displayName": "Cobalt Tools",
+	"description": "",
+	"version": "1.0.0",
 	"engines": {
-		"vscode": ">=0.9.0-pre.1"
+		"vscode": "^1.0.0"
 	},
 	"dependencies": {
 		"vscode-languageclient": "^7.0.0"
+	},
+	"authors": {
+		"name": "Zach Reedy"
 	},
 	"publisher": "zreedy",
 	"contributes": {
@@ -17,7 +22,8 @@
 				],
 				"extensions": [
 					".cmc"
-				]
+				],
+				"configuration": "./language-configuration.json"
 			}
 		],
 		"grammars": [
@@ -27,6 +33,13 @@
 				"path": "./syntaxes/cmc.tmLanguage"
 			}
 		]
+	},
+	"categories": [
+		"Programming Languages"
+	],
+	"repository": {
+		"url": "https://github.com/DatZach/Cobalt",
+		"type": "git"
 	},
 	"__metadata": {
 		"size": 2510
