@@ -120,7 +120,7 @@ namespace Emulator
                                 if (!current.Labels.TryGetValue(labelName, out var labelAddress))
                                     throw new AssemblyException(i, $"Reference to undeclared label '{labelName}'");
 
-                                current.Code[fixupAddress] |= (ControlWord)((labelAddress << 16) & (int)ControlWord.MASK_OPR);
+                                current.Code[fixupAddress] |= (ControlWord)((labelAddress << 18) & (int)ControlWord.MASK_OPR);
                             }
 
                             current = null;
@@ -158,7 +158,7 @@ namespace Emulator
                             if (current.Labels.ContainsKey(labelName))
                                 throw new AssemblyException(i, $"Redeclaration of label '{labelName}'");
 
-                            current.Labels.Add(labelName, current.CodeLength);
+                            current.Labels.Add(labelName, current.CodeLength - 1);
                             continue;
                         }
 
@@ -170,7 +170,7 @@ namespace Emulator
                             if ((word & ControlWord.MASK_OPR) != 0)
                                 throw new AssemblyException(i, $"Cannot reference label '{labelName}' here");
 
-                            word |= (ControlWord)((labelAddress << 16) & (int)ControlWord.MASK_OPR);
+                            word |= (ControlWord)((labelAddress << 18) & (int)ControlWord.MASK_OPR);
                             continue;
                         }
 
@@ -214,8 +214,7 @@ namespace Emulator
                             }
 
                             if ((word & cwPart) != 0)
-                                throw new AssemblyException(i,
-                                    $"Control signal {subPart} conflicts with another in this word");
+                                throw new AssemblyException(i, $"Control signal {subPart} conflicts with another in this word");
 
                             // TODO Validate that multiple bus OUTs aren't in a single word
 
@@ -805,7 +804,7 @@ namespace Emulator
 
             if ((cw & ControlWord.MASK_RI) == ControlWord.RSI1)
                 sb.Append("RSI1 ");
-            else if ((cw & ControlWord.MASK_RI) == ControlWord.TAI)
+            else if ((cw & ControlWord.MASK_RI) == ControlWord.RSI2)
                 sb.Append("RSI2 ");
             else if ((cw & ControlWord.MASK_RI) == ControlWord.TAI)
                 sb.Append("TAI ");

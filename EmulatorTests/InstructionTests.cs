@@ -1172,6 +1172,133 @@ namespace EmulatorTests
         }
 
         [TestMethod]
+        public void MUL_REG_REG()
+        {
+            AssertState(
+                @"
+                mov r0, 7
+                mov r1, 9
+                mul r0, r1
+                ",
+                new CpuState
+                {
+                    r0 = 63,
+                    r1 = 9
+                }
+            );
+
+            AssertState(
+                @"
+                mov r0, 0
+                mov r1, 9
+                mul r0, r1
+                ",
+                new CpuState
+                {
+                    r0 = 0,
+                    r1 = 9
+                }
+            );
+
+            AssertState(
+                @"
+                mov r0, 7
+                mov r1, 0
+                mul r0, r1
+                ",
+                new CpuState
+                {
+                    r0 = 0,
+                    r1 = 0
+                }
+            );
+
+            // TODO Support signed mul?
+            //AssertState(
+            //    @"
+            //    mov r0, 7
+            //    mov r1, -1
+            //    mul r0, r1
+            //    ",
+            //    new CpuState
+            //    {
+            //        r0 = -7,
+            //        r1 = -1
+            //    }
+            //);
+        }
+
+        [TestMethod]
+        public void DIV_REG_REG()
+        {
+            AssertState(
+                @"
+                mov r0, 10
+                mov r1, 2
+                div r0, r1
+                ",
+                new CpuState
+                {
+                    r0 = 5,
+                    r1 = 2
+                }
+            );
+
+            AssertState(
+                @"
+                mov r0, 5
+                mov r1, 2
+                div r0, r1
+                ",
+                new CpuState
+                {
+                    r0 = 2,
+                    r1 = 2
+                }
+            );
+
+            //AssertState(
+            //    @"
+            //    mov r0, 1
+            //    mov r1, 2
+            //    mul r0, r1
+            //    ",
+            //    new CpuState
+            //    {
+            //        r0 = 0,
+            //        r1 = 2
+            //    }
+            //);
+        }
+
+        [TestMethod]
+        public void DIV_REG_REG_Exception()
+        {
+            AssertState(
+                @"
+                mov r3, 0xFFFF
+                mov [0x0000:0x0000], ExceptionHandler
+                sie 1
+                
+                mov r0, 10
+                mov r1, 0
+                div r0, r1
+                hlt
+
+                ExceptionHandler:
+                    pop r3
+                    hlt
+                ",
+                new CpuState
+                {
+                    r0 = 10,
+                    r1 = 0,
+                    r3 = 0x0104     // DIV_BY_0 ZF cf sf
+                }
+            );
+        }
+
+        [TestMethod]
         public void CMP_REG_REG()
         {
             AssertState(

@@ -502,18 +502,18 @@
 
             if (value.All(char.IsDigit))
             {
-                var uResult = short.Parse(value);
-                resultWidth = uResult <= 0xFF ? 1 : 2;
+                var uResult = ushort.Parse(value);
                 result = (short)(uResult * sign);
+                resultWidth = (result & 0xFF00) == 0 ? 1 : 2;
                 return true;
             }
 
             if (value.Length >= 3 && value[0] == '0' && value[1] is 'x' or 'X'
             &&  value.Skip(2).All(IsHexDigit))
             {
-                var uResult = Convert.ToInt16(value[2..], 16);
-                resultWidth = uResult <= 0xFF ? 1 : 2;
+                var uResult = (ushort)Convert.ToInt16(value[2..], 16);
                 result = (short)(uResult * sign);
+                resultWidth = (result & 0xFF00) == 0 ? 1 : 2;
                 return true;
             }
 

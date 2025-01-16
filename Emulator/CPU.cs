@@ -60,7 +60,7 @@ namespace Emulator
             
             if (latchINT && latchINTEN)
             {
-                instruction.Word = iINT_Hi << 8;
+                instruction.Word = 0x0400;
                 mci = 1;
             }
 
@@ -127,7 +127,7 @@ namespace Emulator
                 else if (acword == ControlWord.SPO)
                     reg = sp;
                 else if (acword == ControlWord.INTENLATCH)
-                    reg = Constant0;
+                    reg = ip; // HACK Hardware does not assert anything on the a-line
                 else
                     throw new InvalidOperationException();
 
@@ -289,7 +289,7 @@ namespace Emulator
                 else if (ricword == ControlWord.JNF)
                 {
                     if (flags.Word == 0)
-                        mci = (int)(cword & ControlWord.MASK_OPR) >> 16;
+                        mci = (int)(cword & ControlWord.MASK_OPR) >> 18;
                 }
                 else
                     throw new InvalidOperationException();
