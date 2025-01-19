@@ -191,11 +191,12 @@ namespace Emulator
             if (DebugOutput)
             {
                 Console.WriteLine(
-                    "STATS Ran {0}ms; AVG_ITR_PER_LOOP {1}; TOT_ITR {2}; TOT_LOOPS {3}",
+                    "STATS Ran {0}ms; AVG_ITR_PER_LOOP {1}; TOT_ITR {2}; TOT_LOOPS {3}; TICKS {4}",
                     sw.ElapsedMilliseconds,
                     statAvgIterationsPerLoop,
                     statTotalIterations,
-                    statTotalLoops
+                    statTotalLoops,
+                    machineTicks
                 );
             }
         }
