@@ -1212,20 +1212,6 @@ namespace EmulatorTests
                     r1 = 0
                 }
             );
-
-            // TODO Support signed mul?
-            //AssertState(
-            //    @"
-            //    mov r0, 7
-            //    mov r1, -1
-            //    mul r0, r1
-            //    ",
-            //    new CpuState
-            //    {
-            //        r0 = -7,
-            //        r1 = -1
-            //    }
-            //);
         }
 
         [TestMethod]
@@ -1240,7 +1226,7 @@ namespace EmulatorTests
                 new CpuState
                 {
                     r0 = 5,
-                    r1 = 2
+                    r1 = 0
                 }
             );
 
@@ -1253,33 +1239,16 @@ namespace EmulatorTests
                 new CpuState
                 {
                     r0 = 2,
-                    r1 = 2
+                    r1 = 1
                 }
             );
 
-            //AssertState(
-            //    @"
-            //    mov r0, 1
-            //    mov r1, 2
-            //    mul r0, r1
-            //    ",
-            //    new CpuState
-            //    {
-            //        r0 = 0,
-            //        r1 = 2
-            //    }
-            //);
-        }
-
-        [TestMethod]
-        public void DIV_REG_REG_Exception()
-        {
             AssertState(
                 @"
                 mov r3, 0xFFFF
                 mov [0x0000:0x0000], ExceptionHandler
                 sie 1
-                
+
                 mov r0, 10
                 mov r1, 0
                 div r0, r1

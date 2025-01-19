@@ -10,6 +10,9 @@ namespace Emulator
         private static readonly Register Constant2 = new() { Word = 2 };
         private static readonly Register Constant4 = new() { Word = 4 };
         private const ushort iINT_Hi = 0x0C;
+        private const byte ZF = 0x04;
+        private const byte CF = 0x02;
+        private const byte SF = 0x01;
 
         public bool IsHalted { get; private set; }
 
@@ -82,10 +85,7 @@ namespace Emulator
                 Console.WriteLine();
             }
 
-            // NOTE Checking JNF without masking RI is a shortcut that saves us on circuitry but if
-            //      RI_XX_1 or RI_XX_2 need to be used then this will need to be changed to check against the mask
-            //      Unless, of course, those 2 microinstructions also use the ALU mask as an operand
-            var isALUOperation = (cword & ControlWord.MASK_ALU) != 0 && (cword & ControlWord.JNF) != ControlWord.JNF;
+            var isALUOperation = (cword & ControlWord.MASK_ALU) != 0 && (cword & ControlWord.MASK_CMJ) == 0;
             var isAddr = (cword & ControlWord.ADDR) != 0;
 
             // CLOCK RISING EDGE
@@ -171,7 +171,7 @@ namespace Emulator
             int zf = 0, cf = 0, sf = 0;
             if (isALUOperation)
             {
-                int alucWord = 0;
+                int alucWord = 0, cfOverride = 0;
                 if ((cword & ControlWord.MASK_ALU) == ControlWord.ADD)
                     alucWord = aluaWord + alubWord;
                 else if ((cword & ControlWord.MASK_ALU) == ControlWord.SUB)
@@ -182,14 +182,17 @@ namespace Emulator
                     alucWord = aluaWord ^ alubWord;
                 else if ((cword & ControlWord.MASK_ALU) == ControlWord.AND)
                     alucWord = aluaWord & alubWord;
-                else if ((cword & ControlWord.MASK_ALU) == ControlWord.SHL)
-                    alucWord = aluaWord << alubWord;
-                else if ((cword & ControlWord.MASK_ALU) == ControlWord.SHR)
-                    alucWord = aluaWord >> alubWord;
+                else if ((cword & ControlWord.MASK_ALU) == ControlWord.ROL)
+                    alucWord = (aluaWord << alubWord) | ((flags.Word & CF) == CF ? 0x0001 : 0);
+                else if ((cword & ControlWord.MASK_ALU) == ControlWord.ROR)
+                {
+                    cfOverride = aluaWord & 1;
+                    alucWord = (aluaWord >> alubWord) | ((flags.Word & CF) == CF ? 0x8000 : 0);
+                }
 
-                zf = alucWord == 0 ? 0x04 : 0;
-                cf = (alucWord & 0x10000) != 0 ? 0x02 : 0;
-                sf = (alucWord & 0x8000) != 0 ? 0x01 : 0;
+                zf = alucWord == 0 ? ZF : 0;
+                cf = (alucWord & 0x10000) != 0 || cfOverride != 0 ? CF : 0;
+                sf = (alucWord & 0x8000) != 0 ? SF : 0;
                 dbusWord = (ushort)alucWord;
             }
 
@@ -282,23 +285,37 @@ namespace Emulator
                     ta.Word = dbusWord;
                 else if (ricword == ControlWord.TBI)
                     tb.Word = dbusWord;
-                else if (ricword == ControlWord.TCI)
-                    tc.Word = dbusWord;
                 else if (ricword == ControlWord.SPI)
                     sp.Word = dbusWord;
-                else if (ricword == ControlWord.JNF)
-                {
-                    if (flags.Word == 0)
-                        mci = (int)(cword & ControlWord.MASK_OPR) >> 18;
-                }
                 else
                     throw new InvalidOperationException();
             }
 
+            var cmjword = cword & ControlWord.MASK_CMJ;
+            if (cmjword != 0)
+            {
+                var mciAddr = (int)(cword & ControlWord.MASK_OPR) >> 18;
+                if (cmjword == ControlWord.JNF && flags.Word == 0)
+                    mci = mciAddr;
+                else if (cmjword == ControlWord.JC && (flags.Word & CF) == CF)
+                    mci = mciAddr;
+                else if (cmjword == ControlWord.LNZ)
+                {
+                    ++tc.Word;
+                    if ((tc.Word & 0x10) != 0x10)
+                        mci = mciAddr;
+                }
+            }
+
+            if ((cword & ControlWord.TCI) == ControlWord.TCI)
+                tc.Word = dbusWord;
             if ((cword & ControlWord.MASK_SEG) == ControlWord.INTLATCH)
                 latchINT = (dbusWord & 1) == 1;
             if ((cword & ControlWord.MASK_A) == ControlWord.INTENLATCH)
                 latchINTEN = (dbusWord & 1) == 1;
+
+            if ((cword & ControlWord.TGC) == ControlWord.TGC)
+                flags.Word ^= CF; 
 
             // CLOCK
             mci = (mci + 1) & 0x0F;
