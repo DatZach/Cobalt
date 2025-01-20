@@ -1714,7 +1714,26 @@ namespace EmulatorTests
         }
         /**************************************/
 
-
+        [TestMethod]
+        public void MUL_REG_IMM()
+        {
+            AssertState(
+                @"
+                mov r0, 7
+                mul r0, 9
+                mov r1, 0
+                mul r1, 9
+                mov r2, 7
+                mov r2, 0
+                ",
+                new CpuState
+                {
+                    r0 = 63,
+                    r1 = 0,
+                    r2 = 0
+                }
+            );
+        }
 
         [TestMethod]
         public void MUL_REG_REG()
@@ -1724,37 +1743,92 @@ namespace EmulatorTests
                 mov r0, 7
                 mov r1, 9
                 mul r0, r1
+                mov r2, 0
+                mov r3, 9
+                mul r2, r3
+                mov ss, 7
+                mov sp, 0
+                mul ss, sp
                 ",
                 new CpuState
                 {
                     r0 = 63,
-                    r1 = 9
+                    r1 = 9,
+                    r2 = 0,
+                    r3 = 9,
+                    ss = 0,
+                    sp = 0
                 }
             );
+        }
 
+        [TestMethod]
+        public void MUL_REG_sizeSEGREGplusIMM()
+        {
             AssertState(
                 @"
-                mov r0, 0
-                mov r1, 9
-                mul r0, r1
-                ",
-                new CpuState
-                {
-                    r0 = 0,
-                    r1 = 9
-                }
-            );
-
-            AssertState(
-                @"
+                mov word[ds:0x80], 0x1234
                 mov r0, 7
                 mov r1, 0
-                mul r0, r1
+                mov r2, 0x4321
+                mov r3, 0x70
+                mul r0, word[ds:r3+0x10]
+                mul r1, byte[ds:r3+0x10]
+                mov r3, 0x90
+                mul r2, word[ds:r3-0x10]
                 ",
                 new CpuState
                 {
-                    r0 = 0,
-                    r1 = 0
+                    r0 = 0x7F6C,
+                    r1 = 0x0000,
+                    r2 = 0xF4B4,
+                    r3 = 0x0090
+                }
+            );
+        }
+
+        [TestMethod]
+        public void MUL_REG_sizeSEGREG()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov r0, 7
+                mov r1, 0
+                mov r2, 1
+                mov r3, 0x80
+                mul r0, word[ds:r3]
+                mul r1, byte[ds:r3]
+                mul r2, byte[ds:r3]
+                ",
+                new CpuState
+                {
+                    r0 = 0x7F6C,
+                    r1 = 0x0000,
+                    r2 = 0x0012,
+                    r3 = 0x0080
+                }
+            );
+        }
+
+        [TestMethod]
+        public void MUL_REG_sizeSEGuIMM16()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov r0, 7
+                mov r1, 0
+                mov r2, 1
+                mul r0, word[ds:0x80]
+                mul r1, byte[ds:0x80]
+                mul r2, byte[ds:0x80]
+                ",
+                new CpuState
+                {
+                    r0 = 0x7F6C,
+                    r1 = 0x0000,
+                    r2 = 0x0012
                 }
             );
         }
