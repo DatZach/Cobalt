@@ -189,6 +189,7 @@ namespace Emulator
                                     "RSO1" => "aRSO1",
                                     "RSO2" => "aRSO2",
                                     "TBO" => "aTBO",
+                                    "TCO" => "aTCO",
                                     _ => subPart
                                 };
                             }
@@ -205,6 +206,7 @@ namespace Emulator
                                     "RSO1" => IsAluOp(parts, p + 1) ? ControlWord.aRSO1 : ControlWord.bRSO1,
                                     "RSO2" => IsAluOp(parts, p + 1) ? ControlWord.aRSO2 : ControlWord.bRSO2,
                                     "TBO" => IsAluOp(parts, p + 1) ? ControlWord.aTBO : ControlWord.bTBO,
+                                    "TCO" => IsAluOp(parts, p + 1) ? ControlWord.aTCO : ControlWord.bTCO,
                                     _ => Enum.Parse<ControlWord>(subPart)
                                 };
                             }
@@ -227,7 +229,7 @@ namespace Emulator
 
                     var l = current.CodeLength++;
                     if (l >= Procedure.MaxMicrocodeCount)
-                        throw new AssemblyException(l, $"Microcode exceeds {Procedure.MaxMicrocodeCount} words");
+                        throw new AssemblyException(i, $"Microcode exceeds {Procedure.MaxMicrocodeCount} words");
                     
                     current.Code[l] = word;
                 }
@@ -643,7 +645,7 @@ namespace Emulator
         aRSO2       = 0b00000000_00000000_00000000_01000000,
         TAO         = 0b00000000_00000000_00000000_01100000,
         aTBO        = 0b00000000_00000000_00000000_10000000,
-        TCO         = 0b00000000_00000000_00000000_10100000,
+        aTCO        = 0b00000000_00000000_00000000_10100000,
         SPO         = 0b00000000_00000000_00000000_11000000,
         INTENLATCH  = 0b00000000_00000000_00000000_11100000,
         MASK_A      = 0b00000000_00000000_00000000_11100000,
@@ -651,8 +653,8 @@ namespace Emulator
         bRSO2       = 0b00000000_00000000_00000001_00000000,
         bRSO1       = 0b00000000_00000000_00000010_00000000,
         bTBO        = 0b00000000_00000000_00000011_00000000,
-        FO          = 0b00000000_00000000_00000100_00000000,
-        Const1      = 0b00000000_00000000_00000101_00000000,
+        bTCO        = 0b00000000_00000000_00000100_00000000,
+        FO          = 0b00000000_00000000_00000101_00000000,
         Const2      = 0b00000000_00000000_00000110_00000000,
         Const4      = 0b00000000_00000000_00000111_00000000,
         MASK_B      = 0b00000000_00000000_00000111_00000000,
@@ -661,7 +663,7 @@ namespace Emulator
         RSI2        = 0b00000000_00000000_00010000_00000000,
         TAI         = 0b00000000_00000000_00011000_00000000,
         TBI         = 0b00000000_00000000_00100000_00000000,
-        RI_XX_1     = 0b00000000_00000000_00101000_00000000,
+        TCI         = 0b00000000_00000000_00101000_00000000,
         SPI         = 0b00000000_00000000_00110000_00000000,
         RI_XX_2     = 0b00000000_00000000_00111000_00000000,
         MASK_RI     = 0b00000000_00000000_00111000_00000000,
@@ -694,7 +696,7 @@ namespace Emulator
         SEG2        = 0b00000010_00000000_00000000_00000000,
         SEG_XX_1    = 0b00000010_10000000_00000000_00000000,
         INTLATCH    = 0b00000011_00000000_00000000_00000000,
-        SEG_XX_2    = 0b00000011_10000000_00000000_00000000,
+        LI16        = 0b00000011_10000000_00000000_00000000,
         MASK_SEG    = 0b00000011_10000000_00000000_00000000,
         
         JNF         = 0b00000100_00000000_00000000_00000000,
@@ -702,7 +704,7 @@ namespace Emulator
         LNZ         = 0b00001100_00000000_00000000_00000000,
         MASK_CMJ    = 0b00001100_00000000_00000000_00000000,
 
-        TCI         = 0b00010000_00000000_00000000_00000000,
+        Const1      = 0b00010000_00000000_00000000_00000000,
         TGC         = 0b00100000_00000000_00000000_00000000,
 
         IPO         = 0b01000000_00000000_00000000_00000000,
@@ -751,6 +753,8 @@ namespace Emulator
                 sb.Append("SEG2:");
             else if ((cw & ControlWord.MASK_SEG) == ControlWord.INTLATCH)
                 sb.Append("INTLATCH ");
+            else if ((cw & ControlWord.MASK_SEG) == ControlWord.LI16)
+                sb.Append("LI16 ");
 
             if ((cw & ControlWord.ADDR) != 0)
                 sb.Append("$");
@@ -770,7 +774,7 @@ namespace Emulator
                 sb.Append("TAO ");
             else if ((cw & ControlWord.MASK_A) == ControlWord.aTBO)
                 sb.Append("TBO ");
-            else if ((cw & ControlWord.MASK_A) == ControlWord.TCO)
+            else if ((cw & ControlWord.MASK_A) == ControlWord.aTCO)
                 sb.Append("TCO ");
             else if ((cw & ControlWord.MASK_A) == ControlWord.SPO)
                 sb.Append("SPO ");
@@ -802,10 +806,10 @@ namespace Emulator
                 sb.Append("RSO1 ");
             else if ((cw & ControlWord.MASK_B) == ControlWord.bTBO)
                 sb.Append("TBO ");
+            else if ((cw & ControlWord.MASK_B) == ControlWord.bTCO)
+                sb.Append("TCO ");
             else if ((cw & ControlWord.MASK_B) == ControlWord.FO)
                 sb.Append("FO ");
-            else if ((cw & ControlWord.MASK_B) == ControlWord.Const1)
-                sb.Append("1 ");
             else if ((cw & ControlWord.MASK_B) == ControlWord.Const2)
                 sb.Append("2 ");
             else if ((cw & ControlWord.MASK_B) == ControlWord.Const4)
@@ -819,11 +823,13 @@ namespace Emulator
                 sb.Append("TAI ");
             else if ((cw & ControlWord.MASK_RI) == ControlWord.TBI)
                 sb.Append("TBI ");
+            else if ((cw & ControlWord.MASK_RI) == ControlWord.TCI)
+                sb.Append("TCI ");
             else if ((cw & ControlWord.MASK_RI) == ControlWord.SPI)
                 sb.Append("SPI ");
 
-            if ((cw & ControlWord.TCI) == ControlWord.TCI)
-                sb.Append("TCI ");
+            if ((cw & ControlWord.Const1) == ControlWord.Const1)
+                sb.Append("1 ");
 
             if ((cw & ControlWord.MASK_CMJ) == ControlWord.JNF)
             {

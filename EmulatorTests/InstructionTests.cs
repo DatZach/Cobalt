@@ -1832,7 +1832,7 @@ namespace EmulatorTests
                 }
             );
         }
-
+        
         [TestMethod]
         public void DIV_REG_REG()
         {

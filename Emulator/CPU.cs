@@ -20,7 +20,7 @@ namespace Emulator
         private bool latchINT;
         private bool latchINTEN;
 
-        private readonly Register r0, r1, r2, r3, sp, ss, cs, ds, ta, tb, tc, ip, flags, instruction, operand;
+        private readonly Register r0, r1, r2, r3, sp, ss, cs, ds, ta, tb, tc, lc, ip, flags, instruction, operand;
         private readonly Machine machine;
         private readonly ControlWord[] microcode;
         private readonly Disassembler disassembler;
@@ -42,6 +42,7 @@ namespace Emulator
             ta = new Register();
             tb = new Register();
             tc = new Register();
+            lc = new Register();
             ip = new Register();
             flags = new Register();
             instruction = new Register();
@@ -122,7 +123,7 @@ namespace Emulator
                     reg = ta;
                 else if (acword == ControlWord.aTBO)
                     reg = tb;
-                else if (acword == ControlWord.TCO)
+                else if (acword == ControlWord.aTCO)
                     reg = tc;
                 else if (acword == ControlWord.SPO)
                     reg = sp;
@@ -150,10 +151,10 @@ namespace Emulator
                     reg = SelectRegister(instruction.Word, (instruction.Word & 0x380) >> 7);
                 else if (bcword == ControlWord.bTBO)
                     reg = tb;
+                else if (bcword == ControlWord.bTCO)
+                    reg = tc;
                 else if (bcword == ControlWord.FO)
                     reg = flags;
-                else if (bcword == ControlWord.Const1)
-                    reg = Constant1;
                 else if (bcword == ControlWord.Const2)
                     reg = Constant2;
                 else if (bcword == ControlWord.Const4)
@@ -166,7 +167,15 @@ namespace Emulator
                 else
                     dbusWord = reg.Word;
             }
-            
+
+            if ((cword & ControlWord.Const1) == ControlWord.Const1)
+            {
+                if (isALUOperation)
+                    alubWord |= 1;
+                else
+                    dbusWord |= 1;
+            }
+
             // ALU
             int zf = 0, cf = 0, sf = 0;
             if (isALUOperation)
@@ -285,6 +294,8 @@ namespace Emulator
                     ta.Word = dbusWord;
                 else if (ricword == ControlWord.TBI)
                     tb.Word = dbusWord;
+                else if (ricword == ControlWord.TCI)
+                    tc.Word = dbusWord;
                 else if (ricword == ControlWord.SPI)
                     sp.Word = dbusWord;
                 else
@@ -301,14 +312,14 @@ namespace Emulator
                     mci = mciAddr;
                 else if (cmjword == ControlWord.LNZ)
                 {
-                    ++tc.Word;
-                    if ((tc.Word & 0x10) != 0x10)
+                    lc.Word = (ushort)((lc.Word + 1) & 0x0F);
+                    if (lc.Word != 0)
                         mci = mciAddr;
                 }
             }
 
-            if ((cword & ControlWord.TCI) == ControlWord.TCI)
-                tc.Word = dbusWord;
+            if ((cword & ControlWord.MASK_SEG) == ControlWord.LI16)
+                lc.Word = 0;
             if ((cword & ControlWord.MASK_SEG) == ControlWord.INTLATCH)
                 latchINT = (dbusWord & 1) == 1;
             if ((cword & ControlWord.MASK_A) == ControlWord.INTENLATCH)
