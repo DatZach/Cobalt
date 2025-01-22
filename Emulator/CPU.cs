@@ -201,6 +201,10 @@ namespace Emulator
                     cfOverride = aluaWord & 1;
                     alucWord = (aluaWord >> alubWord) | ((flags.Word & CF) == CF ? 0x8000 : 0);
                 }
+                else if ((cword & ControlWord.MASK_ALU) == ControlWord.SHL)
+                    alucWord = aluaWord << alubWord;
+                else if ((cword & ControlWord.MASK_ALU) == ControlWord.SHR)
+                    alucWord = aluaWord >> alubWord;
 
                 zf = alucWord == 0 ? ZF : 0;
                 cf = (alucWord & 0x10000) != 0 || cfOverride != 0 ? CF : 0;

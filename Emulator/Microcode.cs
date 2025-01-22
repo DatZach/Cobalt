@@ -251,13 +251,13 @@ namespace Emulator
                 else if (procedure.Operand1 == OperandType.DerefSizeSegRegPlusSImm)
                 {
                     procedures.Add(procedure with { Operand1 = OperandType.DerefByteSegRegPlusSImm, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ1, ControlWord.BYTE), (ControlWord.IPCSIZ1, ControlWord.IPC1)) });
-                    procedures.Add(procedure with { Operand1 = OperandType.DerefWordSegRegPlusSImm, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ1, ControlWord.WORD), (ControlWord.IPCSIZ2, ControlWord.IPC2)) });
+                    procedures.Add(procedure with { Operand1 = OperandType.DerefWordSegRegPlusSImm, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ1, ControlWord.WORD), (ControlWord.IPCSIZ1, ControlWord.IPC2)) });
                     continue;
                 }
                 else if (procedure.Operand1 == OperandType.DerefSizeSegReg)
                 {
                     procedures.Add(procedure with { Operand1 = OperandType.DerefByteSegReg, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ1, ControlWord.BYTE), (ControlWord.IPCSIZ1, ControlWord.IPC1)) });
-                    procedures.Add(procedure with { Operand1 = OperandType.DerefWordSegReg, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ1, ControlWord.WORD), (ControlWord.IPCSIZ2, ControlWord.IPC2)) });
+                    procedures.Add(procedure with { Operand1 = OperandType.DerefWordSegReg, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ1, ControlWord.WORD), (ControlWord.IPCSIZ1, ControlWord.IPC2)) });
                     continue;
                 }
                 else if (procedure.Operand2 == OperandType.Imm)
@@ -684,6 +684,14 @@ namespace Emulator
         AND         = 0b00000000_00010100_00000000_00000000,
         ROL         = 0b00000000_00011000_00000000_00000000,
         ROR         = 0b00000000_00011100_00000000_00000000,
+        SHL         = 0b00000000_00100000_00000000_00000000,
+        SHR         = 0b00000000_00100100_00000000_00000000,
+        ALU_XX_1    = 0b00000000_00101000_00000000_00000000,
+        ALU_XX_2    = 0b00000000_00101100_00000000_00000000,
+        ALU_XX_3    = 0b00000000_00110000_00000000_00000000,
+        ALU_XX_4    = 0b00000000_00110100_00000000_00000000,
+        ALU_XX_5    = 0b00000000_00111000_00000000_00000000,
+        ALU_XX_6    = 0b00000000_00111100_00000000_00000000,
         MASK_ALU    = 0b00000000_00111100_00000000_00000000,
         MASK_OPR    = 0b00000000_00111100_00000000_00000000,
         
@@ -798,6 +806,10 @@ namespace Emulator
                     sb.Append("ROL ");
                 else if ((cw & ControlWord.MASK_ALU) == ControlWord.ROR)
                     sb.Append("ROR ");
+                else if ((cw & ControlWord.MASK_ALU) == ControlWord.SHL)
+                    sb.Append("SHL ");
+                else if ((cw & ControlWord.MASK_ALU) == ControlWord.SHR)
+                    sb.Append("SHR ");
             }
 
             if ((cw & ControlWord.MASK_B) == ControlWord.bRSO2)
