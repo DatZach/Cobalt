@@ -1887,6 +1887,187 @@ namespace EmulatorTests
         }
 
         [TestMethod]
+        public void DIV_REG_IMM()
+        {
+            AssertState(
+                @"
+                mov r0, 10
+                div r0, 2
+                ",
+                new CpuState
+                {
+                    r0 = 5
+                }
+            );
+
+            AssertState(
+                @"
+                mov r0, 5
+                div r0, 2
+                ",
+                new CpuState
+                {
+                    r0 = 2
+                }
+            );
+
+            AssertState(
+                @"
+                mov r3, 0xFFFF
+                mov [0x0000:0x0000], ExceptionHandler
+                sie 1
+
+                mov r0, 10
+                div r0, 0
+                hlt
+
+                ExceptionHandler:
+                    pop r3
+                    hlt
+                ",
+                new CpuState
+                {
+                    r0 = 10,
+                    r3 = 0x0104     // DIV_BY_0 ZF cf sf
+                }
+            );
+        }
+
+        [TestMethod]
+        public void DIV_REG_sizeSEGREG()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 2
+                mov r0, 10
+                mov r3, 0x80
+                div r0, word[ds:r3]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 5,
+                        r3 = 0x80
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 2
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 2
+                mov r0, 5
+                mov r3, 0x80
+                div r0, word[ds:r3]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 2,
+                        r3 = 0x80
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 2
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov r3, 0xFFFF
+                mov [0x0000:0x0000], ExceptionHandler
+                sie 1
+
+                mov word[ds:0x80], 0
+                mov r0, 10
+                mov r2, 0x80
+                div r0, word[ds:r2]
+                hlt
+
+                ExceptionHandler:
+                    pop r3
+                    hlt
+                ",
+                new CpuState
+                {
+                    r0 = 10,
+                    r2 = 0x80,
+                    r3 = 0x0104     // DIV_BY_0 ZF cf sf
+                }
+            );
+        }
+
+        [TestMethod]
+        public void DIV_REG_sizeSEGuIMM16()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 2
+                mov r0, 10
+                div r0, word[ds:0x80]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 5
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 2
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 2
+                mov r0, 5
+                div r0, word[ds:0x80]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 2
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 2
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov r3, 0xFFFF
+                mov [0x0000:0x0000], ExceptionHandler
+                sie 1
+
+                mov word[ds:0x80], 0
+                mov r0, 10
+                div r0, word[ds:0x80]
+                hlt
+
+                ExceptionHandler:
+                    pop r3
+                    hlt
+                ",
+                new CpuState
+                {
+                    r0 = 10,
+                    r3 = 0x0104     // DIV_BY_0 ZF cf sf
+                }
+            );
+        }
+
+        [TestMethod]
         public void CMP_REG_REG()
         {
             AssertState(

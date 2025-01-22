@@ -9,8 +9,17 @@ origin 0x0000
 nop								; Required for CPU boot
 
 Main:
-	sie		0
-	hlt
+    mov r3, 0xFFFF
+    mov [0x0000:0x0000], ExceptionHandler
+    sie 1
+
+    mov r0, 10
+    div r0, 0
+    hlt
+
+ExceptionHandler:
+    pop r3
+    hlt
 
 IRQ:
 	hlt

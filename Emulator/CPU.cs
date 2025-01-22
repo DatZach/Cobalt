@@ -128,16 +128,19 @@ namespace Emulator
                 else if (acword == ControlWord.SPO)
                     reg = sp;
                 else if (acword == ControlWord.INTENLATCH)
-                    reg = ip; // HACK Hardware does not assert anything on the a-line
+                    reg = null;
                 else
                     throw new InvalidOperationException();
 
-                if (isALUOperation)
-                    aluaWord = reg.Word;
-                else if (isAddr)
-                    abusWord = reg.Word;
-                else
-                    dbusWord = reg.Word;
+                if (reg != null)
+                {
+                    if (isALUOperation)
+                        aluaWord = reg.Word;
+                    else if (isAddr)
+                        abusWord = reg.Word;
+                    else
+                        dbusWord = reg.Word;
+                }
             }
 
             // B-Line -- Register Output
