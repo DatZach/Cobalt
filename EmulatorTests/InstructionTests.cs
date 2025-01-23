@@ -2072,13 +2072,13 @@ namespace EmulatorTests
             AssertState(
                 @"
                 mov r0, 0x4321
-                mov r1, 5
+                mov r1, 3
                 shl r0, r1
                 ",
                 new CpuState
                 {
-                    r0 = 0x6420,
-                    r1 = 5
+                    r0 = 0x1908,
+                    r1 = 3
                 }
             );
         }
@@ -2089,11 +2089,11 @@ namespace EmulatorTests
             AssertState(
                 @"
                 mov r0, 0x4321
-                shl r0, 5
+                shl r0, 3
                 ",
                 new CpuState
                 {
-                    r0 = 0x6420
+                    r0 = 0x1908
                 }
             );
         }
@@ -2103,7 +2103,7 @@ namespace EmulatorTests
         {
             AssertState(
                 @"
-                mov word[ds:0x80], 0x0505
+                mov word[ds:0x80], 0x0303
                 mov r0, 0x4321
                 mov r1, 0x4321
                 mov r2, 0x4321
@@ -2117,14 +2117,14 @@ namespace EmulatorTests
                 {
                     CPU = new CpuState
                     {
-                        r0 = 0x6420,
-                        r1 = 0x6420,
-                        r2 = 0x6420,
+                        r0 = 0x1908,
+                        r1 = 0x1908,
+                        r2 = 0x1908,
                         r3 = 0x0090
                     },
                     RAMChecks = new()
                     {
-                        [0x80] = 0x0505
+                        [0x80] = 0x0303
                     }
                 }
             );
@@ -2135,7 +2135,7 @@ namespace EmulatorTests
         {
             AssertState(
                 @"
-                mov word[ds:0x80], 0x0505
+                mov word[ds:0x80], 0x0303
                 mov r0, 0x4321
                 mov r1, 0x4321
                 mov r3, 0x80
@@ -2146,13 +2146,13 @@ namespace EmulatorTests
                 {
                     CPU = new CpuState
                     {
-                        r0 = 0x6420,
-                        r1 = 0x6420,
+                        r0 = 0x1908,
+                        r1 = 0x1908,
                         r3 = 0x0080
                     },
                     RAMChecks = new()
                     {
-                        [0x80] = 0x0505
+                        [0x80] = 0x0303
                     }
                 }
             );
@@ -2163,7 +2163,7 @@ namespace EmulatorTests
         {
             AssertState(
                 @"
-                mov word[ds:0x80], 0x0505
+                mov word[ds:0x80], 0x0303
                 mov r0, 0x4321
                 mov r1, 0x4321
                 mov r2, 0x4321
@@ -2175,13 +2175,13 @@ namespace EmulatorTests
                 {
                     CPU = new CpuState
                     {
-                        r0 = 0x6420,
-                        r1 = 0x6420,
-                        r2 = 0x4320
+                        r0 = 0x1908,
+                        r1 = 0x1908,
+                        r2 = 0x4308
                     },
                     RAMChecks = new()
                     {
-                        [0x80] = 0x0505
+                        [0x80] = 0x0303
                     }
                 }
             );
@@ -2194,7 +2194,7 @@ namespace EmulatorTests
                 @"
                 mov word[ds:0x80], 0x4321
                 mov word[ds:0x90], 0x4321
-                mov r0, 5
+                mov r0, 3
                 mov r2, 0xA0
                 mov r3, 0x70
                 shl word[ds:r3+0x10], r0
@@ -2204,14 +2204,14 @@ namespace EmulatorTests
                 {
                     CPU = new CpuState
                     {
-                        r0 = 5,
+                        r0 = 3,
                         r2 = 0x00A0,
                         r3 = 0x0070
                     },
                     RAMChecks = new()
                     {
-                        [0x80] = 0x6420,
-                        [0x90] = 0x4320
+                        [0x80] = 0x1908,
+                        [0x90] = 0x4308
                     }
                 }
             );
@@ -2226,8 +2226,8 @@ namespace EmulatorTests
                 mov word[ds:0x90], 0x4321
                 mov r2, 0xA0
                 mov r3, 0x70
-                shl word[ds:r3+0x10], 5
-                shl byte[ds:r2-0x0F], 5
+                shl word[ds:r3+0x10], 3
+                shl byte[ds:r2-0x0F], 3
                 ",
                 new MachineState
                 {
@@ -2238,8 +2238,8 @@ namespace EmulatorTests
                     },
                     RAMChecks = new()
                     {
-                        [0x80] = 0x6420,
-                        [0x90] = 0x4320
+                        [0x80] = 0x1908,
+                        [0x90] = 0x4308
                     }
                 }
             );
@@ -2252,7 +2252,7 @@ namespace EmulatorTests
                 @"
                 mov word[ds:0x80], 0x4321
                 mov word[ds:0x90], 0x4321
-                mov word[ds:0x40], 5
+                mov word[ds:0x40], 3
                 mov r2, 0xA0
                 mov r3, 0x70
                 shl word[ds:r3+0x10], word[ds:r3-0x30]
@@ -2267,9 +2267,9 @@ namespace EmulatorTests
                     },
                     RAMChecks = new()
                     {
-                        [0x80] = 0x6420,
-                        [0x90] = 0x4320,
-                        [0x40] = 5
+                        [0x80] = 0x1908,
+                        [0x90] = 0x4308,
+                        [0x40] = 3
                     }
                 }
             );
@@ -2282,7 +2282,7 @@ namespace EmulatorTests
                 @"
                 mov word[ds:0x80], 0x4321
                 mov word[ds:0x90], 0x4321
-                mov word[ds:0x40], 5
+                mov word[ds:0x40], 3
                 mov r1, 0x40
                 mov r2, 0xA0
                 mov r3, 0x70
@@ -2300,9 +2300,9 @@ namespace EmulatorTests
                     },
                     RAMChecks = new()
                     {
-                        [0x80] = 0x6420,
-                        [0x90] = 0x4320,
-                        [0x40] = 5
+                        [0x80] = 0x1908,
+                        [0x90] = 0x4308,
+                        [0x40] = 3
                     }
                 }
             );
@@ -2315,7 +2315,7 @@ namespace EmulatorTests
                 @"
                 mov word[ds:0x80], 0x4321
                 mov word[ds:0x90], 0x4321
-                mov word[ds:0x40], 5
+                mov word[ds:0x40], 3
                 mov r2, 0xA0
                 mov r3, 0x70
                 shl word[ds:r3+0x10], word[ds:0x40]
@@ -2330,9 +2330,9 @@ namespace EmulatorTests
                     },
                     RAMChecks = new()
                     {
-                        [0x80] = 0x6420,
-                        [0x90] = 0x4320,
-                        [0x40] = 5
+                        [0x80] = 0x1908,
+                        [0x90] = 0x4308,
+                        [0x40] = 3
                     }
                 }
             );
@@ -2345,7 +2345,7 @@ namespace EmulatorTests
                 @"
                 mov word[ds:0x80], 0x4321
                 mov word[ds:0x90], 0x4321
-                mov r0, 5
+                mov r0, 3
                 mov r2, 0x80
                 mov r3, 0x90
                 shl word[ds:r2], r0
@@ -2355,14 +2355,14 @@ namespace EmulatorTests
                 {
                     CPU = new CpuState
                     {
-                        r0 = 5,
+                        r0 = 3,
                         r2 = 0x0080,
                         r3 = 0x0090
                     },
                     RAMChecks = new()
                     {
-                        [0x80] = 0x6420,
-                        [0x90] = 0x6021
+                        [0x80] = 0x1908,
+                        [0x90] = 0x1821
                     }
                 }
             );
@@ -2377,8 +2377,8 @@ namespace EmulatorTests
                 mov word[ds:0x90], 0x4321
                 mov r2, 0x80
                 mov r3, 0x90
-                shl word[ds:r2], 5
-                shl byte[ds:r3], 5
+                shl word[ds:r2], 3
+                shl byte[ds:r3], 3
                 ",
                 new MachineState
                 {
@@ -2389,8 +2389,8 @@ namespace EmulatorTests
                     },
                     RAMChecks = new()
                     {
-                        [0x80] = 0x6420,
-                        [0x90] = 0x6021
+                        [0x80] = 0x1908,
+                        [0x90] = 0x1821
                     }
                 }
             );
@@ -2403,7 +2403,7 @@ namespace EmulatorTests
                 @"
                 mov word[ds:0x80], 0x4321
                 mov word[ds:0x90], 0x4321
-                mov word[ds:0x40], 5
+                mov word[ds:0x40], 3
                 mov r0, 0x30
                 mov r1, 0x50
                 mov r2, 0x80
@@ -2422,8 +2422,8 @@ namespace EmulatorTests
                     },
                     RAMChecks = new()
                     {
-                        [0x80] = 0x6420,
-                        [0x90] = 0x4320
+                        [0x80] = 0x1908,
+                        [0x90] = 0x4308
                     }
                 }
             );
@@ -2436,7 +2436,7 @@ namespace EmulatorTests
                 @"
                 mov word[ds:0x80], 0x4321
                 mov word[ds:0x90], 0x4321
-                mov word[ds:0x40], 5
+                mov word[ds:0x40], 3
                 mov r0, 0x40
                 mov r1, 0x41
                 mov r2, 0x80
@@ -2455,9 +2455,9 @@ namespace EmulatorTests
                     },
                     RAMChecks = new()
                     {
-                        [0x40] = 0x0005,
-                        [0x80] = 0x6420,
-                        [0x90] = 0x6021
+                        [0x40] = 0x0003,
+                        [0x80] = 0x1908,
+                        [0x90] = 0x1821
                     }
                 }
             );
@@ -2470,7 +2470,7 @@ namespace EmulatorTests
                 @"
                 mov word[ds:0x80], 0x4321
                 mov word[ds:0x90], 0x4321
-                mov word[ds:0x40], 5
+                mov word[ds:0x40], 3
                 mov r2, 0x80
                 mov r3, 0x90
                 shl word[ds:r2], word[ds:0x40]
@@ -2485,8 +2485,8 @@ namespace EmulatorTests
                     },
                     RAMChecks = new()
                     {
-                        [0x80] = 0x6420,
-                        [0x90] = 0x6021
+                        [0x80] = 0x1908,
+                        [0x90] = 0x1821
                     }
                 }
             );
@@ -2499,7 +2499,7 @@ namespace EmulatorTests
                 @"
                 mov word[ds:0x80], 0x4321
                 mov word[ds:0x90], 0x4321
-                mov r0, 5
+                mov r0, 3
                 shl word[ds:0x80], r0
                 shl byte[ds:0x90], r0l
                 ",
@@ -2507,12 +2507,12 @@ namespace EmulatorTests
                 {
                     CPU = new CpuState
                     {
-                        r0 = 5
+                        r0 = 3
                     },
                     RAMChecks = new()
                     {
-                        [0x80] = 0x6420,
-                        [0x90] = 0x6021
+                        [0x80] = 0x1908,
+                        [0x90] = 0x1821
                     }
                 }
             );
@@ -2525,8 +2525,8 @@ namespace EmulatorTests
                 @"
                 mov word[ds:0x80], 0x4321
                 mov word[ds:0x90], 0x4321
-                shl word[ds:0x80], 5
-                shl byte[ds:0x90], 5
+                shl word[ds:0x80], 3
+                shl byte[ds:0x90], 3
                 ",
                 new MachineState
                 {
@@ -2536,8 +2536,8 @@ namespace EmulatorTests
                     },
                     RAMChecks = new()
                     {
-                        [0x80] = 0x6420,
-                        [0x90] = 0x6021
+                        [0x80] = 0x1908,
+                        [0x90] = 0x1821
                     }
                 }
             );
@@ -2550,7 +2550,7 @@ namespace EmulatorTests
                 @"
                 mov word[ds:0x80], 0x4321
                 mov word[ds:0x90], 0x4321
-                mov word[ds:0x40], 5
+                mov word[ds:0x40], 3
                 mov r1, 0x30
                 mov r2, 0x50
                 shl word[ds:0x80], word[ds:r1+0x10]
@@ -2565,9 +2565,9 @@ namespace EmulatorTests
                     },
                     RAMChecks = new()
                     {
-                        [0x80] = 0x6420,
-                        [0x90] = 0x6021,
-                        [0x40] = 5
+                        [0x80] = 0x1908,
+                        [0x90] = 0x1821,
+                        [0x40] = 3
                     }
                 }
             );
@@ -2580,7 +2580,7 @@ namespace EmulatorTests
                 @"
                 mov word[ds:0x80], 0x4321
                 mov word[ds:0x90], 0x4321
-                mov word[ds:0x40], 5
+                mov word[ds:0x40], 3
                 mov r1, 0x40
                 mov r2, 0x41
                 shl word[ds:0x80], word[ds:r1]
@@ -2595,9 +2595,9 @@ namespace EmulatorTests
                     },
                     RAMChecks = new()
                     {
-                        [0x80] = 0x6420,
-                        [0x90] = 0x6021,
-                        [0x40] = 5
+                        [0x80] = 0x1908,
+                        [0x90] = 0x1821,
+                        [0x40] = 3
                     }
                 }
             );
@@ -2610,7 +2610,7 @@ namespace EmulatorTests
                 @"
                 mov word[ds:0x80], 0x4321
                 mov word[ds:0x90], 0x4321
-                mov word[ds:0x40], 5
+                mov word[ds:0x40], 3
                 shl word[ds:0x80], word[ds:0x40]
                 shl byte[ds:0x90], byte[ds:0x41]
                 ",
@@ -2622,15 +2622,577 @@ namespace EmulatorTests
                     },
                     RAMChecks = new()
                     {
-                        [0x80] = 0x6420,
-                        [0x90] = 0x6021,
-                        [0x40] = 5
+                        [0x80] = 0x1908,
+                        [0x90] = 0x1821,
+                        [0x40] = 3
                     }
                 }
             );
         }
 
-        /*******************************************************************/
+        [TestMethod]
+        public void SHR_REG_REG()
+        {
+            AssertState(
+                @"
+                mov r0, 0x4321
+                mov r1, 3
+                shr r0, r1
+                ",
+                new CpuState
+                {
+                    r0 = 0x0864,
+                    r1 = 3
+                }
+            );
+        }
+
+        [TestMethod]
+        public void SHR_REG_IMM()
+        {
+            AssertState(
+                @"
+                mov r0, 0x4321
+                shr r0, 3
+                ",
+                new CpuState
+                {
+                    r0 = 0x0864
+                }
+            );
+        }
+
+        [TestMethod]
+        public void SHR_REG_sizeSEGREGplusIMM()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x0303
+                mov r0, 0x4321
+                mov r1, 0x4321
+                mov r2, 0x4321
+                mov r3, 0x70
+                shr r0, word[ds:r3+0x10]
+                shr r1, byte[ds:r3+0x10]
+                mov r3, 0x90
+                shr r2, word[ds:r3-0x10]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x0864,
+                        r1 = 0x0864,
+                        r2 = 0x0864,
+                        r3 = 0x0090
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x0303
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void SHR_REG_sizeSEGREG()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x0303
+                mov r0, 0x4321
+                mov r1, 0x4321
+                mov r3, 0x80
+                shr r0, word[ds:r3]
+                shr r1, byte[ds:r3]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x0864,
+                        r1 = 0x0864,
+                        r3 = 0x0080
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x0303
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void SHR_REG_sizeSEGuIMM16()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x0303
+                mov r0, 0x4321
+                mov r1, 0x4321
+                mov r2, 0x4321
+                shr r0, word[ds:0x80]
+                shr r1, byte[ds:0x80]
+                shr r2l, byte[ds:0x80]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x0864,
+                        r1 = 0x0864,
+                        r2 = 0x4304
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x0303
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void SHR_sizeSEGREGplusIMM_REG()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x90], 0x4321
+                mov r0, 3
+                mov r2, 0xA0
+                mov r3, 0x70
+                shr word[ds:r3+0x10], r0
+                shr byte[ds:r2-0x0F], r0l
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 3,
+                        r2 = 0x00A0,
+                        r3 = 0x0070
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x0864,
+                        [0x90] = 0x4304
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void SHR_sizeSEGREGplusIMM_IMM()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x90], 0x4321
+                mov r2, 0xA0
+                mov r3, 0x70
+                shr word[ds:r3+0x10], 3
+                shr byte[ds:r2-0x0F], 3
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r2 = 0x00A0,
+                        r3 = 0x0070
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x0864,
+                        [0x90] = 0x4304
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void SHR_sizeSEGREGplusIMM_sizeSEGREGplusIMM()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x90], 0x4321
+                mov word[ds:0x40], 3
+                mov r2, 0xA0
+                mov r3, 0x70
+                shr word[ds:r3+0x10], word[ds:r3-0x30]
+                shr byte[ds:r2-0x0F], byte[ds:r3-0x2F]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r2 = 0x00A0,
+                        r3 = 0x0070
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x0864,
+                        [0x90] = 0x4304,
+                        [0x40] = 3
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void SHR_sizeSEGREGplusIMM_sizeSEGREG()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x90], 0x4321
+                mov word[ds:0x40], 3
+                mov r1, 0x40
+                mov r2, 0xA0
+                mov r3, 0x70
+                shr word[ds:r3+0x10], word[ds:r1]
+                mov r1, 0x41
+                shr byte[ds:r2-0x0F], byte[ds:r1]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r1 = 0x0041,
+                        r2 = 0x00A0,
+                        r3 = 0x0070
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x0864,
+                        [0x90] = 0x4304,
+                        [0x40] = 3
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void SHR_sizeSEGREGplusIMM_sizeSEGuIMM16()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x90], 0x4321
+                mov word[ds:0x40], 3
+                mov r2, 0xA0
+                mov r3, 0x70
+                shr word[ds:r3+0x10], word[ds:0x40]
+                shr byte[ds:r2-0x0F], byte[ds:0x41]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r2 = 0x00A0,
+                        r3 = 0x0070
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x0864,
+                        [0x90] = 0x4304,
+                        [0x40] = 3
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void SHR_sizeSEGREG_REG()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x90], 0x4321
+                mov r0, 3
+                mov r2, 0x80
+                mov r3, 0x90
+                shr word[ds:r2], r0
+                shr byte[ds:r3], r0l
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 3,
+                        r2 = 0x0080,
+                        r3 = 0x0090
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x0864,
+                        [0x90] = 0x0821
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void SHR_sizeSEGREG_IMM()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x90], 0x4321
+                mov r2, 0x80
+                mov r3, 0x90
+                shr word[ds:r2], 3
+                shr byte[ds:r3], 3
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r2 = 0x0080,
+                        r3 = 0x0090
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x0864,
+                        [0x90] = 0x0821
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void SHR_sizeSEGREG_sizeSEGREGplusIMM()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x90], 0x4321
+                mov word[ds:0x40], 3
+                mov r0, 0x30
+                mov r1, 0x50
+                mov r2, 0x80
+                mov r3, 0x91
+                shr word[ds:r2], word[ds:r0+0x10]
+                shr byte[ds:r3], byte[ds:r1-0x0F]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x0030,
+                        r1 = 0x0050,
+                        r2 = 0x0080,
+                        r3 = 0x0091
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x0864,
+                        [0x90] = 0x4304
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void SHR_sizeSEGREG_sizeSEGREG()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x90], 0x4321
+                mov word[ds:0x40], 3
+                mov r0, 0x40
+                mov r1, 0x41
+                mov r2, 0x80
+                mov r3, 0x90
+                shr word[ds:r2], word[ds:r0]
+                shr byte[ds:r3], byte[ds:r1]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x0040,
+                        r1 = 0x0041,
+                        r2 = 0x0080,
+                        r3 = 0x0090
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x40] = 0x0003,
+                        [0x80] = 0x0864,
+                        [0x90] = 0x0821
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void SHR_sizeSEGREG_sizeSEGuIMM16()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x90], 0x4321
+                mov word[ds:0x40], 3
+                mov r2, 0x80
+                mov r3, 0x90
+                shr word[ds:r2], word[ds:0x40]
+                shr byte[ds:r3], byte[ds:0x41]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r2 = 0x0080,
+                        r3 = 0x0090
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x0864,
+                        [0x90] = 0x0821
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void SHR_sizeSEGuIMM16_REG()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x90], 0x4321
+                mov r0, 3
+                shr word[ds:0x80], r0
+                shr byte[ds:0x90], r0l
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 3
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x0864,
+                        [0x90] = 0x0821
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void SHR_sizeSEGuIMM16_IMM()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x90], 0x4321
+                shr word[ds:0x80], 3
+                shr byte[ds:0x90], 3
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x0864,
+                        [0x90] = 0x0821
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void SHR_sizeSEGuIMM16_sizeSEGREGplusIMM()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x90], 0x4321
+                mov word[ds:0x40], 3
+                mov r1, 0x30
+                mov r2, 0x50
+                shr word[ds:0x80], word[ds:r1+0x10]
+                shr byte[ds:0x90], byte[ds:r2-0x0F]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r1 = 0x0030,
+                        r2 = 0x0050
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x0864,
+                        [0x90] = 0x0821,
+                        [0x40] = 3
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void SHR_sizeSEGuIMM16_sizeSEGREG()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x90], 0x4321
+                mov word[ds:0x40], 3
+                mov r1, 0x40
+                mov r2, 0x41
+                shr word[ds:0x80], word[ds:r1]
+                shr byte[ds:0x90], byte[ds:r2]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r1 = 0x0040,
+                        r2 = 0x0041
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x0864,
+                        [0x90] = 0x0821,
+                        [0x40] = 3
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void SHR_sizeSEGuIMM16_sizeSEGuIMM16()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x90], 0x4321
+                mov word[ds:0x40], 3
+                shr word[ds:0x80], word[ds:0x40]
+                shr byte[ds:0x90], byte[ds:0x41]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x0864,
+                        [0x90] = 0x0821,
+                        [0x40] = 3
+                    }
+                }
+            );
+        }
 
         [TestMethod]
         public void CMP_REG_REG()
