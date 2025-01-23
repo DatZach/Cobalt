@@ -675,14 +675,14 @@ namespace EmulatorTests
                 mov r2, 0x1234
                 mov r3, 0x70
                 add r0, word[ds:r3+0x10]
-                add r1, byte[ds:r3+0x10]
+                add r1, byte[ds:r3+0x11]
                 mov r3, 0x90
                 add r2, word[ds:r3-0x10]
                 ",
                 new CpuState
                 {
                     r0 = 0x5555,
-                    r1 = 0x1277,
+                    r1 = 0x1255,
                     r2 = 0x5555,
                     r3 = 0x0090
                 }
@@ -699,13 +699,14 @@ namespace EmulatorTests
                 mov r1, 0x1234
                 mov r3, 0x80
                 add r0, word[ds:r3]
+                mov r3, 0x81
                 add r1, byte[ds:r3]
                 ",
                 new CpuState
                 {
                     r0 = 0x5555,
-                    r1 = 0x1277,
-                    r3 = 0x0080
+                    r1 = 0x1255,
+                    r3 = 0x0081
                 }
             );
         }
@@ -719,12 +720,12 @@ namespace EmulatorTests
                 mov r0, 0x1234
                 mov r1, 0x1234
                 add r0, word[ds:0x80]
-                add r1, byte[ds:0x80]
+                add r1, byte[ds:0x81]
                 ",
                 new CpuState
                 {
                     r0 = 0x5555,
-                    r1 = 0x1277
+                    r1 = 0x1255
                 }
             );
         }
@@ -4316,6 +4317,570 @@ namespace EmulatorTests
                     {
                         [0x80] = 0x5335,
                         [0x90] = 0x4335,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void XOR_REG_REG()
+        {
+            AssertState(
+                @"
+                mov r0, 0x4321
+                mov r1, 0x1234
+                xor r0, r1
+                ",
+                new CpuState
+                {
+                    r0 = 0x5115,
+                    r1 = 0x1234
+                }
+            );
+        }
+
+        [TestMethod]
+        public void XOR_REG_IMM()
+        {
+            AssertState(
+                @"
+                mov r0, 0x4321
+                xor r0, 0x1234
+                ",
+                new CpuState
+                {
+                    r0 = 0x5115
+                }
+            );
+        }
+
+        [TestMethod]
+        public void XOR_REG_sizeSEGREGplusIMM()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov r0, 0x4321
+                mov r1, 0x4321
+                mov r2, 0x4321
+                mov r3, 0x70
+                xor r0, word[ds:r3+0x10]
+                xor r1, byte[ds:r3+0x10]
+                mov r3, 0x90
+                xor r2, word[ds:r3-0x10]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x5115,
+                        r1 = 0x4333,
+                        r2 = 0x5115,
+                        r3 = 0x0090
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void XOR_REG_sizeSEGREG()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x8765
+                mov r0, 0x4321
+                mov r1, 0x4321
+                mov r3, 0x80
+                xor r0, word[ds:r3]
+                xor r1, byte[ds:r3]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0xC444,
+                        r1 = 0x43A6,
+                        r3 = 0x0080
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x8765
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void XOR_REG_sizeSEGuIMM16()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov r0, 0x4321
+                mov r1, 0x4321
+                mov r2, 0x4321
+                xor r0, word[ds:0x80]
+                xor r1, byte[ds:0x80]
+                xor r2l, byte[ds:0x80]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x5115,
+                        r1 = 0x4333,
+                        r2 = 0x4333
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void XOR_sizeSEGREGplusIMM_REG()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x90], 0x4321
+                mov r0, 0x1234
+                mov r2, 0xA0
+                mov r3, 0x70
+                xor word[ds:r3+0x10], r0
+                xor byte[ds:r2-0x0F], r0l
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x1234,
+                        r2 = 0x00A0,
+                        r3 = 0x0070
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x5115,
+                        [0x90] = 0x4315
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void XOR_sizeSEGREGplusIMM_IMM()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x90], 0x4321
+                mov r2, 0xA0
+                mov r3, 0x70
+                xor word[ds:r3+0x10], 0x1234
+                xor byte[ds:r2-0x0F], 0x1234
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r2 = 0x00A0,
+                        r3 = 0x0070
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x5115,
+                        [0x90] = 0x4315
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void XOR_sizeSEGREGplusIMM_sizeSEGREGplusIMM()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x90], 0x4321
+                mov word[ds:0x40], 0x1234
+                mov r2, 0xA0
+                mov r3, 0x70
+                xor word[ds:r3+0x10], word[ds:r3-0x30]
+                xor byte[ds:r2-0x0F], byte[ds:r3-0x2F]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r2 = 0x00A0,
+                        r3 = 0x0070
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x5115,
+                        [0x90] = 0x4315,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void XOR_sizeSEGREGplusIMM_sizeSEGREG()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x90], 0x4321
+                mov word[ds:0x40], 0x1234
+                mov r1, 0x40
+                mov r2, 0xA0
+                mov r3, 0x70
+                xor word[ds:r3+0x10], word[ds:r1]
+                mov r1, 0x41
+                xor byte[ds:r2-0x0F], byte[ds:r1]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r1 = 0x0041,
+                        r2 = 0x00A0,
+                        r3 = 0x0070
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x5115,
+                        [0x90] = 0x4315,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void XOR_sizeSEGREGplusIMM_sizeSEGuIMM16()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x90], 0x4321
+                mov word[ds:0x40], 0x1234
+                mov r2, 0xA0
+                mov r3, 0x70
+                xor word[ds:r3+0x10], word[ds:0x40]
+                xor byte[ds:r2-0x0F], byte[ds:0x41]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r2 = 0x00A0,
+                        r3 = 0x0070
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x5115,
+                        [0x90] = 0x4315,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void XOR_sizeSEGREG_REG()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x90], 0x4321
+                mov r0, 0x1234
+                mov r2, 0x80
+                mov r3, 0x91
+                xor word[ds:r2], r0
+                xor byte[ds:r3], r0l
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x1234,
+                        r2 = 0x0080,
+                        r3 = 0x0091
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x5115,
+                        [0x90] = 0x4315
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void XOR_sizeSEGREG_IMM()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x90], 0x4321
+                mov r2, 0x80
+                mov r3, 0x91
+                xor word[ds:r2], 0x1234
+                xor byte[ds:r3], 0x12
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r2 = 0x0080,
+                        r3 = 0x0091
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x5115,
+                        [0x90] = 0x4333
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void XOR_sizeSEGREG_sizeSEGREGplusIMM()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x90], 0x4321
+                mov word[ds:0x40], 0x1234
+                mov r0, 0x30
+                mov r1, 0x50
+                mov r2, 0x80
+                mov r3, 0x91
+                xor word[ds:r2], word[ds:r0+0x10]
+                xor byte[ds:r3], byte[ds:r1-0x0F]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x0030,
+                        r1 = 0x0050,
+                        r2 = 0x0080,
+                        r3 = 0x0091
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x5115,
+                        [0x90] = 0x4315
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void XOR_sizeSEGREG_sizeSEGREG()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x90], 0x4321
+                mov word[ds:0x40], 0x1234
+                mov r0, 0x40
+                mov r1, 0x41
+                mov r2, 0x80
+                mov r3, 0x91
+                xor word[ds:r2], word[ds:r0]
+                xor byte[ds:r3], byte[ds:r1]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x0040,
+                        r1 = 0x0041,
+                        r2 = 0x0080,
+                        r3 = 0x0091
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x40] = 0x1234,
+                        [0x80] = 0x5115,
+                        [0x90] = 0x4315
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void XOR_sizeSEGREG_sizeSEGuIMM16()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x90], 0x4321
+                mov word[ds:0x40], 0x1234
+                mov r2, 0x80
+                mov r3, 0x91
+                xor word[ds:r2], word[ds:0x40]
+                xor byte[ds:r3], byte[ds:0x41]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r2 = 0x0080,
+                        r3 = 0x0091
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x5115,
+                        [0x90] = 0x4315
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void XOR_sizeSEGuIMM16_REG()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x90], 0x4321
+                mov r0, 0x1234
+                xor word[ds:0x80], r0
+                xor byte[ds:0x91], r0l
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x1234
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x5115,
+                        [0x90] = 0x4315
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void XOR_sizeSEGuIMM16_IMM()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x90], 0x4321
+                xor word[ds:0x80], 0x1234
+                xor byte[ds:0x90], 0x12
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x5115,
+                        [0x90] = 0x5121
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void XOR_sizeSEGuIMM16_sizeSEGREGplusIMM()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x90], 0x4321
+                mov word[ds:0x40], 0x1234
+                mov r1, 0x30
+                mov r2, 0x50
+                xor word[ds:0x80], word[ds:r1+0x10]
+                xor byte[ds:0x91], byte[ds:r2-0x0F]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r1 = 0x0030,
+                        r2 = 0x0050
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x5115,
+                        [0x90] = 0x4315,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void XOR_sizeSEGuIMM16_sizeSEGREG()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x90], 0x4321
+                mov word[ds:0x40], 0x1234
+                mov r1, 0x40
+                mov r2, 0x41
+                xor word[ds:0x80], word[ds:r1]
+                xor byte[ds:0x91], byte[ds:r2]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r1 = 0x0040,
+                        r2 = 0x0041
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x5115,
+                        [0x90] = 0x4315,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void XOR_sizeSEGuIMM16_sizeSEGuIMM16()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x90], 0x4321
+                mov word[ds:0x40], 0x1234
+                xor word[ds:0x80], word[ds:0x40]
+                xor byte[ds:0x90], byte[ds:0x40]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x5115,
+                        [0x90] = 0x5121,
                         [0x40] = 0x1234
                     }
                 }
