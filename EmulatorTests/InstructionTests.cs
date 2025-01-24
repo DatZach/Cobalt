@@ -4972,6 +4972,1634 @@ namespace EmulatorTests
         }
 
         [TestMethod]
+        public void CMP_REG_sizeSEGREGplusIMM()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov r0, 0x1234
+                mov r2, 0x70
+                cmp r0, word[ds:r2+0x10]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x1234,
+                        r2 = 0x0070,
+                        flags = 0x0004      // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov r1, 0x1234
+                mov r3, 0x70
+                cmp r1l, byte[ds:r3+0x11]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r1 = 0x1234,
+                        r3 = 0x0070,
+                        flags = 0x0004      // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov r0, 0x1234
+                mov r3, 0x70
+                cmp r0, word[ds:r3+0x10]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x1234,
+                        r3 = 0x0070,
+                        flags = 0x0003      // zf CF SF
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov r1, 0x1234
+                mov r3, 0x70
+                cmp r1, byte[ds:r3+0x11]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r1 = 0x1234,
+                        r3 = 0x0070,
+                        flags = 0x0000      // zf cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void CMP_REG_sizeSEGREG()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov r0, 0x1234
+                mov r3, 0x80
+                cmp r0, word[ds:r3]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x1234,
+                        r3 = 0x0080,
+                        flags = 0x0004      // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov r1, 0x1234
+                mov r3, 0x81
+                cmp r1l, byte[ds:r3]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r1 = 0x1234,
+                        r3 = 0x0081,
+                        flags = 0x0004      // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov r0, 0x1234
+                mov r3, 0x80
+                cmp r0, word[ds:r3]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x1234,
+                        r3 = 0x0080,
+                        flags = 0x0003      // zf CF SF
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov r1, 0x1234
+                mov r3, 0x81
+                cmp r1, byte[ds:r3]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r1 = 0x1234,
+                        r3 = 0x0081,
+                        flags = 0x0000      // zf cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void CMP_REG_sizeSEGuIMM16()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov r0, 0x1234
+                cmp r0, word[ds:0x80]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x1234,
+                        flags = 0x0004      // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov r1, 0x1234
+                cmp r1l, byte[ds:0x81]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r1 = 0x1234,
+                        flags = 0x0004      // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov r0, 0x1234
+                cmp r0, word[ds:0x80]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x1234,
+                        flags = 0x0003      // zf CF SF
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov r1, 0x1234
+                cmp r1l, byte[ds:0x80]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r1 = 0x1234,
+                        flags = 0x0003      // zf CF SF
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void CMP_sizeSEGREGplusIMM_REG()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov r0, 0x1234
+                mov r3, 0x70
+                cmp word[ds:r3+0x10], r0
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x1234,
+                        r3 = 0x0070,
+                        flags = 0x0004      // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov r0, 0x1234
+                mov r2, 0xA0
+                cmp byte[ds:r2-0x0F], r0l
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x1234,
+                        r2 = 0x00A0,
+                        flags = 0x0003      // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov r0, 0x1234
+                mov r2, 0x70
+                cmp word[ds:r2+0x10], r0
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x1234,
+                        r2 = 0x0070,
+                        flags = 0x0000      // zf cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov r0, 0x1234
+                mov r2, 0xA0
+                cmp byte[ds:r2-0x0F], r0l
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x1234,
+                        r2 = 0x00A0,
+                        flags = 0x0003      // zf CF SF
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void CMP_sizeSEGREGplusIMM_IMM()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov r3, 0x70
+                cmp word[ds:r3+0x10], 0x1234
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r3 = 0x0070,
+                        flags = 0x0004      // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov r2, 0x90
+                cmp byte[ds:r2-0x0F], 0x34
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r2 = 0x0090,
+                        flags = 0x0004      // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov r3, 0x70
+                cmp word[ds:r3+0x10], 0x1234
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r3 = 0x0070,
+                        flags = 0x0000      // zf cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov r2, 0x90
+                cmp byte[ds:r2-0x0F], 0x34
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r2 = 0x0090,
+                        flags = 0x0003      // zf CF SF
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void CMP_sizeSEGREGplusIMM_sizeSEGREGplusIMM()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov word[ds:0x40], 0x1234
+                mov r3, 0x70
+                cmp word[ds:r3+0x10], word[ds:r3-0x30]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r3 = 0x0070,
+                        flags = 0x0004      // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov word[ds:0x40], 0x1234
+                mov r2, 0x90
+                mov r3, 0x70
+                cmp byte[ds:r2-0x0F], byte[ds:r3-0x2F]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r2 = 0x0090,
+                        r3 = 0x0070,
+                        flags = 0x0004      // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x40], 0x1234
+                mov r3, 0x70
+                cmp word[ds:r3+0x10], word[ds:r3-0x30]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r3 = 0x0070,
+                        flags = 0x0000      // zf cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x40], 0x1234
+                mov r2, 0x90
+                mov r3, 0x70
+                cmp byte[ds:r2-0x0F], byte[ds:r3-0x2F]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r2 = 0x0090,
+                        r3 = 0x0070,
+                        flags = 0x0003      // zf CF SF
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void CMP_sizeSEGREGplusIMM_sizeSEGREG()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov word[ds:0x40], 0x1234
+                mov r1, 0x40
+                mov r3, 0x70
+                cmp word[ds:r3+0x10], word[ds:r1]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r1 = 0x0040,
+                        r3 = 0x0070,
+                        flags = 0x0004      // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov word[ds:0x40], 0x1234
+                mov r1, 0x41
+                mov r2, 0x90
+                cmp byte[ds:r2-0x0F], byte[ds:r1]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r1 = 0x0041,
+                        r2 = 0x0090,
+                        flags = 0x0004      // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x40], 0x1234
+                mov r1, 0x40
+                mov r3, 0x70
+                cmp word[ds:r3+0x10], word[ds:r1]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r1 = 0x0040,
+                        r3 = 0x0070,
+                        flags = 0x0000      // zf cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x40], 0x1234
+                mov r1, 0x41
+                mov r2, 0x90
+                cmp byte[ds:r2-0x0F], byte[ds:r1]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r1 = 0x0041,
+                        r2 = 0x0090,
+                        flags = 0x0003      // zf CF SF
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void CMP_sizeSEGREGplusIMM_sizeSEGuIMM16()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov word[ds:0x40], 0x1234
+                mov r3, 0x70
+                cmp word[ds:r3+0x10], word[ds:0x40]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r3 = 0x0070,
+                        flags = 0x0004      // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov word[ds:0x40], 0x1234
+                mov r2, 0x90
+                cmp byte[ds:r2-0x0F], byte[ds:0x41]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r2 = 0x0090,
+                        flags = 0x0004      // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x40], 0x1234
+                mov r3, 0x70
+                cmp word[ds:r3+0x10], word[ds:0x40]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r3 = 0x0070,
+                        flags = 0x0000      // zf cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x40], 0x1234
+                mov r2, 0xA0
+                cmp byte[ds:r2-0x0F], byte[ds:0x41]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r2 = 0x00A0,
+                        flags = 0x0003      // zf CF SF
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void CMP_sizeSEGREG_REG()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov r0, 0x1234
+                mov r2, 0x80
+                cmp word[ds:r2], r0
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x1234,
+                        r2 = 0x0080,
+                        flags = 0x0004      // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov r0, 0x1234
+                mov r3, 0x81
+                cmp byte[ds:r3], r0l
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x1234,
+                        r3 = 0x0081,
+                        flags = 0x0004      // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov r0, 0x1234
+                mov r2, 0x80
+                cmp word[ds:r2], r0
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x1234,
+                        r2 = 0x0080,
+                        flags = 0x0000      // zf cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov r0, 0x1234
+                mov r3, 0x81
+                cmp byte[ds:r3], r0l
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x1234,
+                        r3 = 0x0081,
+                        flags = 0x0003      // zf CF SF
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void CMP_sizeSEGREG_IMM()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov r2, 0x80
+                cmp word[ds:r2], 0x1234
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r2 = 0x0080,
+                        flags = 0x0004      // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov r3, 0x81
+                cmp byte[ds:r3], 0x34
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r3 = 0x0081,
+                        flags = 0x0004      // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov r2, 0x80
+                cmp word[ds:r2], 0x1234
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r2 = 0x0080,
+                        flags = 0x0000      // zf cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov r3, 0x81
+                cmp byte[ds:r3], 0x34
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r3 = 0x0081,
+                        flags = 0x0003      // zf CF SF
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void CMP_sizeSEGREG_sizeSEGREGplusIMM()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov word[ds:0x40], 0x1234
+                mov r0, 0x30
+                mov r2, 0x80
+                cmp word[ds:r2], word[ds:r0+0x10]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x0030,
+                        r2 = 0x0080,
+                        flags = 0x0004      // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov word[ds:0x40], 0x1234
+                mov r1, 0x50
+                mov r3, 0x81
+                cmp byte[ds:r3], byte[ds:r1-0x0F]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r1 = 0x0050,
+                        r3 = 0x0081,
+                        flags = 0x0004      // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x40], 0x1234
+                mov r0, 0x30
+                mov r2, 0x80
+                cmp word[ds:r2], word[ds:r0+0x10]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x0030,
+                        r2 = 0x0080,
+                        flags = 0x0000      // zf cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x40], 0x1234
+                mov r1, 0x50
+                mov r3, 0x81
+                cmp byte[ds:r3], byte[ds:r1-0x0F]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r1 = 0x0050,
+                        r3 = 0x0081,
+                        flags = 0x0003      // zf CF SF
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void CMP_sizeSEGREG_sizeSEGREG()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov word[ds:0x40], 0x1234
+                mov r0, 0x40
+                mov r2, 0x80
+                cmp word[ds:r2], word[ds:r0]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x0040,
+                        r2 = 0x0080,
+                        flags = 0x0004      // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov word[ds:0x40], 0x1234
+                mov r1, 0x41
+                mov r3, 0x81
+                cmp byte[ds:r3], byte[ds:r1]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r1 = 0x0041,
+                        r3 = 0x0081,
+                        flags = 0x0004      // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x40], 0x1234
+                mov r0, 0x40
+                mov r2, 0x80
+                cmp word[ds:r2], word[ds:r0]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x0040,
+                        r2 = 0x0080,
+                        flags = 0x0000      // zf cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x40], 0x1234
+                mov r1, 0x41
+                mov r3, 0x81
+                cmp byte[ds:r3], byte[ds:r1]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r1 = 0x0041,
+                        r3 = 0x0081,
+                        flags = 0x0003      // zf CF SF
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void CMP_sizeSEGREG_sizeSEGuIMM16()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov word[ds:0x40], 0x1234
+                mov r2, 0x80
+                cmp word[ds:r2], word[ds:0x40]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r2 = 0x0080,
+                        flags = 0x0004      // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov word[ds:0x40], 0x1234
+                mov r3, 0x81
+                cmp byte[ds:r3], byte[ds:0x41]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r3 = 0x0081,
+                        flags = 0x0004      // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x40], 0x1234
+                mov r2, 0x80
+                cmp word[ds:r2], word[ds:0x40]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r2 = 0x0080,
+                        flags = 0x0000      // zf cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x40], 0x1234
+                mov r3, 0x91
+                cmp byte[ds:r3], byte[ds:0x41]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r3 = 0x0091,
+                        flags = 0x0003      // zf CF SF
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void CMP_sizeSEGuIMM16_REG()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov r0, 0x1234
+                cmp word[ds:0x80], r0
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x1234,
+                        flags = 0x0004      // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov r0, 0x1234
+                cmp byte[ds:0x81], r0l
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x1234,
+                        flags = 0x0004      // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov r0, 0x1234
+                cmp word[ds:0x80], r0
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x1234,
+                        flags = 0x0000      // zf cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov r0, 0x1234
+                cmp byte[ds:0x81], r0l
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r0 = 0x1234,
+                        flags = 0x0003      // zf CF SF
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void CMP_sizeSEGuIMM16_IMM()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                cmp word[ds:0x80], 0x1234
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        flags = 0x0004      // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                cmp byte[ds:0x81], 0x34
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        flags = 0x0004      // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                cmp word[ds:0x80], 0x1234
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        flags = 0x0000      // zf cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                cmp byte[ds:0x81], 0x34
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        flags = 0x0003      // zf CF SF
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void CMP_sizeSEGuIMM16_sizeSEGREGplusIMM()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov word[ds:0x40], 0x1234
+                mov r1, 0x30
+                cmp word[ds:0x80], word[ds:r1+0x10]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r1 = 0x0030,
+                        flags = 0x0004        // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov word[ds:0x40], 0x1234
+                mov r3, 0x50
+                cmp byte[ds:0x81], byte[ds:r3-0x0F]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r3 = 0x0050,
+                        flags = 0x0004        // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x40], 0x1234
+                mov r1, 0x30
+                cmp word[ds:0x80], word[ds:r1+0x10]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r1 = 0x0030,
+                        flags = 0x0000        // zf cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x40], 0x1234
+                mov r2, 0x50
+                cmp byte[ds:0x81], byte[ds:r2-0x0F]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r2 = 0x0050,
+                        flags = 0x0003        // zf CF SF
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void CMP_sizeSEGuIMM16_sizeSEGREG()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov word[ds:0x40], 0x1234
+                mov r1, 0x40
+                cmp word[ds:0x80], word[ds:r1]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r1 = 0x40,
+                        flags = 0x0004        // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov word[ds:0x40], 0x1234
+                mov r3, 0x41
+                cmp byte[ds:0x81], byte[ds:r3]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r3 = 0x41,
+                        flags = 0x0004        // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x40], 0x1234
+                mov r1, 0x40
+                cmp word[ds:0x80], word[ds:r1]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r1 = 0x40,
+                        flags = 0x0000        // zf cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x40], 0x1234
+                mov r3, 0x41
+                cmp byte[ds:0x81], byte[ds:r3]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        r3 = 0x41,
+                        flags = 0x0003        // zf CF SF
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
+        public void CMP_sizeSEGuIMM16_sizeSEGuIMM16()
+        {
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov word[ds:0x40], 0x1234
+                cmp word[ds:0x80], word[ds:0x40]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        flags = 0x0004        // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x1234
+                mov word[ds:0x40], 0x1234
+                cmp byte[ds:0x81], byte[ds:0x41]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        flags = 0x0004        // ZF cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x1234,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x40], 0x1234
+                cmp word[ds:0x80], word[ds:0x40]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        flags = 0x0000        // zf cf sf
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+
+            AssertState(
+                @"
+                mov word[ds:0x80], 0x4321
+                mov word[ds:0x40], 0x1234
+                cmp byte[ds:0x81], byte[ds:0x41]
+                ",
+                new MachineState
+                {
+                    CPU = new CpuState
+                    {
+                        flags = 0x0003        // zf CF SF
+                    },
+                    RAMChecks = new()
+                    {
+                        [0x80] = 0x4321,
+                        [0x40] = 0x1234
+                    }
+                }
+            );
+        }
+
+        [TestMethod]
         public void BIT_REG_REG()
         {
             AssertState(
