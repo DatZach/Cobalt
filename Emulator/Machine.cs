@@ -32,7 +32,7 @@ namespace Emulator
 
         public Machine(MicrocodeRom microcode, Memory rom, IReadOnlyList<DeviceConfigBase> deviceConfigs)
         {
-            ClockHz = 1_000_000;
+            ClockHz = 4_000_000;
             TickIndex = 0;
             RAM = new Memory(16 * 1024 * 1024);
             CPU = new CPU(this, microcode);
@@ -334,9 +334,9 @@ namespace Emulator
                 isEqual = isEqual && (other.CPU.r2 == null || CPU.r2 == other.CPU.r2);
                 isEqual = isEqual && (other.CPU.r3 == null || CPU.r3 == other.CPU.r3);
                 isEqual = isEqual && (other.CPU.sp == null || CPU.sp == other.CPU.sp);
-                isEqual = isEqual && (other.CPU.ss == null || CPU.ss == other.CPU.ss);
-                isEqual = isEqual && (other.CPU.cs == null || CPU.cs == other.CPU.cs);
-                isEqual = isEqual && (other.CPU.ds == null || CPU.ds == other.CPU.ds);
+                isEqual = isEqual && (other.CPU.sg == null || CPU.sg == other.CPU.sg);
+                isEqual = isEqual && (other.CPU.cg == null || CPU.cg == other.CPU.cg);
+                isEqual = isEqual && (other.CPU.dg == null || CPU.dg == other.CPU.dg);
                 isEqual = isEqual && (other.CPU.ip == null || CPU.ip == other.CPU.ip);
                 isEqual = isEqual && (other.CPU.flags == null || CPU.flags == other.CPU.flags);
                 if (!isEqual)

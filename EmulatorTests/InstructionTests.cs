@@ -50,8 +50,8 @@ namespace EmulatorTests
                     r2 = 0x1234,
                     r3 = 0x5600,
                     sp = 0x000F,
-                    ss = 0x0080,
-                    ds = 0x0001,
+                    sg = 0x0080,
+                    dg = 0x0001,
                 }
             );
         }
@@ -1756,7 +1756,7 @@ namespace EmulatorTests
                     r1 = 9,
                     r2 = 0,
                     r3 = 9,
-                    ss = 0,
+                    sg = 0,
                     sp = 0
                 }
             );
