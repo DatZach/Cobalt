@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.Diagnostics;
+using System.Text;
 using DiskUtil;
 
 namespace Emulator
@@ -58,18 +59,22 @@ namespace Emulator
                     var operand2 = OperandType.None;
                     var operand3 = OperandType.None;
 
-                    if (operandCount == 1) // 1 Operand
+                    if (operandCount == 0)
+                    {
+                        opcodeIndex <<= 2;
+                    }
+                    else if (operandCount == 1)
                     {
                         opcodeIndex |= 0x20;
                         operand1 = ParseOperand(parts[3], i);
                     }
-                    else if (operandCount == 2) // 2 Operands
+                    else if (operandCount == 2)
                     {
                         opcodeIndex |= 0x20;
                         operand1 = ParseOperand(parts[3], i);
                         operand2 = ParseOperand(parts[4], i);
                     }
-                    else if (operandCount == 3) // 3 Operands
+                    else if (operandCount == 3)
                     {
                         opcodeIndex |= 0x20;
                         operand1 = ParseOperand(parts[3], i);
@@ -79,7 +84,7 @@ namespace Emulator
                         if (operand1 != operand2)
                             throw new AssemblyException(i, $"Illegal operand combination: {operand1}, {operand2}, {operand3}");
                     }
-                    else if (operandCount != 0)
+                    else
                         throw new AssemblyException(i, $"Illegal operand count {operandCount}");
 
                     current = new Procedure
@@ -326,7 +331,7 @@ namespace Emulator
 
             // SERIALIZE OPCODES & MICROCODE
             var microcode = new ControlWord[MicrocodeRom.MaxControlWordCount];
-            for (int addr = 0x0000; addr <= 0x7FF0; addr += 0x08)
+            for (int addr = 0x0000; addr <= 0x7FF8; addr += 0x08)
             {
                 if (!opcodes.TryGetValue(addr, out var proc))
                     proc = macros["ILLEGAL"] ?? throw new AssemblyException(-1, "Missing 'ILLEGAL' macro");

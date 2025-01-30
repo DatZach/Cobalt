@@ -14,7 +14,9 @@ Main:
     ;sie 1
 
     mov r0, 0x1234
+    ;nop
     mov r7, 0x4321
+    add r1, r0, r7
     hlt
 
 ExceptionHandler:

@@ -24,26 +24,25 @@
             var iword = machine.ReadWord(segment, offset);
             offset += 2;
 
-            int opcodeIndex = (iword & 0xFC00) >> 10;
+            int opcodeIndex = (iword & 0x8000) switch
+            {
+                0x8000 => (iword & 0xFC00) >> 10,
+                0x0000 => (iword & 0xF000) >> 10,
+                _ => -1
+            };
+
             if (!opcodeMetadata.TryGetValue(opcodeIndex, out var metadata))
                 return $"; UNK {iword:X4}";
 
-            int operandCount = (opcodeIndex & 0x30) switch
-            {
-                0x30 => 1,
-                0x20 => 1,
-                0x10 => 2,
-                0x00 => 0,
-                _ => 0
-            };
-
             string? operandA = null;
             string? operandB = null;
-            var operand1Type = operandCount >= 1 ? (OperandType)((iword & 0x0380) >> 7) : OperandType.None;
-            var operand2Type = operandCount >= 2 ? (OperandType)((iword & 0x0070) >> 4) : OperandType.None;
+            string? operandC = null;
+            var operand1Type = metadata.OperandCount >= 1 ? (OperandType)((iword & 0x0038) >> 3) : OperandType.None;
+            var operand2Type = metadata.OperandCount >= 2 ? (OperandType)(iword & 0x0007) : OperandType.None;
+            OperandType operand3Type = OperandType.None;
             var isFlipped = false;
 
-            if (operandCount >= 2)
+            if (metadata.OperandCount >= 2)
             {
                 var operandCombo = metadata.OperandCombinations.FirstOrDefault(x => x.A == operand1Type && x.B == operand2Type);
                 if (operandCombo == null)
@@ -55,10 +54,33 @@
             if (isFlipped)
                 (operand1Type, operand2Type) = (operand2Type, operand1Type);
 
+            if (metadata.OperandCount == 3)
+            {
+                operand3Type = operand2Type;
+                operand2Type = operand1Type;
+            }
+
+            ushort regWord;
+            if (IsRegRefOperand(operand1Type) || IsRegRefOperand(operand2Type) || IsRegRefOperand(operand3Type))
+            {
+                if (IsRegRefOperand(operand3Type))
+                {
+                    regWord = machine.ReadWord(segment, offset);
+                    offset += 2;
+                }
+                else
+                {
+                    regWord = (ushort)(machine.ReadByte(segment, offset) << 8);
+                    offset += 1;
+                }
+            }
+            else
+                regWord = 0;
+
             switch (operand1Type)
             {
                 case OperandType.Reg:
-                    operandA = ParseRegisterName(iword & 0x000F);
+                    operandA = ParseRegisterName((regWord & 0xF000) >> 12);
                     break;
 
                 case OperandType.Imm8:
@@ -78,9 +100,9 @@
                 case OperandType.DerefWordPgReg:
                 case OperandType.DerefBytePgReg:
                 {
-                    var operand = iword & 0x000F;
+                    var operand = (regWord & 0xF000) >> 12;
                     var busWidthName = operand1Type == OperandType.DerefWordPgReg ? "WORD" : "BYTE";
-                    var regName = ParseSegRegIndex(operand);
+                    var regName = ParsePgRegIndex(operand);
                     operandA = $"{busWidthName} [{regName}]";
                     break;
                 }
@@ -88,9 +110,9 @@
                 case OperandType.DerefWordPgRegPlusSImm:
                 case OperandType.DerefBytePgRegPlusSImm:
                 {
-                    var operand = iword & 0x000F;
+                    var operand = (regWord & 0xF000) >> 12;
                     var busWidthName = operand1Type == OperandType.DerefWordPgRegPlusSImm ? "WORD" : "BYTE";
-                    var regName = ParseSegRegIndex(operand);
+                    var regName = ParsePgRegIndex(operand);
                     var immWidth = SelectOperandWidth(operand);
 
                     short immValue;
@@ -112,8 +134,8 @@
 
                 case OperandType.DerefPgUImm16:
                 {
-                    var operand = iword & 0x000F;
-                    var segName = ParseSegmentIndex(operand);
+                    var operand = (regWord & 0xF000) >> 12;
+                    var segName = ParsePageIndex(operand);
                     var immWidth = SelectOperandWidth(operand);
                     var busWidthName = immWidth == 2 ? "WORD" : "BYTE";
                     operandA = $"{busWidthName} [{segName}:0x{machine.ReadWord(segment, offset):X4}]";
@@ -125,8 +147,7 @@
             switch (operand2Type)
             {
                 case OperandType.Reg:
-                    operandB = ParseRegisterName(machine.ReadByte(segment, offset) & 0x0F);
-                    offset += 1;
+                    operandB = ParseRegisterName((regWord & 0x0F00) >> 8);
                     break;
 
                 case OperandType.Imm8:
@@ -146,9 +167,9 @@
                 case OperandType.DerefWordPgReg:
                 case OperandType.DerefBytePgReg:
                 {
-                    var operand = machine.ReadByte(segment, offset) & 0x0F;
+                    var operand = (regWord & 0x0F00) >> 8;
                     var busWidthName = operand2Type == OperandType.DerefWordPgReg ? "WORD" : "BYTE";
-                    var regName = ParseSegRegIndex(operand);
+                    var regName = ParsePgRegIndex(operand);
                     operandB = $"{busWidthName} [{regName}]";
                     offset += 1;
                     break;
@@ -157,9 +178,9 @@
                 case OperandType.DerefWordPgRegPlusSImm:
                 case OperandType.DerefBytePgRegPlusSImm:
                 {
-                    var operand = machine.ReadByte(segment, offset) & 0x0F;
+                    var operand = (regWord & 0x0F00) >> 8;
                     var busWidthName = operand2Type == OperandType.DerefWordPgRegPlusSImm ? "WORD" : "BYTE";
-                    var regName = ParseSegRegIndex(operand);
+                    var regName = ParsePgRegIndex(operand);
                     var immWidth = SelectOperandWidth(operand);
                     offset += 1;
                     short immValue;
@@ -180,8 +201,8 @@
 
                 case OperandType.DerefPgUImm16:
                 {
-                    var operand = machine.ReadByte(segment, offset) & 0x0F;
-                    var segName = ParseSegmentIndex(operand);
+                    var operand = (regWord & 0x0F00) >> 8;
+                    var segName = ParsePageIndex(operand);
                     var immWidth = SelectOperandWidth(operand);
                     var busWidthName = immWidth == 2 ? "WORD" : "BYTE";
                     offset += 1;
@@ -191,48 +212,131 @@
                 }
             }
 
-            if (isFlipped)
-                (operandA, operandB) = (operandB, operandA);
+            switch (operand3Type)
+            {
+                case OperandType.Reg:
+                    operandC = ParseRegisterName((regWord & 0x00F0) >> 4);
+                    break;
 
-            return operandCount switch
+                case OperandType.Imm8:
+                {
+                    operandC = $"0x{machine.ReadByte(segment, offset):X2}";
+                    offset += 1;
+                    break;
+                }
+
+                case OperandType.Imm16:
+                {
+                    operandC = $"0x{machine.ReadWord(segment, offset):X4}";
+                    offset += 2;
+                    break;
+                }
+
+                case OperandType.DerefWordPgReg:
+                case OperandType.DerefBytePgReg:
+                {
+                    var operand = (regWord & 0x00F0) >> 4;
+                    var busWidthName = operand2Type == OperandType.DerefWordPgReg ? "WORD" : "BYTE";
+                    var regName = ParsePgRegIndex(operand);
+                    operandC = $"{busWidthName} [{regName}]";
+                    offset += 1;
+                    break;
+                }
+
+                case OperandType.DerefWordPgRegPlusSImm:
+                case OperandType.DerefBytePgRegPlusSImm:
+                {
+                    var operand = (regWord & 0x00F0) >> 4;
+                    var busWidthName = operand2Type == OperandType.DerefWordPgRegPlusSImm ? "WORD" : "BYTE";
+                    var regName = ParsePgRegIndex(operand);
+                    var immWidth = SelectOperandWidth(operand);
+                    offset += 1;
+                    short immValue;
+                    if (immWidth == 1)
+                        immValue = (short)-machine.ReadByte(segment, offset);
+                    else
+                        immValue = (short)-machine.ReadWord(segment, offset);
+                    offset += (ushort)immWidth;
+                    if (immValue == 0)
+                        operandC = $"{busWidthName} [{regName}]";
+                    else
+                    {
+                        var signStr = (immValue & 0x8000) != 0 ? "" : "+";
+                        operandC = $"{busWidthName} [{regName}{signStr}{immValue}]";
+                    }
+                    break;
+                }
+
+                case OperandType.DerefPgUImm16:
+                {
+                    var operand = (regWord & 0x00F0) >> 4;
+                    var segName = ParsePageIndex(operand);
+                    var immWidth = SelectOperandWidth(operand);
+                    var busWidthName = immWidth == 2 ? "WORD" : "BYTE";
+                    offset += 1;
+                    operandC = $"{busWidthName} [{segName}:0x{machine.ReadWord(segment, offset):X4}]";
+                    offset += 2;
+                    break;
+                }
+            }
+
+            if (isFlipped)
+            {
+                if (metadata.OperandCount == 2)
+                    (operandA, operandB) = (operandB, operandA);
+                else if (metadata.OperandCount == 3)
+                    (operandA, operandB, operandC) = (operandC, operandB, operandA);
+            }
+
+            return metadata.OperandCount switch
             {
                 0 => metadata.Name,
                 1 => $"{metadata.Name} {operandA}",
                 2 => $"{metadata.Name} {operandA}, {operandB}",
+                3 => $"{metadata.Name} {operandA}, {operandB}, {operandC}",
                 _ => $"; UNK {iword:X4}"
             };
         }
 
         private readonly static string[] Registers =
         {
-            "R0", "R1", "R2", "R3", "SP", "SS", "CS", "DS",
-            "R0H", "R0L", "R1H", "R1L", "R2H", "R2L", "R3H", "R3L"
+            "R0", "R1", "R2", "R3", "R4", "R5", "R6", "R7",
+            "SP", "SG", "CG", "DG", "TG", "R0L", "R0H", "R1L"
         };
         private static string ParseRegisterName(int idx)
         {
             return Registers[idx];
         }
 
-        private readonly static string[] SegRegs =
+        private readonly static string[] PgRegs =
         {
-            "DS:R0", "DS:R1", "DS:R2", "DS:R3", "SS:SP", "SS:R1", "CS:R2", "DS:R3",
-            "SS:R0", "CS:R0", "0xE000:R1", "0xC000:R1", "0x8000:R2", "0x4000:R2", "0x2000:R3", "0x0000:R3"
+            "DG:R0", "DG:R1", "DG:R2", "DG:R3", "DG:R4", "DG:R5", "CG:R6", "TG:R7",
+            "SG:SP", "SG:R1", "0xE000:R5", "0xC000:R5", "0x8000:R6", "0x4000:R6", "0x2000:R7", "0x0000:R7"
         };
-        private static string ParseSegRegIndex(int idx)
+        private static string ParsePgRegIndex(int idx)
         {
-            return SegRegs[idx];
+            return PgRegs[idx];
         }
 
-        private readonly static string[] Segments =
+        private readonly static string[] Pages =
         {
-            "DS", "DS", "DS", "DS", "SS", "SS", "CS", "DS",
-            "SS", "CS", "0xE000", "0xC000", "0x8000", "0x4000", "0x2000", "0x0000"
+            "DG", "DG", "DG", "DG", "DG", "DG", "CG", "TG",
+            "SG", "SG", "0xE000", "0xC000", "0x8000", "0x4000", "0x2000", "0x0000"
         };
-        private static string ParseSegmentIndex(int idx)
+        private static string ParsePageIndex(int idx)
         {
-            return Segments[idx];
+            return Pages[idx];
         }
 
         private static int SelectOperandWidth(int index) => (index & 0xC) == 0x4 ? 1 : 2;
+
+        private static bool IsRegRefOperand(OperandType operandType)
+        {
+            return operandType
+                is OperandType.Reg
+                or OperandType.DerefBytePgRegPlusSImm or OperandType.DerefWordPgRegPlusSImm
+                or OperandType.DerefBytePgReg or OperandType.DerefWordPgReg
+                or OperandType.DerefPgUImm16;
+        }
     }
 }

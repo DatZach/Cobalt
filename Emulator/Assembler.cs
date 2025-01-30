@@ -246,16 +246,20 @@
                 }
 
                 // ENCODE
-                var opcode = (ushort)(
-                      ((metadata.Index & 0x3F) << 10)
-                    | (((byte)aType & 0x07) << 3)
-                    |  ((byte)bType & 0x07)
-                );
+
 
                 if (operandCount == 0)
-                    writer.Write((byte)(((opcode >> 8) & 0xF0) | ((byte)conditional & 0x0F)));
+                {
+                    writer.Write((byte)(((metadata.Index & 0x1C) << 2) | ((byte)conditional & 0x0F)));
+                }
                 else
                 {
+                    var opcode = (ushort)(
+                          ((metadata.Index & 0x3F) << 10)
+                        | (((byte)aType & 0x07) << 3)
+                        |  ((byte)bType & 0x07)
+                    );
+
                     var ii = (ushort)((opcode & 0xFC3F) | ((byte)conditional & 0x0F) << 6);
                     writer.Write((byte)(ii >> 8));
                     writer.Write((byte)(ii & 0xFF));

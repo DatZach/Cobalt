@@ -99,31 +99,34 @@ namespace Emulator
             var isAddr = (cword & ControlWord.ADDR) != 0;
 
             // CLOCK RISING EDGE
-            var cc = ResolveConditional();
-            var isOF = (flags.Word & OF) == OF;
-            var isZF = (flags.Word & ZF) == ZF;
-            var isCF = (flags.Word & CF) == CF;
-            var isSF = (flags.Word & SF) == SF;
-            var ccIsAdv = cc switch
+            if (mci == 1)
             {
-                Conditional.EQ   =>  isZF,
-                Conditional.NEQ  => !isZF,
-                Conditional.GTu  => !isZF && !isCF,
-                Conditional.GTEu => !isCF,
-                Conditional.LTu  =>  isCF,
-                Conditional.LTEu =>  isZF || isCF,
-                Conditional.GTs  => !isZF && isSF == isOF,
-                Conditional.GTEs =>  isSF == isOF,
-                Conditional.LTs  =>  isSF != isOF,
-                Conditional.LTEs =>  isZF || isSF != isOF,
-                _ => false
-            };
+                var cc = ResolveConditional();
+                var isOF = (flags.Word & OF) == OF;
+                var isZF = (flags.Word & ZF) == ZF;
+                var isCF = (flags.Word & CF) == CF;
+                var isSF = (flags.Word & SF) == SF;
+                var ccIsAdv = cc switch
+                {
+                    Conditional.EQ   =>  isZF,
+                    Conditional.NEQ  => !isZF,
+                    Conditional.GTu  => !isZF && !isCF,
+                    Conditional.GTEu => !isCF,
+                    Conditional.LTu  =>  isCF,
+                    Conditional.LTEu =>  isZF || isCF,
+                    Conditional.GTs  => !isZF && isSF == isOF,
+                    Conditional.GTEs =>  isSF == isOF,
+                    Conditional.LTs  =>  isSF != isOF,
+                    Conditional.LTEs =>  isZF || isSF != isOF,
+                    _ => false
+                };
 
-            if (ccIsAdv)
-            {
-                ip.Word += 1;
-                mci = 0;
-                goto DoTick;
+                if (ccIsAdv)
+                {
+                    ip.Word += 1;
+                    mci = 0;
+                    goto DoTick;
+                }
             }
 
             // IP Reg
@@ -411,7 +414,7 @@ namespace Emulator
             var iaddr = (iword & 0x8000) switch
             {
                 0x8000 => ((iword & 0xFC00) >> 1) | ((iword & 0x003F) << 3) | (mci & 0x07),
-                0x0000 => ((iword & 0xFF00) >> 1) | (mci & 0x07),
+                0x0000 => ((iword & 0xF000) >> 1) | (mci & 0x07),
                 _ => throw new ArgumentOutOfRangeException(nameof(iword), iword, "Illegal Instruction Encoding")
             };
 
@@ -423,8 +426,8 @@ namespace Emulator
             var iword = instruction.Word;
             return (iword & 0x8000) switch
             {
-                0x8000 => (Conditional)(iword & 0x000F),
-                0x0000 => (Conditional)((iword & 0x03C0) >> 6),
+                0x8000 => (Conditional)((iword & 0x03C0) >> 6),
+                0x0000 => (Conditional)((iword & 0x0F00) >> 8),
                 _ => throw new ArgumentOutOfRangeException(nameof(iword), iword, "Illegal Instruction Encoding")
             };
         }
