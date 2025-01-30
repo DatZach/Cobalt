@@ -4,7 +4,7 @@
     {
         private readonly Dictionary<string, short> labels = new();
         private readonly Dictionary<long, string> fixups = new();
-        private Action<long>? resolveFixup1, resolveFixup2;
+        private Action<long>? resolveFixup1, resolveFixup2, resolveFixup3;
         private int origin;
 
         private readonly Dictionary<string, MicrocodeRom.Opcode> opcodeMetadata;
@@ -73,10 +73,19 @@
                 if (string.IsNullOrEmpty(line))
                     continue;
 
-                string? operand1String = null;
-                string? operand2String = null;
+                Conditional conditional;
                 var opcodeString = string.Join("", line.TakeWhile(char.IsLetter)).ToUpperInvariant();
                 int j = opcodeString.Length;
+
+                if (j < line.Length && line[j] == '.')
+                {
+                    var conditionalString = string.Join("", line.Skip(j + 1).TakeWhile(char.IsLetter)).ToUpperInvariant();
+                    conditional = Enum.Parse<Conditional>(conditionalString);
+                    j += conditionalString.Length + 1;
+                }
+                else
+                    conditional = Conditional.None;
+
                 while (j < line.Length && char.IsWhiteSpace(line[j]))
                     ++j;
 
@@ -146,77 +155,121 @@
                     continue;
                 }
 
+                Operand? operand1 = null;
+                Operand? operand2 = null;
+                Operand? operand3 = null;
                 int operandCount = 0;
-                var commaIdx = line.IndexOf(',', j);
-                if (commaIdx != -1)
+
+                while (j < line.Length)
                 {
-                    operandCount = 2;
+                    var l = line.IndexOf(',', j);
+                    if (l == -1) l = line.Length;
 
-                    var k = commaIdx + 1;
-                    while (k < line.Length && char.IsWhiteSpace(line[k]))
-                        ++k;
+                    var operandString = line.Substring(j, l - j).Trim().ToUpperInvariant();
+                    if (operandCount == 0)
+                        operand1 = ParseOperand(i, operandCount, operandString);
+                    else if (operandCount == 1)
+                        operand2 = ParseOperand(i, operandCount, operandString);
+                    else if (operandCount == 2)
+                        operand3 = ParseOperand(i, operandCount, operandString);
+                    ++operandCount;
 
-                    operand2String = line.Substring(k, line.Length - k).ToUpperInvariant();
+                    j = l + 1;
                 }
-                else
-                {
-                    operandCount = 1;
-                    commaIdx = line.Length;
-                }
-
-                operand1String = line.Substring(j, commaIdx - j).ToUpperInvariant();
-                if (operand1String.Length == 0)
-                    operandCount = 0;
 
                 resolveFixup1 = resolveFixup2 = null;
-                var operand1 = ParseOperand(i, 0, operand1String);
-                var operand2 = ParseOperand(i, 1, operand2String);
                 
                 if (!opcodeMetadata.TryGetValue(opcodeString, out var metadata))
                     throw new AssemblyException(i, $"Unknown opcode '{opcodeString}'");
 
-                var (opcode, operandOrder) = ParseOpcode(i, metadata, operandCount, operand1.Type, operand2.Type);
+                if (metadata.OperandCount != operandCount)
+                    throw new AssemblyException(i, $"Opcode '{metadata.Name}' expected {metadata.OperandCount} operands, received {operandCount} instead");
 
-                Operand? operandB, operandA;
-                Action<long>? resolveFixupB, resolveFixupA;
-                if (operandCount == 2)
+                var aType = operand1?.Type ?? OperandType.None;
+                var bType = operand3?.Type ?? operand2?.Type ?? OperandType.None;
+                
+                bool operandOrder;
+                if (operandCount > 0)
+                {
+                    var operandCombo = metadata.OperandCombinations.FirstOrDefault(x => x.A == aType && x.B == bType);
+                    if (operandCombo == null)
+                        throw new AssemblyException(i, $"Opcode '{metadata.Name}' does not support the operand combination {operand1}, {operand2}");
+
+                    operandOrder = operandCombo.RTL;
+                }
+                else
+                    operandOrder = false;
+
+                Operand? operandA, operandB, operandC;
+                Action<long>? resolveFixupC, resolveFixupB, resolveFixupA;
+                if (operandCount == 3)
                 {
                     if (!operandOrder)
                     {
                         operandA = operand1; resolveFixupA = resolveFixup1;
                         operandB = operand2; resolveFixupB = resolveFixup2;
+                        operandC = operand3; resolveFixupC = resolveFixup3;
                     }
-                    else if (operandOrder)
+                    else
+                    {
+                        operandA = operand3; resolveFixupA = resolveFixup3;
+                        operandB = operand2; resolveFixupB = resolveFixup2;
+                        operandC = operand1; resolveFixupC = resolveFixup1;
+                    }
+                }
+                else if (operandCount == 2)
+                {
+                    if (!operandOrder)
+                    {
+                        operandA = operand1; resolveFixupA = resolveFixup1;
+                        operandB = operand2; resolveFixupB = resolveFixup2;
+                        operandC = null; resolveFixupC = null;
+                    }
+                    else
                     {
                         operandA = operand2; resolveFixupA = resolveFixup2;
                         operandB = operand1; resolveFixupB = resolveFixup1;
+                        operandC = null; resolveFixupC = null;
                     }
-                    else
-                        throw new AssemblyException(i, $"Illegal operand direction specified in metadata '{opcodeString}'");
                 }
                 else if (operandCount == 1)
                 {
                     operandA = operand1; resolveFixupA = resolveFixup1;
                     operandB = null; resolveFixupB = null;
+                    operandC = null; resolveFixupC = null;
                 }
                 else
                 {
                     operandA = null; resolveFixupA = null;
                     operandB = null; resolveFixupB = null;
+                    operandC = null; resolveFixupC = null;
                 }
 
-                if (operandA != null)
+                // ENCODE
+                var opcode = (ushort)(
+                      ((metadata.Index & 0x3F) << 10)
+                    | (((byte)aType & 0x07) << 3)
+                    |  ((byte)bType & 0x07)
+                );
+
+                if (operandCount == 0)
+                    writer.Write((byte)(((opcode >> 8) & 0xF0) | ((byte)conditional & 0x0F)));
+                else
                 {
-                    if (operandA.Type is OperandType.Reg
-                                      or OperandType.DerefByteSegRegPlusSImm or OperandType.DerefWordSegRegPlusSImm
-                                      or OperandType.DerefByteSegReg or OperandType.DerefWordSegReg
-                                      or OperandType.DerefSegUImm16)
-                        opcode |= (ushort)(operandA.Data1 & 0x000F);
+                    var ii = (ushort)((opcode & 0xFC3F) | ((byte)conditional & 0x0F) << 6);
+                    writer.Write((byte)(ii >> 8));
+                    writer.Write((byte)(ii & 0xFF));
                 }
 
-                writer.Write((byte)(opcode >> 8));
-                if (operandCount > 0)
-                    writer.Write((byte)(opcode & 0xFF));
+                if (IsRegRefOperand(operandA) || IsRegRefOperand(operandB) || IsRegRefOperand(operandC))
+                {
+                    byte rd0 = 0x00, rd1 = 0x00;
+                    if (operandA != null) rd0 |= (byte)((operandA.Data1 & 0x0F) << 4);
+                    if (operandB != null) rd0 |= (byte)(operandB.Data1 & 0x0F);
+                    if (operandA != null || operandB != null) writer.Write(rd0);
+                    if (operandC != null) rd1 |= (byte)((operandC.Data1 & 0x0F) << 4);
+                    if (operandC != null) writer.Write(rd1);
+                }
 
                 if (operandA != null)
                 {
@@ -229,7 +282,7 @@
                     {
                         case OperandType.Reg:
                             data = 0;
-                            width = 0; // Already encoded in opcode
+                            width = 0; // Already encoded
                             break;
                         case OperandType.Imm8:
                             data = (ushort)operandA.Data1;
@@ -239,17 +292,17 @@
                             data = (ushort)operandA.Data1;
                             width = 2;
                             break;
-                        case OperandType.DerefByteSegRegPlusSImm:
-                        case OperandType.DerefWordSegRegPlusSImm:
+                        case OperandType.DerefBytePgRegPlusSImm:
+                        case OperandType.DerefWordPgRegPlusSImm:
                             data = (ushort)operandA.Data2;
                             width = (operandA.Data1 & 0x0C) == 0x04 ? 1 : 2;
                             break;
-                        case OperandType.DerefByteSegReg:
-                        case OperandType.DerefWordSegReg:
+                        case OperandType.DerefBytePgReg:
+                        case OperandType.DerefWordPgReg:
                             data = 0;
                             width = 0;
                             break;
-                        case OperandType.DerefSegUImm16:
+                        case OperandType.DerefPgUImm16:
                             data = (ushort)operandA.Data2;
                             width = 2;
                             break;
@@ -276,8 +329,8 @@
                     switch (operandB.Type)
                     {
                         case OperandType.Reg:
-                            data = (ushort)operandB.Data1;
-                            width = 1;
+                            data = 0;
+                            width = 0; // Already encoded
                             break;
                         case OperandType.Imm8:
                             data = (ushort)operandB.Data1;
@@ -287,19 +340,17 @@
                             data = (ushort)operandB.Data1;
                             width = 2;
                             break;
-                        case OperandType.DerefByteSegRegPlusSImm:
-                        case OperandType.DerefWordSegRegPlusSImm:
-                            writer.Write((byte)operandB.Data1);
+                        case OperandType.DerefBytePgRegPlusSImm:
+                        case OperandType.DerefWordPgRegPlusSImm:
                             data = (ushort)operandB.Data2;
                             width = (operandB.Data1 & 0x0C) == 0x04 ? 1 : 2;
                             break;
-                        case OperandType.DerefByteSegReg:
-                        case OperandType.DerefWordSegReg:
-                            writer.Write((byte)operandB.Data1);
+                        case OperandType.DerefBytePgReg:
+                        case OperandType.DerefWordPgReg:
                             data = 0;
                             width = 0;
                             break;
-                        case OperandType.DerefSegUImm16:
+                        case OperandType.DerefPgUImm16:
                             writer.Write((byte)operandB.Data1);
                             data = (ushort)operandB.Data2;
                             width = 2;
@@ -330,31 +381,6 @@
             }
 
             return stream.ToArray();
-        }
-
-        private (ushort, bool) ParseOpcode(int line, MicrocodeRom.Opcode metadata, int operandCount, OperandType operand1, OperandType operand2)
-        {
-            if (metadata.OperandCount != operandCount)
-                throw new AssemblyException(line, $"Opcode '{metadata.Name}' expected {metadata.OperandCount} operands, received {operandCount} instead");
-            
-            int result = 0;
-            result |= (metadata.Index & 0x3F) << 10;
-            result |= ((byte)operand1 & 0x07) << 7;
-            result |= ((byte)operand2 & 0x07) << 4;
-
-            if (operandCount > 0)
-            {
-                var operandCombination = (byte)(((byte)((int)operand1 & 0x07) << 4) | (byte)((int)operand2 & 0x07));
-                var operandCombinationIdx =
-                    metadata.OperandCombinations.FindIndex(x => (x & 0x7F) == operandCombination);
-                if (operandCombinationIdx == -1)
-                    throw new AssemblyException(line,
-                        $"Opcode '{metadata.Name}' does not support the operand combination {operand1}, {operand2}");
-
-                return ((ushort)result, (metadata.OperandCombinations[operandCombinationIdx] & 0x80) != 0);
-            }
-            else
-                return ((ushort)result, false);
         }
 
         private Operand ParseOperand(int line, int operandIdx, string? operand)
@@ -405,8 +431,8 @@
                 var indOperand = operand.Substring(1, operand.Length - 2);
                 var regOperand = operand.Substring(1, signIdx != -1 ? signIdx - 1 : operand.Length - 2);
 
-                // [SEG:REG] / [SEG:REG+sIMM]
-                ParseSegRegIndex(regOperand, out data1, out var data1ImmWidth);
+                // [PG:REG] / [PG:REG+sIMM]
+                ParsePgRegIndex(regOperand, out data1, out var data1ImmWidth);
                 if (data1 != -1)
                 {
                     //if (data1ImmWidth != (isByte ? 1 : 2))
@@ -416,7 +442,7 @@
 
                     if ((signIdx = indOperand.IndexOfAny(SignChars)) != -1)
                     {
-                        // [SEG:REG+sIMM]
+                        // [PG:REG+sIMM]
                         var sign = indOperand[signIdx] == '-' ? -1 : 1;
                         var numberString = indOperand.Substring(signIdx + 1, indOperand.Length - signIdx - 1);
                         if (!TryParseImm(numberString, operandIdx, out var data2ImmWidth, out data2))
@@ -424,30 +450,30 @@
                         if (data2ImmWidth > data1ImmWidth)
                             throw new AssemblyException(line, $"Operand sImm would overflow {data2ImmWidth} > {data1ImmWidth}");
                         
-                        operandType = isByte ? OperandType.DerefByteSegRegPlusSImm : OperandType.DerefWordSegRegPlusSImm;
+                        operandType = isByte ? OperandType.DerefBytePgRegPlusSImm : OperandType.DerefWordPgRegPlusSImm;
                         data2 = (short)(data2 * -sign); // Negative sign because we SUB for sign purposes
                     }
                     else
                     {
-                        // [SEG:REG]
-                        operandType = isByte ? OperandType.DerefByteSegReg : OperandType.DerefWordSegReg;
+                        // [PG:REG]
+                        operandType = isByte ? OperandType.DerefBytePgReg : OperandType.DerefWordPgReg;
                         data2 = 0;
                     }
 
                     return new Operand(operandType, data1, data2);
                 }
 
-                // [SEG:uIMM16]
+                // [PG:uIMM16]
                 int colonIdx = operand.IndexOf(':');
-                var segOperand = operand[1..colonIdx];
+                var pagOperand = operand[1..colonIdx];
                 var immOperand = operand[(colonIdx + 1)..^1];
-                data1 = ParseSegmentIndex(segOperand, isByte);
+                data1 = ParsePageIndex(pagOperand, isByte);
 
                 if (data1 == -1)
-                    throw new AssemblyException(line, $"Illegal Addressing Mode for SEG:REG '{operand}'");
+                    throw new AssemblyException(line, $"Illegal Addressing Mode for PG:REG '{operand}'");
 
                 if (TryParseImm(immOperand, operandIdx, out _, out data2))
-                    return new Operand(OperandType.DerefSegUImm16, data1, data2);
+                    return new Operand(OperandType.DerefPgUImm16, data1, data2);
             }
 
             throw new AssemblyException(line, $"Illegal operand '{operand}'");
@@ -455,40 +481,40 @@
 
         private readonly static string[] Registers =
         {
-            "R0", "R1", "R2", "R3", "SP", "SS", "CS", "DS",
-            "R0H", "R0L", "R1H", "R1L", "R2H", "R2L", "R3H", "R3L"
+            "R0", "R1", "R2", "R3", "R4", "R5", "R6", "R7",
+            "SP", "SG", "CG", "DG", "TG", "R0L", "R0H", "R1L"
         };
         private static short ParseRegisterIndex(string registerName)
         {
             return (short)Array.IndexOf(Registers, registerName);
         }
 
-        private readonly static string[] SegRegs =
+        private readonly static string[] PgRegs =
         {
-            "DS:R0", "DS:R1", "DS:R2", "DS:R3", "SS:SP", "SS:R1", "CS:R2", "DS:R3",
-            "SS:R0", "CS:R0", "0XE000:R1", "0XC000:R1", "0X8000:R2", "0X4000:R2", "0X2000:R3", "0X0000:R3"
+            "DG:R0", "DG:R1", "DG:R2", "DG:R3", "DG:R4", "DG:R5", "CG:R6", "TG:R7",
+            "SG:SP", "SG:R1", "0XE000:R5", "0XC000:R5", "0X8000:R6", "0X4000:R6", "0X2000:R7", "0X0000:R7"
         };
-        private static void ParseSegRegIndex(string registerName, out short idx, out int width)
+        private static void ParsePgRegIndex(string registerName, out short idx, out int width)
         {
-            idx = (short)Array.IndexOf(SegRegs, registerName);
+            idx = (short)Array.IndexOf(PgRegs, registerName);
             width = SelectOperandWidth(idx);
         }
 
-        private readonly static string[] ByteAddressingSegments =
+        private readonly static string[] ByteAddressingPages =
         {
-            "??", "??", "??", "??", "SS", "SS", "CS", "DS",
+            "??", "??", "??", "??", "DG", "DG", "CG", "TG",
             "??", "??", "??", "??", "??", "??", "??", "??"
         };
-        private readonly static string[] WordAddressingSegments =
+        private readonly static string[] WordAddressingPages =
         {
-            "DS", "DS", "DS", "DS", "??", "??", "??", "??",
-            "SS", "CS", "0XE000", "0XC000", "0X8000", "0X4000", "0X2000", "0X0000"
+            "DG", "DG", "DG", "DG", "??", "??", "??", "??",
+            "SG", "SG", "0XE000", "0XC000", "0X8000", "0X4000", "0X2000", "0X0000"
         };
-        private static short ParseSegmentIndex(string registerName, bool isByte)
+        private static short ParsePageIndex(string registerName, bool isByte)
         {
             return isByte
-                ? (short)Array.IndexOf(ByteAddressingSegments, registerName)
-                : (short)Array.IndexOf(WordAddressingSegments, registerName);
+                ? (short)Array.IndexOf(ByteAddressingPages, registerName)
+                : (short)Array.IndexOf(WordAddressingPages, registerName);
         }
 
         private static int SelectOperandWidth(int index) => (index & 0xC) == 0x4 ? 1 : 2;
@@ -534,8 +560,10 @@
                     resolveFixup1 = Fixup;
                 else if (operandIdx == 1)
                     resolveFixup2 = Fixup;
+                else if (operandIdx == 2)
+                    resolveFixup3 = Fixup;
                 else if (operandIdx != -1)
-                    throw new ArgumentOutOfRangeException(nameof(operandIdx), operandIdx, "Must be 0 or 1");
+                    throw new ArgumentOutOfRangeException(nameof(operandIdx), operandIdx, "Must be 0, 1, or 2");
                 
                 result = -1;
                 resultWidth = 0; // TODO Wrong??
@@ -552,6 +580,15 @@
             return char.IsDigit(ch)
                 || (ch >= 'A' && ch <= 'F')
                 || (ch >= 'a' && ch <= 'f');
+        }
+
+        private static bool IsRegRefOperand(Operand? operand)
+        {
+            return operand != null && operand.Type
+                is OperandType.Reg
+                or OperandType.DerefBytePgRegPlusSImm or OperandType.DerefWordPgRegPlusSImm
+                or OperandType.DerefBytePgReg or OperandType.DerefWordPgReg
+                or OperandType.DerefPgUImm16;
         }
 
         private sealed record Operand(OperandType Type, short Data1 = 0, short Data2 = 0);

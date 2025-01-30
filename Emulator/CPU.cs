@@ -411,7 +411,7 @@ namespace Emulator
             var iaddr = (iword & 0x8000) switch
             {
                 0x8000 => ((iword & 0xFC00) >> 1) | ((iword & 0x003F) << 3) | (mci & 0x07),
-                0x0000 => ((iword & 0xFFF0) >> 1) | (mci & 0x07),
+                0x0000 => ((iword & 0xFF00) >> 1) | (mci & 0x07),
                 _ => throw new ArgumentOutOfRangeException(nameof(iword), iword, "Illegal Instruction Encoding")
             };
 

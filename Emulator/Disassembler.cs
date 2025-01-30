@@ -45,10 +45,11 @@
 
             if (operandCount >= 2)
             {
-                var operandCombination = (byte)(((byte)operand1Type << 4) | (byte)operand2Type);
-                var operandCombinationIdx = metadata.OperandCombinations.FindIndex(x => (x & 0x7F) == operandCombination);
-                isFlipped = operandCombinationIdx != -1
-                         && (metadata.OperandCombinations[operandCombinationIdx] & 0x80) != 0;
+                var operandCombo = metadata.OperandCombinations.FirstOrDefault(x => x.A == operand1Type && x.B == operand2Type);
+                if (operandCombo == null)
+                    return $"; UNK {iword:X4}";
+
+                isFlipped = operandCombo.RTL;
             }
 
             if (isFlipped)
@@ -74,21 +75,21 @@
                     break;
                 }
 
-                case OperandType.DerefWordSegReg:
-                case OperandType.DerefByteSegReg:
+                case OperandType.DerefWordPgReg:
+                case OperandType.DerefBytePgReg:
                 {
                     var operand = iword & 0x000F;
-                    var busWidthName = operand1Type == OperandType.DerefWordSegReg ? "WORD" : "BYTE";
+                    var busWidthName = operand1Type == OperandType.DerefWordPgReg ? "WORD" : "BYTE";
                     var regName = ParseSegRegIndex(operand);
                     operandA = $"{busWidthName} [{regName}]";
                     break;
                 }
 
-                case OperandType.DerefWordSegRegPlusSImm:
-                case OperandType.DerefByteSegRegPlusSImm:
+                case OperandType.DerefWordPgRegPlusSImm:
+                case OperandType.DerefBytePgRegPlusSImm:
                 {
                     var operand = iword & 0x000F;
-                    var busWidthName = operand1Type == OperandType.DerefWordSegRegPlusSImm ? "WORD" : "BYTE";
+                    var busWidthName = operand1Type == OperandType.DerefWordPgRegPlusSImm ? "WORD" : "BYTE";
                     var regName = ParseSegRegIndex(operand);
                     var immWidth = SelectOperandWidth(operand);
 
@@ -109,7 +110,7 @@
                     break;
                 }
 
-                case OperandType.DerefSegUImm16:
+                case OperandType.DerefPgUImm16:
                 {
                     var operand = iword & 0x000F;
                     var segName = ParseSegmentIndex(operand);
@@ -142,22 +143,22 @@
                     break;
                 }
 
-                case OperandType.DerefWordSegReg:
-                case OperandType.DerefByteSegReg:
+                case OperandType.DerefWordPgReg:
+                case OperandType.DerefBytePgReg:
                 {
                     var operand = machine.ReadByte(segment, offset) & 0x0F;
-                    var busWidthName = operand2Type == OperandType.DerefWordSegReg ? "WORD" : "BYTE";
+                    var busWidthName = operand2Type == OperandType.DerefWordPgReg ? "WORD" : "BYTE";
                     var regName = ParseSegRegIndex(operand);
                     operandB = $"{busWidthName} [{regName}]";
                     offset += 1;
                     break;
                 }
 
-                case OperandType.DerefWordSegRegPlusSImm:
-                case OperandType.DerefByteSegRegPlusSImm:
+                case OperandType.DerefWordPgRegPlusSImm:
+                case OperandType.DerefBytePgRegPlusSImm:
                 {
                     var operand = machine.ReadByte(segment, offset) & 0x0F;
-                    var busWidthName = operand2Type == OperandType.DerefWordSegRegPlusSImm ? "WORD" : "BYTE";
+                    var busWidthName = operand2Type == OperandType.DerefWordPgRegPlusSImm ? "WORD" : "BYTE";
                     var regName = ParseSegRegIndex(operand);
                     var immWidth = SelectOperandWidth(operand);
                     offset += 1;
@@ -177,7 +178,7 @@
                     break;
                 }
 
-                case OperandType.DerefSegUImm16:
+                case OperandType.DerefPgUImm16:
                 {
                     var operand = machine.ReadByte(segment, offset) & 0x0F;
                     var segName = ParseSegmentIndex(operand);
