@@ -31,6 +31,13 @@
                 _ => -1
             };
 
+            var conditional = (iword & 0x8000) switch
+            {
+                0x8000 => (Conditional)((iword & 0x03C0) >> 6),
+                0x0000 => (Conditional)((iword & 0x0F00) >> 8),
+                _ => Conditional.None
+            };
+
             if (!opcodeMetadata.TryGetValue(opcodeIndex, out var metadata))
                 return $"; UNK {iword:X4}";
 
@@ -288,12 +295,14 @@
                     (operandA, operandB, operandC) = (operandC, operandB, operandA);
             }
 
+            var conditionalName = conditional != Conditional.None ? $".{conditional.ToString().ToUpperInvariant()}" : "";
+
             return metadata.OperandCount switch
             {
-                0 => metadata.Name,
-                1 => $"{metadata.Name} {operandA}",
-                2 => $"{metadata.Name} {operandA}, {operandB}",
-                3 => $"{metadata.Name} {operandA}, {operandB}, {operandC}",
+                0 => $"{metadata.Name}{conditionalName}",
+                1 => $"{metadata.Name}{conditionalName} {operandA}",
+                2 => $"{metadata.Name}{conditionalName} {operandA}, {operandB}",
+                3 => $"{metadata.Name}{conditionalName} {operandA}, {operandB}, {operandC}",
                 _ => $"; UNK {iword:X4}"
             };
         }

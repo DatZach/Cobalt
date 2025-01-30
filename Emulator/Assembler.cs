@@ -154,11 +154,16 @@
                     writer.Write((byte)(result & 0xFF));
                     continue;
                 }
+                
+                if (!opcodeMetadata.TryGetValue(opcodeString, out var metadata))
+                    throw new AssemblyException(i, $"Unknown opcode '{opcodeString}'");
 
                 Operand? operand1 = null;
                 Operand? operand2 = null;
                 Operand? operand3 = null;
                 int operandCount = 0;
+
+                resolveFixup1 = resolveFixup2 = resolveFixup3 = null;
 
                 while (j < line.Length)
                 {
@@ -176,11 +181,6 @@
 
                     j = l + 1;
                 }
-
-                resolveFixup1 = resolveFixup2 = null;
-                
-                if (!opcodeMetadata.TryGetValue(opcodeString, out var metadata))
-                    throw new AssemblyException(i, $"Unknown opcode '{opcodeString}'");
 
                 if (metadata.OperandCount != operandCount)
                     throw new AssemblyException(i, $"Opcode '{metadata.Name}' expected {metadata.OperandCount} operands, received {operandCount} instead");
@@ -361,6 +361,55 @@
                             break;
                         default:
                             throw new AssemblyException(i, $"Unhandled operandB type {operandB.Type}");
+                    }
+
+                    if (width == 1)
+                        writer.Write((byte)data);
+                    else if (width == 2)
+                    {
+                        writer.Write((byte)(data >> 8));
+                        writer.Write((byte)(data & 0xFF));
+                    }
+                }
+
+                if (operandC != null)
+                {
+                    resolveFixupC?.Invoke(stream.Position);
+
+                    ushort data;
+                    int width;
+
+                    switch (operandC.Type)
+                    {
+                        case OperandType.Reg:
+                            data = 0;
+                            width = 0; // Already encoded
+                            break;
+                        case OperandType.Imm8:
+                            data = (ushort)operandC.Data1;
+                            width = 1;
+                            break;
+                        case OperandType.Imm16:
+                            data = (ushort)operandC.Data1;
+                            width = 2;
+                            break;
+                        case OperandType.DerefBytePgRegPlusSImm:
+                        case OperandType.DerefWordPgRegPlusSImm:
+                            data = (ushort)operandC.Data2;
+                            width = (operandC.Data1 & 0x0C) == 0x04 ? 1 : 2;
+                            break;
+                        case OperandType.DerefBytePgReg:
+                        case OperandType.DerefWordPgReg:
+                            data = 0;
+                            width = 0;
+                            break;
+                        case OperandType.DerefPgUImm16:
+                            writer.Write((byte)operandC.Data1);
+                            data = (ushort)operandC.Data2;
+                            width = 2;
+                            break;
+                        default:
+                            throw new AssemblyException(i, $"Unhandled operandC type {operandC.Type}");
                     }
 
                     if (width == 1)

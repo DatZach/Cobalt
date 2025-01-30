@@ -106,7 +106,7 @@ namespace Emulator
                 var isZF = (flags.Word & ZF) == ZF;
                 var isCF = (flags.Word & CF) == CF;
                 var isSF = (flags.Word & SF) == SF;
-                var ccIsAdv = cc switch
+                var isCond = cc switch
                 {
                     Conditional.EQ   =>  isZF,
                     Conditional.NEQ  => !isZF,
@@ -118,10 +118,10 @@ namespace Emulator
                     Conditional.GTEs =>  isSF == isOF,
                     Conditional.LTs  =>  isSF != isOF,
                     Conditional.LTEs =>  isZF || isSF != isOF,
-                    _ => false
+                    _ => true
                 };
 
-                if (ccIsAdv)
+                if (!isCond)
                 {
                     ip.Word += 1;
                     mci = 0;
