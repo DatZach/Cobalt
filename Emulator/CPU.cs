@@ -196,8 +196,8 @@ namespace Emulator
                     reg = flags;
                 else if (bcword == ControlWord.Const2)
                     reg = Constant2;
-                else if (bcword == ControlWord.Const4)
-                    reg = Constant4;
+                else if (bcword == ControlWord.ISO1)
+                    reg = operand;
                 else
                     throw new InvalidOperationException();
 
@@ -465,7 +465,7 @@ namespace Emulator
                 2  => dg.Word,
                 3  => dg.Word,
                 4  => dg.Word,
-                5  => dg.Word,
+                5  => sg.Word,
                 6  => cg.Word,
                 7  => tg.Word,
                 8  => sg.Word,

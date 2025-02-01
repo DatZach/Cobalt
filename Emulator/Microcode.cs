@@ -1,5 +1,4 @@
-﻿using System.Diagnostics;
-using System.Text;
+﻿using System.Text;
 using DiskUtil;
 
 namespace Emulator
@@ -198,7 +197,7 @@ namespace Emulator
                                     "0" => ControlWord.None,
                                     "1" => ControlWord.Const1,
                                     "2" => ControlWord.Const2,
-                                    "4" => ControlWord.Const4,
+                                    //"4" => ControlWord.Const4,
                                     "RSO1" => IsAluOp(parts, p + 1) ? ControlWord.aRSO1 : ControlWord.bRSO1,
                                     "RSO2" => IsAluOp(parts, p + 1) ? ControlWord.aRSO2 : ControlWord.bRSO2,
                                     "RSO3" => IsAluOp(parts, p + 1) ? ControlWord.aRSO3 : ControlWord.aRSO3,
@@ -239,13 +238,14 @@ namespace Emulator
             {
                 var procedure = procedures[i];
 
-                if (procedure.Operand1 == OperandType.Imm)
-                {
-                    procedures.Add(procedure with { Operand1 = OperandType.Imm8, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ1, ControlWord.BYTE), (ControlWord.IPCSIZ1, ControlWord.IPC1)) });
-                    procedures.Add(procedure with { Operand1 = OperandType.Imm16, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ1, ControlWord.WORD), (ControlWord.IPCSIZ1, ControlWord.IPC2)) });
-                    continue;
-                }
-                else if (procedure.Operand1 == OperandType.DerefSizePgRegPlusSImm)
+                //if (procedure.Operand1 == OperandType.Imm)
+                //{
+                //    procedures.Add(procedure with { Operand1 = OperandType.Imm8, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ1, ControlWord.BYTE), (ControlWord.IPCSIZ1, ControlWord.IPC1)) });
+                //    procedures.Add(procedure with { Operand1 = OperandType.Imm16, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ1, ControlWord.WORD), (ControlWord.IPCSIZ1, ControlWord.IPC2)) });
+                //    continue;
+                //}
+                //else
+                if (procedure.Operand1 == OperandType.DerefSizePgRegPlusSImm)
                 {
                     procedures.Add(procedure with { Operand1 = OperandType.DerefBytePgRegPlusSImm, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ1, ControlWord.BYTE), (ControlWord.IPCSIZ1, ControlWord.IPC1)) });
                     procedures.Add(procedure with { Operand1 = OperandType.DerefWordPgRegPlusSImm, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ1, ControlWord.WORD), (ControlWord.IPCSIZ1, ControlWord.IPC2)) });
@@ -257,12 +257,18 @@ namespace Emulator
                     procedures.Add(procedure with { Operand1 = OperandType.DerefWordPgReg, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ1, ControlWord.WORD), (ControlWord.IPCSIZ1, ControlWord.IPC2)) });
                     continue;
                 }
-                else if (procedure.Operand2 == OperandType.Imm)
+                else if (procedure.Operand1 == OperandType.DerefSizePgUImm)
                 {
-                    procedures.Add(procedure with { Operand2 = OperandType.Imm8, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ2, ControlWord.BYTE), (ControlWord.IPCSIZ2, ControlWord.IPC1)) });
-                    procedures.Add(procedure with { Operand2 = OperandType.Imm16, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ2, ControlWord.WORD), (ControlWord.IPCSIZ2, ControlWord.IPC2)) });
+                    procedures.Add(procedure with { Operand1 = OperandType.DerefBytePgUImm, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ1, ControlWord.BYTE), (ControlWord.IPCSIZ1, ControlWord.IPC1)) });
+                    procedures.Add(procedure with { Operand1 = OperandType.DerefWordPgUImm, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ1, ControlWord.WORD), (ControlWord.IPCSIZ1, ControlWord.IPC2)) });
                     continue;
                 }
+                //else if (procedure.Operand2 == OperandType.Imm)
+                //{
+                //    procedures.Add(procedure with { Operand2 = OperandType.Imm8, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ2, ControlWord.BYTE), (ControlWord.IPCSIZ2, ControlWord.IPC1)) });
+                //    procedures.Add(procedure with { Operand2 = OperandType.Imm16, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ2, ControlWord.WORD), (ControlWord.IPCSIZ2, ControlWord.IPC2)) });
+                //    continue;
+                //}
                 else if (procedure.Operand2 == OperandType.DerefSizePgRegPlusSImm)
                 {
                     procedures.Add(procedure with { Operand2 = OperandType.DerefBytePgRegPlusSImm, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ2, ControlWord.BYTE), (ControlWord.IPCSIZ2, ControlWord.IPC1)) });
@@ -273,6 +279,12 @@ namespace Emulator
                 {
                     procedures.Add(procedure with { Operand2 = OperandType.DerefBytePgReg, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ2, ControlWord.BYTE), (ControlWord.IPCSIZ2, ControlWord.IPC1)) });
                     procedures.Add(procedure with { Operand2 = OperandType.DerefWordPgReg, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ2, ControlWord.WORD), (ControlWord.IPCSIZ2, ControlWord.IPC2)) });
+                    continue;
+                }
+                else if (procedure.Operand2 == OperandType.DerefSizePgUImm)
+                {
+                    procedures.Add(procedure with { Operand2 = OperandType.DerefBytePgUImm, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ2, ControlWord.BYTE), (ControlWord.IPCSIZ2, ControlWord.IPC1)) });
+                    procedures.Add(procedure with { Operand2 = OperandType.DerefWordPgUImm, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ2, ControlWord.WORD), (ControlWord.IPCSIZ2, ControlWord.IPC2)) });
                     continue;
                 }
 
@@ -360,17 +372,18 @@ namespace Emulator
             return value switch
             {
                 "REG" => OperandType.Reg,
-                "IMM8" => OperandType.Imm8,
-                "IMM16" => OperandType.Imm16,
+                "IMM" => OperandType.Imm,
                 "BYTE[PG:REG+sIMM]" => OperandType.DerefBytePgRegPlusSImm,
                 "WORD[PG:REG+sIMM]" => OperandType.DerefWordPgRegPlusSImm,
                 "BYTE[PG:REG]" => OperandType.DerefBytePgReg,
                 "WORD[PG:REG]" => OperandType.DerefWordPgReg,
-                "[PG:uIMM16]" => OperandType.DerefPgUImm16,
+                "BYTE[PG:uIMM]" => OperandType.DerefBytePgUImm,
+                "WORD[PG:uIMM]" => OperandType.DerefWordPgUImm,
 
-                "IMM" => OperandType.Imm,
+                //"IMM" => OperandType.Imm,
                 "SZ[PG:REG+sIMM]" => OperandType.DerefSizePgRegPlusSImm,
                 "SZ[PG:REG]" => OperandType.DerefSizePgReg,
+                "SZ[PG:uIMM]" => OperandType.DerefSizePgUImm,
                 
                 _ => throw new AssemblyException(line, $"Illegal operand: {value}")
             };
@@ -447,18 +460,18 @@ namespace Emulator
     public enum OperandType
     {
         Reg,
-        Imm8,
-        Imm16,
+        Imm,
         DerefBytePgRegPlusSImm,
         DerefWordPgRegPlusSImm,
         DerefBytePgReg,
         DerefWordPgReg,
-        DerefPgUImm16,
+        DerefBytePgUImm,
+        DerefWordPgUImm,
 
         None,
-        Imm,
         DerefSizePgRegPlusSImm,
-        DerefSizePgReg
+        DerefSizePgReg,
+        DerefSizePgUImm
     }
 
     public sealed class MicrocodeRom
@@ -624,8 +637,8 @@ namespace Emulator
         IPC2        = 0b00000000_00000000_00000000_00000010,
         IPC3        = 0b00000000_00000000_00000000_00000011,
         IPC4        = 0b00000000_00000000_00000000_00000100,
-        IPCORW1     = 0b00000000_00000000_00000000_00000101,
-        IPCORW2     = 0b00000000_00000000_00000000_00000110,
+        IPCIMMW     = 0b00000000_00000000_00000000_00000101,
+        IPC_XX_1    = 0b00000000_00000000_00000000_00000110,
         JMP         = 0b00000000_00000000_00000000_00000111,
         MASK_IPC    = 0b00000000_00000000_00000000_00000111,
 
@@ -649,7 +662,7 @@ namespace Emulator
         bTCO        = 0b00000000_00000000_00000100_00000000,
         FO          = 0b00000000_00000000_00000101_00000000,
         Const2      = 0b00000000_00000000_00000110_00000000,
-        Const4      = 0b00000000_00000000_00000111_00000000,
+        ISO1        = 0b00000000_00000000_00000111_00000000,
         MASK_B      = 0b00000000_00000000_00000111_00000000,
         
         RSI1        = 0b00000000_00000000_00001000_00000000,
@@ -838,8 +851,8 @@ namespace Emulator
                 sb.Append("FO ");
             else if ((cw & ControlWord.MASK_B) == ControlWord.Const2)
                 sb.Append("2 ");
-            else if ((cw & ControlWord.MASK_B) == ControlWord.Const4)
-                sb.Append("4 ");
+            else if ((cw & ControlWord.MASK_B) == ControlWord.ISO1)
+                sb.Append("ISO1 ");
 
             if ((cw & ControlWord.MASK_RI) == ControlWord.RSI1)
                 sb.Append("RSI1 ");
@@ -896,10 +909,8 @@ namespace Emulator
                 sb.Append("IPC3");
             else if ((cw & ControlWord.MASK_IPC) == ControlWord.IPC4)
                 sb.Append("IPC4");
-            else if ((cw & ControlWord.MASK_IPC) == ControlWord.IPCORW1)
-                sb.Append("IPCORW1");
-            else if ((cw & ControlWord.MASK_IPC) == ControlWord.IPCORW2)
-                sb.Append("IPCORW2");
+            else if ((cw & ControlWord.MASK_IPC) == ControlWord.IPCIMMW)
+                sb.Append("IPCIMMW");
             else if ((cw & ControlWord.MASK_IPC) == ControlWord.JMP)
                 sb.Append("JMP");
 

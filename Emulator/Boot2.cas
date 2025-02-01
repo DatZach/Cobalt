@@ -26,6 +26,7 @@ Main:
 
 Wow:
     mov     r5, 0x1111
+    hlt
 
     mov     r6, 2
 

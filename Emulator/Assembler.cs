@@ -275,141 +275,60 @@
                     if (operandC != null) writer.Write(rd1);
                 }
 
-                if (operandA != null)
+                for (int k = 0; k < operandCount; ++k)
                 {
-                    resolveFixupA?.Invoke(stream.Position);
+                    Operand operand;
+                    if (k == 0)
+                    {
+                        resolveFixupA?.Invoke(stream.Position);
+                        operand = operandA!;
+                    }
+                    else if (k == 1)
+                    {
+                        resolveFixupB?.Invoke(stream.Position);
+                        operand = operandB!;
+                    }
+                    else if (k == 2)
+                    {
+                        resolveFixupC?.Invoke(stream.Position);
+                        operand = operandC!;
+                    }
+                    else
+                        throw new AssemblyException(i, $"Unable to encode operand {k + 1}");
 
                     ushort data;
                     int width;
 
-                    switch (operandA.Type)
+                    switch (operand.Type)
                     {
                         case OperandType.Reg:
                             data = 0;
                             width = 0; // Already encoded
                             break;
-                        case OperandType.Imm8:
-                            data = (ushort)operandA.Data1;
-                            width = 1;
-                            break;
-                        case OperandType.Imm16:
-                            data = (ushort)operandA.Data1;
+                        case OperandType.Imm:
+                            data = (ushort)operand.Data1;
                             width = 2;
                             break;
                         case OperandType.DerefBytePgRegPlusSImm:
                         case OperandType.DerefWordPgRegPlusSImm:
-                            data = (ushort)operandA.Data2;
-                            width = (operandA.Data1 & 0x0C) == 0x04 ? 1 : 2;
+                            data = (ushort)operand.Data2;
+                            width = 2;
                             break;
                         case OperandType.DerefBytePgReg:
                         case OperandType.DerefWordPgReg:
                             data = 0;
                             width = 0;
                             break;
-                        case OperandType.DerefPgUImm16:
-                            data = (ushort)operandA.Data2;
+                        case OperandType.DerefBytePgUImm:
+                            data = (ushort)operand.Data2;
+                            width = 2;
+                            break;
+                        case OperandType.DerefWordPgUImm:
+                            data = (ushort)operand.Data2;
                             width = 2;
                             break;
                         default:
-                            throw new AssemblyException(i, $"Unhandled operandA type {operandA.Type}");
-                    }
-
-                    if (width == 1)
-                        writer.Write((byte)data);
-                    else if (width == 2)
-                    {
-                        writer.Write((byte)(data >> 8));
-                        writer.Write((byte)(data & 0xFF));
-                    }
-                }
-
-                if (operandB != null)
-                {
-                    resolveFixupB?.Invoke(stream.Position);
-
-                    ushort data;
-                    int width;
-
-                    switch (operandB.Type)
-                    {
-                        case OperandType.Reg:
-                            data = 0;
-                            width = 0; // Already encoded
-                            break;
-                        case OperandType.Imm8:
-                            data = (ushort)operandB.Data1;
-                            width = 1;
-                            break;
-                        case OperandType.Imm16:
-                            data = (ushort)operandB.Data1;
-                            width = 2;
-                            break;
-                        case OperandType.DerefBytePgRegPlusSImm:
-                        case OperandType.DerefWordPgRegPlusSImm:
-                            data = (ushort)operandB.Data2;
-                            width = (operandB.Data1 & 0x0C) == 0x04 ? 1 : 2;
-                            break;
-                        case OperandType.DerefBytePgReg:
-                        case OperandType.DerefWordPgReg:
-                            data = 0;
-                            width = 0;
-                            break;
-                        case OperandType.DerefPgUImm16:
-                            writer.Write((byte)operandB.Data1);
-                            data = (ushort)operandB.Data2;
-                            width = 2;
-                            break;
-                        default:
-                            throw new AssemblyException(i, $"Unhandled operandB type {operandB.Type}");
-                    }
-
-                    if (width == 1)
-                        writer.Write((byte)data);
-                    else if (width == 2)
-                    {
-                        writer.Write((byte)(data >> 8));
-                        writer.Write((byte)(data & 0xFF));
-                    }
-                }
-
-                if (operandC != null)
-                {
-                    resolveFixupC?.Invoke(stream.Position);
-
-                    ushort data;
-                    int width;
-
-                    switch (operandC.Type)
-                    {
-                        case OperandType.Reg:
-                            data = 0;
-                            width = 0; // Already encoded
-                            break;
-                        case OperandType.Imm8:
-                            data = (ushort)operandC.Data1;
-                            width = 1;
-                            break;
-                        case OperandType.Imm16:
-                            data = (ushort)operandC.Data1;
-                            width = 2;
-                            break;
-                        case OperandType.DerefBytePgRegPlusSImm:
-                        case OperandType.DerefWordPgRegPlusSImm:
-                            data = (ushort)operandC.Data2;
-                            width = (operandC.Data1 & 0x0C) == 0x04 ? 1 : 2;
-                            break;
-                        case OperandType.DerefBytePgReg:
-                        case OperandType.DerefWordPgReg:
-                            data = 0;
-                            width = 0;
-                            break;
-                        case OperandType.DerefPgUImm16:
-                            writer.Write((byte)operandC.Data1);
-                            data = (ushort)operandC.Data2;
-                            width = 2;
-                            break;
-                        default:
-                            throw new AssemblyException(i, $"Unhandled operandC type {operandC.Type}");
+                            throw new AssemblyException(i, $"Unhandled operandA type {operand.Type}");
                     }
 
                     if (width == 1)
@@ -447,7 +366,7 @@
             if (operand.Length >= 2 && operand[0] == '\'')
             {
                 // TODO Escape codes '^n
-                return new Operand(OperandType.Imm8, (byte)operand[1]);
+                return new Operand(OperandType.Imm, (byte)operand[1]);
             }
 
             // REG
@@ -457,7 +376,7 @@
             // IMM
             if (TryParseImm(operand, operandIdx, out var data1Width, out data1))
             {
-                var imm1Type = data1Width == 1 ? OperandType.Imm8 : OperandType.Imm16;
+                var imm1Type = data1Width == 1 ? OperandType.Imm : OperandType.Imm;
                 return new Operand(imm1Type, data1);
             }
 
@@ -516,7 +435,7 @@
                     return new Operand(operandType, data1, data2);
                 }
 
-                // [PG:uIMM16]
+                // [PG:uIMM]
                 int colonIdx = operand.IndexOf(':');
                 var pagOperand = operand[1..colonIdx];
                 var immOperand = operand[(colonIdx + 1)..^1];
@@ -526,7 +445,7 @@
                     throw new AssemblyException(line, $"Illegal Addressing Mode for PG:REG '{operand}'");
 
                 if (TryParseImm(immOperand, operandIdx, out _, out data2))
-                    return new Operand(OperandType.DerefPgUImm16, data1, data2);
+                    return new Operand(OperandType.DerefBytePgUImm, data1, data2);
             }
 
             throw new AssemblyException(line, $"Illegal operand '{operand}'");
@@ -544,7 +463,7 @@
 
         private readonly static string[] PgRegs =
         {
-            "DG:R0", "DG:R1", "DG:R2", "DG:R3", "DG:R4", "DG:R5", "CG:R6", "TG:R7",
+            "DG:R0", "DG:R1", "DG:R2", "DG:R3", "DG:R4", "SG:R5", "CG:R6", "TG:R7",
             "SG:SP", "SG:R1", "0XE000:R5", "0XC000:R5", "0X8000:R6", "0X4000:R6", "0X2000:R7", "0X0000:R7"
         };
         private static void ParsePgRegIndex(string registerName, out short idx, out int width)
@@ -641,7 +560,7 @@
                 is OperandType.Reg
                 or OperandType.DerefBytePgRegPlusSImm or OperandType.DerefWordPgRegPlusSImm
                 or OperandType.DerefBytePgReg or OperandType.DerefWordPgReg
-                or OperandType.DerefPgUImm16;
+                or OperandType.DerefBytePgUImm;
         }
 
         private sealed record Operand(OperandType Type, short Data1 = 0, short Data2 = 0);
