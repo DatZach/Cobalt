@@ -19,13 +19,32 @@ Main:
     add     r1, r0, r7
 
     cmp     r1, 0x5555
+    mov.z   r3, 0x3333
     jmp.eq  Wow
     mov     r5, 0x2222
     hlt
 
 Wow:
     mov     r5, 0x1111
-    hlt
+
+    mov     r6, 2
+
+    cmp     r6, 3
+    jmp.ltu word[cg:r6+Tbl]
+    jmp     Default
+Tbl:dw  Case0, Case1, Case2
+Case0:
+    mov     r4, 0
+    jmp     a
+Case1:
+    mov     r4, 1
+    jmp     a
+Case2:
+    mov     r4, 2
+    jmp     a
+Default:
+    mov     r4, 3
+a:  hlt
 
 ExceptionHandler:
     hlt

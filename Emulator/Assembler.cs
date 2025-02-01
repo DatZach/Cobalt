@@ -80,7 +80,7 @@
                 if (j < line.Length && line[j] == '.')
                 {
                     var conditionalString = string.Join("", line.Skip(j + 1).TakeWhile(char.IsLetter)).ToUpperInvariant();
-                    conditional = Enum.Parse<Conditional>(conditionalString);
+                    conditional = Enum.Parse<Conditional>(conditionalString, true);
                     j += conditionalString.Length + 1;
                 }
                 else

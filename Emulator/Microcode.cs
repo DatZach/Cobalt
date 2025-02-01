@@ -362,15 +362,15 @@ namespace Emulator
                 "REG" => OperandType.Reg,
                 "IMM8" => OperandType.Imm8,
                 "IMM16" => OperandType.Imm16,
-                "BYTE[SEG:REG+sIMM]" => OperandType.DerefBytePgRegPlusSImm,
-                "WORD[SEG:REG+sIMM]" => OperandType.DerefWordPgRegPlusSImm,
-                "BYTE[SEG:REG]" => OperandType.DerefBytePgReg,
-                "WORD[SEG:REG]" => OperandType.DerefWordPgReg,
-                "[SEG:uIMM16]" => OperandType.DerefPgUImm16,
+                "BYTE[PG:REG+sIMM]" => OperandType.DerefBytePgRegPlusSImm,
+                "WORD[PG:REG+sIMM]" => OperandType.DerefWordPgRegPlusSImm,
+                "BYTE[PG:REG]" => OperandType.DerefBytePgReg,
+                "WORD[PG:REG]" => OperandType.DerefWordPgReg,
+                "[PG:uIMM16]" => OperandType.DerefPgUImm16,
 
                 "IMM" => OperandType.Imm,
-                "SIZE[SEG:REG+sIMM]" => OperandType.DerefSizePgRegPlusSImm,
-                "SIZE[SEG:REG]" => OperandType.DerefSizePgReg,
+                "SZ[PG:REG+sIMM]" => OperandType.DerefSizePgRegPlusSImm,
+                "SZ[PG:REG]" => OperandType.DerefSizePgReg,
                 
                 _ => throw new AssemblyException(line, $"Illegal operand: {value}")
             };
@@ -667,7 +667,7 @@ namespace Emulator
         BYTE        = 0b00000000_00000000_00000000_00000000,
         WORD        = 0b00000000_00000001_00000000_00000000,
         DWORD       = 0b00000000_00000010_00000000_00000000,
-        BUSW_XX_1   = 0b00000000_00000011_00000000_00000000,
+        ORW1        = 0b00000000_00000011_00000000_00000000,
         MASK_BUSW   = 0b00000000_00000011_00000000_00000000,
 
         ADD         = 0b00000000_00000100_00000000_00000000,

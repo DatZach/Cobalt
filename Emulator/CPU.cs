@@ -265,15 +265,15 @@ namespace Emulator
 
                 if (isRead) // Read
                 {
-                    //if ((cword & ControlWord.MASK_BUSW) == ControlWord.ORW1)
-                    //    dbusWord = SelectOperandWidth(instruction.Word) == 1
-                    //             ? machine.ReadByte(seg, abusWord)
-                    //             : machine.ReadWord(seg, abusWord);
+                    if ((cword & ControlWord.MASK_BUSW) == ControlWord.ORW1)
+                        dbusWord = SelectOperandWidth(instruction.Word) == 1
+                                 ? machine.ReadByte(seg, abusWord)
+                                 : machine.ReadWord(seg, abusWord);
                     //else if ((cword & ControlWord.MASK_BUSW) == ControlWord.ORW2)
                     //    dbusWord = SelectOperandWidth(operand.Word) == 1
                     //             ? machine.ReadByte(seg, abusWord)
                     //             : machine.ReadWord(seg, abusWord);
-                    if ((cword & ControlWord.MASK_BUSW) == ControlWord.DWORD) // 32-bit
+                    else if ((cword & ControlWord.MASK_BUSW) == ControlWord.DWORD) // 32-bit
                     {
                         dbusWord  = machine.ReadWord(seg, abusWord);
                         dbusWordHi = machine.ReadWord(seg, (ushort)(abusWord + 2));
@@ -285,13 +285,13 @@ namespace Emulator
                 }
                 else if (isWrite) // Write
                 {
-                    //if ((cword & ControlWord.MASK_BUSW) == ControlWord.ORW1)
-                    //{
-                    //    if (SelectOperandWidth(instruction.Word) == 1)
-                    //        machine.WriteByte(seg, abusWord, (byte)(dbusWord & 0xFF));
-                    //    else
-                    //        machine.WriteWord(seg, abusWord, dbusWord);
-                    //}
+                    if ((cword & ControlWord.MASK_BUSW) == ControlWord.ORW1)
+                    {
+                        if (SelectOperandWidth(instruction.Word) == 1)
+                            machine.WriteByte(seg, abusWord, (byte)(dbusWord & 0xFF));
+                        else
+                            machine.WriteWord(seg, abusWord, dbusWord);
+                    }
                     //else if ((cword & ControlWord.MASK_BUSW) == ControlWord.ORW2)
                     //{
                     //    if (SelectOperandWidth(operand.Word) == 1)
@@ -299,7 +299,7 @@ namespace Emulator
                     //    else
                     //        machine.WriteWord(seg, abusWord, dbusWord);
                     //}
-                    if ((cword & ControlWord.MASK_BUSW) == ControlWord.DWORD) // 32-bit
+                    else if ((cword & ControlWord.MASK_BUSW) == ControlWord.DWORD) // 32-bit
                     {
                         machine.WriteWord(seg, abusWord, dbusWord);
                         machine.WriteWord(seg, (ushort)(abusWord + 2), dbusWord);
@@ -480,7 +480,7 @@ namespace Emulator
             };
         }
 
-        private static int SelectOperandWidth(int index) => (index & 0xC) == 0x4 ? 1 : 2;
+        private static int SelectOperandWidth(int index) => 2;//(index & 0xC) == 0x4 ? 1 : 2;
 
         public CpuState CaptureState()
         {
