@@ -3,6 +3,8 @@
 ;	0xF000 - 0xFFFF
 ;
 
+; 98 Bytes "Uncompressed"
+
 format bin
 origin 0x0000
 

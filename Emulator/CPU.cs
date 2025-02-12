@@ -133,7 +133,7 @@ namespace Emulator
             if ((cword & ControlWord.MASK_IP) == ControlWord.IPO)
             {
                 if (isALUOperation)
-                    throw new InvalidOperationException();
+                    aluaWord = ip.Word;
                 else if (isAddr)
                     abusWord = ip.Word;
                 else
@@ -265,14 +265,10 @@ namespace Emulator
 
                 if (isRead) // Read
                 {
-                    if ((cword & ControlWord.MASK_BUSW) == ControlWord.ORW1)
-                        dbusWord = SelectOperandWidth(instruction.Word) == 1
+                    if ((cword & ControlWord.MASK_BUSW) == ControlWord.IMMW)
+                        dbusWord = ResolveImmWidth() == 1
                                  ? machine.ReadByte(seg, abusWord)
                                  : machine.ReadWord(seg, abusWord);
-                    //else if ((cword & ControlWord.MASK_BUSW) == ControlWord.ORW2)
-                    //    dbusWord = SelectOperandWidth(operand.Word) == 1
-                    //             ? machine.ReadByte(seg, abusWord)
-                    //             : machine.ReadWord(seg, abusWord);
                     else if ((cword & ControlWord.MASK_BUSW) == ControlWord.DWORD) // 32-bit
                     {
                         dbusWord  = machine.ReadWord(seg, abusWord);
@@ -285,20 +281,13 @@ namespace Emulator
                 }
                 else if (isWrite) // Write
                 {
-                    if ((cword & ControlWord.MASK_BUSW) == ControlWord.ORW1)
+                    if ((cword & ControlWord.MASK_BUSW) == ControlWord.IMMW)
                     {
-                        if (SelectOperandWidth(instruction.Word) == 1)
+                        if (ResolveImmWidth() == 1)
                             machine.WriteByte(seg, abusWord, (byte)(dbusWord & 0xFF));
                         else
                             machine.WriteWord(seg, abusWord, dbusWord);
                     }
-                    //else if ((cword & ControlWord.MASK_BUSW) == ControlWord.ORW2)
-                    //{
-                    //    if (SelectOperandWidth(operand.Word) == 1)
-                    //        machine.WriteByte(seg, abusWord, (byte)(dbusWord & 0xFF));
-                    //    else
-                    //        machine.WriteWord(seg, abusWord, dbusWord);
-                    //}
                     else if ((cword & ControlWord.MASK_BUSW) == ControlWord.DWORD) // 32-bit
                     {
                         machine.WriteWord(seg, abusWord, dbusWord);
@@ -368,9 +357,7 @@ namespace Emulator
             if (cmjword != 0)
             {
                 var mciAddr = (int)(cword & ControlWord.MASK_OPR) >> 18;
-                if (cmjword == ControlWord.JNF && flags.Word == 0)
-                    mci = mciAddr;
-                else if (cmjword == ControlWord.JC && (flags.Word & CF) == CF)
+                if (cmjword == ControlWord.JC && (flags.Word & CF) == CF)
                     mci = mciAddr;
                 else if (cmjword == ControlWord.LNZ)
                 {
@@ -400,10 +387,8 @@ namespace Emulator
                 ip.Word += 3;
             else if ((cword & ControlWord.MASK_IPC) == ControlWord.IPC4)
                 ip.Word += 4;
-            //else if ((cword & ControlWord.MASK_IPC) == ControlWord.IPCORW1)
-            //    ip.Word += (ushort)SelectOperandWidth(instruction.Word);
-            //else if ((cword & ControlWord.MASK_IPC) == ControlWord.IPCORW2)
-            //    ip.Word += (ushort)SelectOperandWidth(operand.Word);
+            else if ((cword & ControlWord.MASK_IPC) == ControlWord.IPCIMMW)
+                ip.Word += (ushort)ResolveImmWidth();
             else if ((cword & ControlWord.MASK_IPC) == ControlWord.JMP)
                 ip.Word = dbusWord;
         }
@@ -480,7 +465,7 @@ namespace Emulator
             };
         }
 
-        private static int SelectOperandWidth(int index) => 2;//(index & 0xC) == 0x4 ? 1 : 2;
+        private int ResolveImmWidth() => ResolveConditional() == Conditional.fIMM8 ? 1 : 2;
 
         public CpuState CaptureState()
         {

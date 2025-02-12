@@ -680,7 +680,7 @@ namespace Emulator
         BYTE        = 0b00000000_00000000_00000000_00000000,
         WORD        = 0b00000000_00000001_00000000_00000000,
         DWORD       = 0b00000000_00000010_00000000_00000000,
-        ORW1        = 0b00000000_00000011_00000000_00000000,
+        IMMW        = 0b00000000_00000011_00000000_00000000,
         MASK_BUSW   = 0b00000000_00000011_00000000_00000000,
 
         ADD         = 0b00000000_00000100_00000000_00000000,
@@ -713,9 +713,9 @@ namespace Emulator
         LI16        = 0b00000011_10000000_00000000_00000000,
         MASK_SEG    = 0b00000011_10000000_00000000_00000000,
         
-        JNF         = 0b00000100_00000000_00000000_00000000,
-        JC          = 0b00001000_00000000_00000000_00000000,
-        LNZ         = 0b00001100_00000000_00000000_00000000,
+        JC          = 0b00000100_00000000_00000000_00000000,
+        LNZ         = 0b00001000_00000000_00000000_00000000,
+        CMJ_XX_1    = 0b00001100_00000000_00000000_00000000,
         MASK_CMJ    = 0b00001100_00000000_00000000_00000000,
 
         Const1      = 0b00010000_00000000_00000000_00000000,
@@ -749,7 +749,7 @@ namespace Emulator
         COND_XX_1   = 0b1011,
         COND_XX_2   = 0b1100,
         COND_XX_3   = 0b1101,
-        fIMM3       = 0b1110,
+        fIMM8       = 0b1110,
         f32         = 0b1111,
 
         Z = EQ,
@@ -872,13 +872,7 @@ namespace Emulator
             if ((cw & ControlWord.Const1) == ControlWord.Const1)
                 sb.Append("1 ");
 
-            if ((cw & ControlWord.MASK_CMJ) == ControlWord.JNF)
-            {
-                sb.Append("JNF ");
-                sb.Append((int)(cw & ControlWord.MASK_OPR) >> 18);
-                sb.Append(' ');
-            }
-            else if ((cw & ControlWord.MASK_CMJ) == ControlWord.JC)
+            if ((cw & ControlWord.MASK_CMJ) == ControlWord.JC)
             {
                 sb.Append("JC ");
                 sb.Append((int)(cw & ControlWord.MASK_OPR) >> 18);

@@ -246,12 +246,20 @@
                 }
 
                 // ENCODE
-
+                if (conditional == Conditional.None
+                && (IsImmRefOperand(operandA) || IsImmRefOperand(operandB) || IsImmRefOperand(operandC)))
+                {
+                    conditional = Conditional.fIMM8;
+                    if (IsImmRefOperand(operandA) && !IsImm8(operandA))
+                        conditional = Conditional.None;
+                    if (IsImmRefOperand(operandB) && !IsImm8(operandB))
+                        conditional = Conditional.None;
+                    if (IsImmRefOperand(operandC) && !IsImm8(operandC))
+                        conditional = Conditional.None;
+                }
 
                 if (operandCount == 0)
-                {
                     writer.Write((byte)(((metadata.Index & 0x1C) << 2) | ((byte)conditional & 0x0F)));
-                }
                 else
                 {
                     var opcode = (ushort)(
@@ -296,9 +304,9 @@
                     else
                         throw new AssemblyException(i, $"Unable to encode operand {k + 1}");
 
-                    ushort data;
-                    int width;
+                    int width = conditional == Conditional.fIMM8 ? 1 : 2;
 
+                    ushort data;
                     switch (operand.Type)
                     {
                         case OperandType.Reg:
@@ -307,12 +315,10 @@
                             break;
                         case OperandType.Imm:
                             data = (ushort)operand.Data1;
-                            width = 2;
                             break;
                         case OperandType.DerefBytePgRegPlusSImm:
                         case OperandType.DerefWordPgRegPlusSImm:
                             data = (ushort)operand.Data2;
-                            width = 2;
                             break;
                         case OperandType.DerefBytePgReg:
                         case OperandType.DerefWordPgReg:
@@ -321,11 +327,9 @@
                             break;
                         case OperandType.DerefBytePgUImm:
                             data = (ushort)operand.Data2;
-                            width = 2;
                             break;
                         case OperandType.DerefWordPgUImm:
                             data = (ushort)operand.Data2;
-                            width = 2;
                             break;
                         default:
                             throw new AssemblyException(i, $"Unhandled operandA type {operand.Type}");
@@ -561,6 +565,23 @@
                 or OperandType.DerefBytePgRegPlusSImm or OperandType.DerefWordPgRegPlusSImm
                 or OperandType.DerefBytePgReg or OperandType.DerefWordPgReg
                 or OperandType.DerefBytePgUImm;
+        }
+
+        private static bool IsImmRefOperand(Operand? operand)
+        {
+            return operand != null && operand.Type
+                is OperandType.Imm
+                or OperandType.DerefBytePgRegPlusSImm or OperandType.DerefWordPgRegPlusSImm
+                or OperandType.DerefBytePgUImm;
+        }
+
+        private static bool IsImm8(Operand? operand)
+        {
+            if (operand == null || !IsImmRefOperand(operand))
+                return false;
+
+            var data = operand.Type == OperandType.Imm ? operand.Data1 : operand.Data2;
+            return (data & 0xFF00) == 0;
         }
 
         private sealed record Operand(OperandType Type, short Data1 = 0, short Data2 = 0);
