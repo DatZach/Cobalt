@@ -9,20 +9,22 @@ namespace Emulator
         private static readonly Register Constant1 = new() { Word = 1 };
         private static readonly Register Constant2 = new() { Word = 2 };
         private static readonly Register Constant4 = new() { Word = 4 };
-        private const ushort iINT_Hi = 0x0C;
+        
         private const byte OF = 0x08;
         private const byte ZF = 0x04;
         private const byte CF = 0x02;
         private const byte SF = 0x01;
 
+        private const byte PM = 0x02;
+        private const byte IE = 0x01;
+
         public bool IsHalted { get; private set; }
 
         private int mci;
         private bool latchINT;
-        private bool latchINTEN;
 
         private readonly Register r0, r1, r2, r3, r4, r5, r6, r7, sp, sg, cg, dg, tg;
-        private readonly Register ta, tb, tc, lc, ip, flags, instruction, operand;
+        private readonly Register ta, tb, tc, lc, ip, flags, features, instruction, operand;
         private readonly Machine machine;
         private readonly ControlWord[] microcode;
         private readonly Disassembler disassembler;
@@ -53,6 +55,7 @@ namespace Emulator
             lc = new Register();
             ip = new Register();
             flags = new Register();
+            features = new Register();
             instruction = new Register();
             operand = new Register();
             mci = 0;
@@ -71,7 +74,7 @@ namespace Emulator
                 ta.Word = 0;
             }
             
-            if (latchINT && latchINTEN)
+            if (latchINT && (features.Word & IE) != 0)
             {
                 instruction.Word = 0x0400;
                 mci = 1;
@@ -194,8 +197,6 @@ namespace Emulator
                     reg = tc;
                 else if (bcword == ControlWord.FO)
                     reg = flags;
-                else if (bcword == ControlWord.Const2)
-                    reg = Constant2;
                 else if (bcword == ControlWord.ISO1)
                     reg = operand;
                 else
@@ -207,12 +208,37 @@ namespace Emulator
                     dbusWord = reg.Word;
             }
 
-            if ((cword & ControlWord.Const1) == ControlWord.Const1)
+            var constword = cword & ControlWord.MASK_CONST;
+            if (constword == ControlWord.CGI)
             {
+                cg.Word = dbusWord;
+            }
+            else if (constword == ControlWord.PRVCHK)
+            {
+                // TODO Protect 0-page
+                if ((features.Word & PM) != 0)
+                {
+                    latchINT = true;
+                    features.Word |= IE;
+                    ta.Word = 4;
+                    mci = 0;
+                }
+            }
+            else if (constword != 0)
+            {
+                ushort data = constword switch
+                {
+                    ControlWord.Const1 => 1,
+                    ControlWord.Const2 => 2,
+                    ControlWord.Const3 => 3,
+                    ControlWord.Const4 => 4,
+                    _ => 0
+                };
+
                 if (isALUOperation)
-                    alubWord |= 1;
+                    alubWord = data;
                 else
-                    dbusWord |= 1;
+                    dbusWord = data;
             }
 
             // ALU
@@ -237,10 +263,6 @@ namespace Emulator
                     cfOverride = aluaWord & 1;
                     alucWord = (aluaWord >> alubWord) | ((flags.Word & CF) == CF ? 0x8000 : 0);
                 }
-                else if ((cword & ControlWord.MASK_ALU) == ControlWord.SHL)
-                    alucWord = aluaWord << alubWord;
-                else if ((cword & ControlWord.MASK_ALU) == ControlWord.SHR)
-                    alucWord = aluaWord >> alubWord;
 
                 // TODO Overflow Flag
                 zf = alucWord == 0 ? ZF : 0;
@@ -260,6 +282,7 @@ namespace Emulator
                     ControlWord.SG => sg.Word,
                     ControlWord.PAG1 => SelectPage((operand.Word & 0xF000) >> 12),
                     ControlWord.PAG2 => SelectPage((operand.Word & 0x0F00) >> 8),
+                    ControlWord.PAG3 => SelectPage((operand.Word & 0x00F0) >> 4),
                     _ => 0
                 };
 
@@ -318,10 +341,8 @@ namespace Emulator
                 else
                     flags.Word = dbusWord;
             }
-            else if ((cword & ControlWord.MASK_IR) == ControlWord.INTENLATCH)
-            {
-                latchINTEN = (dbusWord & 1) == 1;
-            }
+            else if ((cword & ControlWord.MASK_IR) == ControlWord.FFI)
+                features.Word = dbusWord;
 
             var ricword = cword & ControlWord.MASK_RI;
             if (ricword != 0)
@@ -357,7 +378,9 @@ namespace Emulator
             if (cmjword != 0)
             {
                 var mciAddr = (int)(cword & ControlWord.MASK_OPR) >> 18;
-                if (cmjword == ControlWord.JC && (flags.Word & CF) == CF)
+                if (cmjword == ControlWord.JNZ && (flags.Word & ZF) != ZF)
+                    mci = mciAddr;
+                else if (cmjword == ControlWord.JC && (flags.Word & CF) == CF)
                     mci = mciAddr;
                 else if (cmjword == ControlWord.LNZ)
                 {
@@ -372,7 +395,7 @@ namespace Emulator
             if ((cword & ControlWord.MASK_SEG) == ControlWord.INTLATCH)
                 latchINT = (dbusWord & 1) == 1;
 
-            if ((cword & ControlWord.TGC) == ControlWord.TGC)
+            if ((cword & ControlWord.MASK_IPC) == ControlWord.TGC)
                 flags.Word ^= CF; 
 
             // CLOCK
