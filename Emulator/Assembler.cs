@@ -1,10 +1,12 @@
-﻿namespace Emulator
+﻿using System.Runtime.Intrinsics.Arm;
+
+namespace Emulator
 {
     public sealed class Assembler
     {
         private readonly Dictionary<string, short> labels = new();
-        private readonly Dictionary<long, string> fixups = new();
-        private Action<long>? resolveFixup1, resolveFixup2, resolveFixup3;
+        private readonly Dictionary<long, (string, bool)> fixups = new();
+        private Action<long, Operand?>? resolveFixup1, resolveFixup2, resolveFixup3;
         private int origin;
 
         private readonly Dictionary<string, MicrocodeRom.Opcode> opcodeMetadata;
@@ -148,11 +150,27 @@
                 }
                 else if (opcodeString == "DW")
                 {
-                    var operandString = line[j..];
-                    TryParseImm(operandString, -1, out _, out var result);
-                    writer.Write((byte)(result >> 8));
-                    writer.Write((byte)(result & 0xFF));
+                    while (j < line.Length)
+                    {
+                        var l = line.IndexOf(',', j);
+                        if (l == -1) l = line.Length;
+
+                        var operandString = line.Substring(j, l - j).Trim().ToUpperInvariant();
+                        TryParseImm(operandString, 0, out _, out var result);
+                        resolveFixup1?.Invoke(stream.Position, null); // TODO Clean this up
+
+                        writer.Write((byte)(result >> 8));
+                        writer.Write((byte)(result & 0xFF));
+
+                        j = l + 1;
+                    }
+
                     continue;
+                }
+                else if (opcodeString == "JMP") // JMP SHORT, JMP LONG
+                {
+                    // HACK Kinda dumb, but I like the syntax
+                    opcodeString = line.IndexOf(',', j) == -1 ? "JMPS" : "JMPL";
                 }
                 
                 if (!opcodeMetadata.TryGetValue(opcodeString, out var metadata))
@@ -201,7 +219,7 @@
                     operandOrder = false;
 
                 Operand? operandA, operandB, operandC;
-                Action<long>? resolveFixupC, resolveFixupB, resolveFixupA;
+                Action<long, Operand?>? resolveFixupC, resolveFixupB, resolveFixupA;
                 if (operandCount == 3)
                 {
                     if (!operandOrder)
@@ -273,14 +291,20 @@
                     writer.Write((byte)(ii & 0xFF));
                 }
 
-                if (IsRegRefOperand(operandA) || IsRegRefOperand(operandB) || IsRegRefOperand(operandC))
+                var aIsRegRef = IsRegRefOperand(operandA);
+                var bIsRegRef = IsRegRefOperand(operandB);
+                var cIsRegRef = IsRegRefOperand(operandC);
+                if (aIsRegRef || bIsRegRef)
                 {
-                    byte rd0 = 0x00, rd1 = 0x00;
-                    if (operandA != null) rd0 |= (byte)((operandA.Data1 & 0x0F) << 4);
-                    if (operandB != null) rd0 |= (byte)(operandB.Data1 & 0x0F);
-                    if (operandA != null || operandB != null) writer.Write(rd0);
-                    if (operandC != null) rd1 |= (byte)((operandC.Data1 & 0x0F) << 4);
-                    if (operandC != null) writer.Write(rd1);
+                    byte rd0 = 0x00;
+                    if (aIsRegRef) rd0 |= (byte)((operandA!.Data1 & 0x0F) << 4);
+                    if (bIsRegRef) rd0 |= (byte)(operandB!.Data1 & 0x0F);
+                    writer.Write(rd0);
+                }
+                if (cIsRegRef)
+                {
+                    byte rd1 = (byte)((operandC!.Data1 & 0x0F) << 4);
+                    writer.Write(rd1);
                 }
 
                 for (int k = 0; k < operandCount; ++k)
@@ -288,17 +312,17 @@
                     Operand operand;
                     if (k == 0)
                     {
-                        resolveFixupA?.Invoke(stream.Position);
+                        resolveFixupA?.Invoke(stream.Position, operandA);
                         operand = operandA!;
                     }
                     else if (k == 1)
                     {
-                        resolveFixupB?.Invoke(stream.Position);
+                        resolveFixupB?.Invoke(stream.Position, operandB);
                         operand = operandB!;
                     }
                     else if (k == 2)
                     {
-                        resolveFixupC?.Invoke(stream.Position);
+                        resolveFixupC?.Invoke(stream.Position, operandC);
                         operand = operandC!;
                     }
                     else
@@ -347,8 +371,10 @@
 
             foreach (var kvp in fixups)
             {
-                if (!labels.TryGetValue(kvp.Value, out var address))
+                if (!labels.TryGetValue(kvp.Value.Item1, out var address))
                     throw new AssemblyException(-1, $"Reference to undeclared label '{kvp.Value}'");
+
+                address = (short)(kvp.Value.Item2 ? -address : address);
 
                 stream.Position = kvp.Key;
                 var imm16 = (ushort)(origin + address);
@@ -467,7 +493,7 @@
 
         private readonly static string[] PgRegs =
         {
-            "DG:R0", "DG:R1", "DG:R2", "DG:R3", "DG:R4", "SG:R5", "CG:R6", "TG:R7",
+            "DG:R0", "DG:R1", "DG:R2", "DG:R3", "DG:R4", "SG:R5", "TG:R6", "CG:R7",
             "SG:SP", "SG:R1", "0XE000:R5", "0XC000:R5", "0X8000:R6", "0X4000:R6", "0X2000:R7", "0X0000:R7"
         };
         private static void ParsePgRegIndex(string registerName, out short idx, out int width)
@@ -478,7 +504,7 @@
 
         private readonly static string[] ByteAddressingPages =
         {
-            "??", "??", "??", "??", "DG", "DG", "CG", "TG",
+            "??", "??", "??", "??", "DG", "DG", "TG", "CG",
             "??", "??", "??", "??", "??", "??", "??", "??"
         };
         private readonly static string[] WordAddressingPages =
@@ -531,7 +557,8 @@
                     return true;
                 }
 
-                void Fixup(long x) => fixups.Add(x, value);
+                // TODO Clean this up...
+                void Fixup(long x, Operand? operand) => fixups.Add(x, (value, IsNegImmRefOperand(operand)));
                 if (operandIdx == 0)
                     resolveFixup1 = Fixup;
                 else if (operandIdx == 1)
@@ -573,6 +600,12 @@
                 is OperandType.Imm
                 or OperandType.DerefBytePgRegPlusSImm or OperandType.DerefWordPgRegPlusSImm
                 or OperandType.DerefBytePgUImm;
+        }
+
+        private static bool IsNegImmRefOperand(Operand? operand)
+        {
+            return operand != null && operand.Type
+                is OperandType.DerefBytePgRegPlusSImm or OperandType.DerefWordPgRegPlusSImm;
         }
 
         private static bool IsImm8(Operand? operand)

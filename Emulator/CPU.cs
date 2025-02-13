@@ -102,9 +102,9 @@ namespace Emulator
             var isAddr = (cword & ControlWord.ADDR) != 0;
 
             // CLOCK RISING EDGE
+            var cc = ResolveConditional();
             if (mci == 1)
             {
-                var cc = ResolveConditional();
                 var isOF = (flags.Word & OF) == OF;
                 var isZF = (flags.Word & ZF) == ZF;
                 var isCF = (flags.Word & CF) == CF;
@@ -245,6 +245,8 @@ namespace Emulator
             int zf = 0, cf = 0, sf = 0;
             if (isALUOperation)
             {
+                var fl = cc == Conditional.SF ? 0 : flags.Word;
+
                 int alucWord = 0, cfOverride = 0;
                 if ((cword & ControlWord.MASK_ALU) == ControlWord.ADD)
                     alucWord = aluaWord + alubWord;
@@ -257,11 +259,11 @@ namespace Emulator
                 else if ((cword & ControlWord.MASK_ALU) == ControlWord.AND)
                     alucWord = aluaWord & alubWord;
                 else if ((cword & ControlWord.MASK_ALU) == ControlWord.ROL)
-                    alucWord = (aluaWord << alubWord) | ((flags.Word & CF) == CF ? 0x0001 : 0);
+                    alucWord = (aluaWord << alubWord) | ((fl & CF) == CF ? 0x0001 : 0);
                 else if ((cword & ControlWord.MASK_ALU) == ControlWord.ROR)
                 {
                     cfOverride = aluaWord & 1;
-                    alucWord = (aluaWord >> alubWord) | ((flags.Word & CF) == CF ? 0x8000 : 0);
+                    alucWord = (aluaWord >> alubWord) | ((fl & CF) == CF ? 0x8000 : 0);
                 }
 
                 // TODO Overflow Flag
@@ -334,7 +336,7 @@ namespace Emulator
                 operand.Word = (cword & ControlWord.MASK_BUSW) == ControlWord.DWORD ? dbusWordHi : operand.Word;
                 cword = ResolveControlWord();
             }
-            else if ((cword & ControlWord.MASK_IR) == ControlWord.FI)
+            else if ((cword & ControlWord.MASK_IR) == ControlWord.FI && cc != Conditional.SF)
             {
                 if (isALUOperation)
                     flags.Word = (ushort)(zf | cf | sf);
@@ -474,8 +476,8 @@ namespace Emulator
                 3  => dg.Word,
                 4  => dg.Word,
                 5  => sg.Word,
-                6  => cg.Word,
-                7  => tg.Word,
+                6  => tg.Word,
+                7  => cg.Word,
                 8  => sg.Word,
                 9  => sg.Word,
                 10 => 0xE000,

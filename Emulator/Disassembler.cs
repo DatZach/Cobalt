@@ -106,10 +106,17 @@
                         value = ParseRegisterName(regOperand);
                         break;
 
-                    case OperandType.Imm:
+                    case OperandType.Imm when conditional != Conditional.fIMM8:
                     {
                         value = $"0x{machine.ReadWord(segment, offset):X4}";
                         offset += 2;
+                        break;
+                    }
+
+                    case OperandType.Imm when conditional == Conditional.fIMM8:
+                    {
+                        value = $"0x{machine.ReadByte(segment, offset):X2}";
+                        offset += 1;
                         break;
                     }
 
@@ -183,14 +190,19 @@
                     (operandA, operandB, operandC) = (operandC, operandB, operandA);
             }
 
+            var opcodeName = metadata.Name;
+
+            if (metadata.Name is "JMPS" or "JMPL") opcodeName = "JMP";
+            if (conditional == Conditional.fIMM8) conditional = Conditional.None;
+            
             var conditionalName = conditional != Conditional.None ? $".{conditional.ToString().ToUpperInvariant()}" : "";
 
             return metadata.OperandCount switch
             {
-                0 => $"{metadata.Name}{conditionalName}",
-                1 => $"{metadata.Name}{conditionalName} {operandA}",
-                2 => $"{metadata.Name}{conditionalName} {operandA}, {operandB}",
-                3 => $"{metadata.Name}{conditionalName} {operandA}, {operandB}, {operandC}",
+                0 => $"{opcodeName}{conditionalName}",
+                1 => $"{opcodeName}{conditionalName} {operandA}",
+                2 => $"{opcodeName}{conditionalName} {operandA}, {operandB}",
+                3 => $"{opcodeName}{conditionalName} {operandA}, {operandB}, {operandC}",
                 _ => $"; UNK {iword:X4}"
             };
         }
@@ -207,7 +219,7 @@
 
         private readonly static string[] PgRegs =
         {
-            "DG:R0", "DG:R1", "DG:R2", "DG:R3", "DG:R4", "SG:R5", "CG:R6", "TG:R7",
+            "DG:R0", "DG:R1", "DG:R2", "DG:R3", "DG:R4", "SG:R5", "TG:R6", "CG:R7",
             "SG:SP", "SG:R1", "0xE000:R5", "0xC000:R5", "0x8000:R6", "0x4000:R6", "0x2000:R7", "0x0000:R7"
         };
         private static string ParsePgRegIndex(int idx)
@@ -217,7 +229,7 @@
 
         private readonly static string[] Pages =
         {
-            "DG", "DG", "DG", "DG", "DG", "DG", "CG", "TG",
+            "DG", "DG", "DG", "DG", "DG", "DG", "TG", "CG",
             "SG", "SG", "0xE000", "0xC000", "0x8000", "0x4000", "0x2000", "0x0000"
         };
         private static string ParsePageIndex(int idx)

@@ -320,7 +320,7 @@ namespace Emulator
                     operandCount = 0;
 
                 if (!opcodes.TryAdd(addr, procedure))
-                    throw new AssemblyException(i, $"Opcode '{procedure.Name} {procedure.Operand1} {procedure.Operand2}' is already declared without wildcard");
+                    throw new AssemblyException(procedure.DeclarationLine, $"Opcode '{procedure.Name} {procedure.Operand1} {procedure.Operand2}' is already declared");
 
                 if (!opcodesMetadata.TryGetValue(procedure.Name, out var opcodeMetadata))
                 {
@@ -744,7 +744,7 @@ namespace Emulator
         GTEs        = 0b1000,
         LTs         = 0b1001,
         LTEs        = 0b1010,
-        COND_XX_1   = 0b1011,
+        SF          = 0b1011,
         COND_XX_2   = 0b1100,
         COND_XX_3   = 0b1101,
         fIMM8       = 0b1110,

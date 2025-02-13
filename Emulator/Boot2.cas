@@ -29,12 +29,13 @@ Main:
 
 Wow:
     mov     r5, 0x1111
-    hlt
+    nop
 
-    mov     r6, 2
+    mov     r7, 2
 
-    cmp     r6, 3
-    jmp.ltu word[cg:r6+Tbl]
+    cmp     r7, 3
+    rol.sf  r7, r7, 1
+    jmp.ltu word[cg:r7+Tbl]
     jmp     Default
 Tbl:dw  Case0, Case1, Case2
 Case0:
@@ -52,6 +53,3 @@ a:  hlt
 
 ExceptionHandler:
     hlt
-
-IRQ:
-	hlt
