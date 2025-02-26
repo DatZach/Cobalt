@@ -3,7 +3,7 @@
 ;	0xF000 - 0xFFFF
 ;
 
-; 98 Bytes "Uncompressed"
+; 105 Bytes v4
 
 format bin
 origin 0x0000
@@ -12,8 +12,8 @@ nop								; Required for CPU boot
 
 Main:
     ;mov r3, 0xFFFF
-    ;mov [0x0000:0x0000], ExceptionHandler
-    ;sie 1
+    ;mov word[0x0000:0x0000], ExceptionHandler
+    ;sff 1
 
     mov     r0, 0x1234
     nop
@@ -34,7 +34,7 @@ Wow:
     mov     r7, 2
 
     cmp     r7, 3
-    rol.sf  r7, r7, 1
+    rcl.sf  r7, r7, 1
     jmp.ltu word[cg:r7+Tbl]
     jmp     Default
 Tbl:dw  Case0, Case1, Case2

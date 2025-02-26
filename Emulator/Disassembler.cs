@@ -106,19 +106,19 @@
                         value = ParseRegisterName(regOperand);
                         break;
 
-                    case OperandType.Imm when conditional != Conditional.fIMM8:
-                    {
-                        value = $"0x{machine.ReadWord(segment, offset):X4}";
-                        offset += 2;
-                        break;
-                    }
+                    //case OperandType.Imm when conditional != Conditional.fIMM8:
+                    //{
+                    //    value = $"0x{machine.ReadWord(segment, offset):X4}";
+                    //    offset += 2;
+                    //    break;
+                    //}
 
-                    case OperandType.Imm when conditional == Conditional.fIMM8:
-                    {
-                        value = $"0x{machine.ReadByte(segment, offset):X2}";
-                        offset += 1;
-                        break;
-                    }
+                    //case OperandType.Imm when conditional == Conditional.fIMM8:
+                    //{
+                    //    value = $"0x{machine.ReadByte(segment, offset):X2}";
+                    //    offset += 1;
+                    //    break;
+                    //}
 
                     case OperandType.DerefWordPgReg:
                     case OperandType.DerefBytePgReg:
@@ -193,7 +193,6 @@
             var opcodeName = metadata.Name;
 
             if (metadata.Name is "JMPS" or "JMPL") opcodeName = "JMP";
-            if (conditional == Conditional.fIMM8) conditional = Conditional.None;
             
             var conditionalName = conditional != Conditional.None ? $".{conditional.ToString().ToUpperInvariant()}" : "";
 

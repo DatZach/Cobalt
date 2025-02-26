@@ -50,51 +50,27 @@ namespace Emulator
                     }
 
                     // OPCODE DECLARATION
-                    var operandCount = Convert.ToInt32(parts[0], 10);
-                    var opcodeIndex = Convert.ToInt32(parts[1], 2) & 0x1F;
-                    var opcodeName = parts[2].ToUpperInvariant();
-                    var operandOrder = false;
-                    var operand1 = OperandType.None;
-                    var operand2 = OperandType.None;
-                    var operand3 = OperandType.None;
+                    var opcodeIndex = Convert.ToInt32(parts[0], 2) & 0x1F;
+                    var opcodeName = parts[1].ToUpperInvariant();
+                    var operandCount = parts.Length - 2;
+                    var operands = new List<OperandType>();
 
-                    if (operandCount == 0)
+                    for (int j = 0; j < operandCount; ++j)
                     {
-                        opcodeIndex <<= 2;
+                        var operand = ParseOperand(parts[j + 2], i);
+                        operands.Add(operand);
                     }
-                    else if (operandCount == 1)
-                    {
-                        opcodeIndex |= 0x20;
-                        operand1 = ParseOperand(parts[3], i);
-                    }
-                    else if (operandCount == 2)
-                    {
-                        opcodeIndex |= 0x20;
-                        operand1 = ParseOperand(parts[3], i);
-                        operand2 = ParseOperand(parts[4], i);
-                    }
-                    else if (operandCount == 3)
-                    {
-                        opcodeIndex |= 0x20;
-                        operand1 = ParseOperand(parts[3], i);
-                        operand2 = ParseOperand(parts[4], i);
-                        operand3 = ParseOperand(parts[5], i);
-
-                        if (operand1 != operand2)
-                            throw new AssemblyException(i, $"Illegal operand combination: {operand1}, {operand2}, {operand3}");
-                    }
-                    else
-                        throw new AssemblyException(i, $"Illegal operand count {operandCount}");
+                    
+                    // TODO Validate
+                    //if (operand1 != operand2)
+                    //    throw new AssemblyException(i, $"Illegal operand combination: {operand1}, {operand2}, {operand3}");
 
                     current = new Procedure
                     {
                         DeclarationLine = i,
                         Name = opcodeName,
                         Index = opcodeIndex,
-                        OperandOrder = operandOrder,
-                        Operand1 = operand1,
-                        Operand2 = operand2,
-                        Operand3 = operand3
+                        Operands = operands
                     };
                     
                     procedures.Add(current);
@@ -197,10 +173,11 @@ namespace Emulator
                                     "0" => ControlWord.None,
                                     "1" => ControlWord.Const1,
                                     "2" => ControlWord.Const2,
-                                    //"4" => ControlWord.Const4,
+                                    "3" => ControlWord.Const3,
+                                    "4" => ControlWord.Const4,
                                     "RSO1" => IsAluOp(parts, p + 1) ? ControlWord.aRSO1 : ControlWord.bRSO1,
                                     "RSO2" => IsAluOp(parts, p + 1) ? ControlWord.aRSO2 : ControlWord.bRSO2,
-                                    "RSO3" => IsAluOp(parts, p + 1) ? ControlWord.aRSO3 : ControlWord.aRSO3,
+                                    "RSO3" => IsAluOp(parts, p + 1) ? ControlWord.aRSO3 : throw new AssemblyException(i, "RSO3 is LHS-only"),
                                     "TBO" => IsAluOp(parts, p + 1) ? ControlWord.aTBO : ControlWord.bTBO,
                                     "TCO" => IsAluOp(parts, p + 1) ? ControlWord.aTCO : ControlWord.bTCO,
                                     _ => Enum.Parse<ControlWord>(subPart)
@@ -237,90 +214,22 @@ namespace Emulator
             for (var i = 0; i < procedures.Count; ++i)
             {
                 var procedure = procedures[i];
+                var size = 0; // TODO
+                //procedure.Code = ConcretizeMacroCode(procedure, (ControlWord.IPCIW, (ControlWord)(ControlWord.IPC1 + size));
 
-                //if (procedure.Operand1 == OperandType.Imm)
-                //{
-                //    procedures.Add(procedure with { Operand1 = OperandType.Imm8, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ1, ControlWord.BYTE), (ControlWord.IPCSIZ1, ControlWord.IPC1)) });
-                //    procedures.Add(procedure with { Operand1 = OperandType.Imm16, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ1, ControlWord.WORD), (ControlWord.IPCSIZ1, ControlWord.IPC2)) });
-                //    continue;
-                //}
-                //else
-                if (procedure.Operand1 == OperandType.DerefSizePgRegPlusSImm)
-                {
-                    procedures.Add(procedure with { Operand1 = OperandType.DerefBytePgRegPlusSImm, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ1, ControlWord.BYTE), (ControlWord.IPCSIZ1, ControlWord.IPC1)) });
-                    procedures.Add(procedure with { Operand1 = OperandType.DerefWordPgRegPlusSImm, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ1, ControlWord.WORD), (ControlWord.IPCSIZ1, ControlWord.IPC2)) });
-                    continue;
-                }
-                else if (procedure.Operand1 == OperandType.DerefSizePgReg)
-                {
-                    procedures.Add(procedure with { Operand1 = OperandType.DerefBytePgReg, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ1, ControlWord.BYTE), (ControlWord.IPCSIZ1, ControlWord.IPC1)) });
-                    procedures.Add(procedure with { Operand1 = OperandType.DerefWordPgReg, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ1, ControlWord.WORD), (ControlWord.IPCSIZ1, ControlWord.IPC2)) });
-                    continue;
-                }
-                else if (procedure.Operand1 == OperandType.DerefSizePgUImm)
-                {
-                    procedures.Add(procedure with { Operand1 = OperandType.DerefBytePgUImm, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ1, ControlWord.BYTE), (ControlWord.IPCSIZ1, ControlWord.IPC1)) });
-                    procedures.Add(procedure with { Operand1 = OperandType.DerefWordPgUImm, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ1, ControlWord.WORD), (ControlWord.IPCSIZ1, ControlWord.IPC2)) });
-                    continue;
-                }
-                //else if (procedure.Operand2 == OperandType.Imm)
-                //{
-                //    procedures.Add(procedure with { Operand2 = OperandType.Imm8, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ2, ControlWord.BYTE), (ControlWord.IPCSIZ2, ControlWord.IPC1)) });
-                //    procedures.Add(procedure with { Operand2 = OperandType.Imm16, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ2, ControlWord.WORD), (ControlWord.IPCSIZ2, ControlWord.IPC2)) });
-                //    continue;
-                //}
-                else if (procedure.Operand2 == OperandType.DerefSizePgRegPlusSImm)
-                {
-                    procedures.Add(procedure with { Operand2 = OperandType.DerefBytePgRegPlusSImm, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ2, ControlWord.BYTE), (ControlWord.IPCSIZ2, ControlWord.IPC1)) });
-                    procedures.Add(procedure with { Operand2 = OperandType.DerefWordPgRegPlusSImm, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ2, ControlWord.WORD), (ControlWord.IPCSIZ2, ControlWord.IPC2)) });
-                    continue;
-                }
-                else if (procedure.Operand2 == OperandType.DerefSizePgReg)
-                {
-                    procedures.Add(procedure with { Operand2 = OperandType.DerefBytePgReg, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ2, ControlWord.BYTE), (ControlWord.IPCSIZ2, ControlWord.IPC1)) });
-                    procedures.Add(procedure with { Operand2 = OperandType.DerefWordPgReg, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ2, ControlWord.WORD), (ControlWord.IPCSIZ2, ControlWord.IPC2)) });
-                    continue;
-                }
-                else if (procedure.Operand2 == OperandType.DerefSizePgUImm)
-                {
-                    procedures.Add(procedure with { Operand2 = OperandType.DerefBytePgUImm, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ2, ControlWord.BYTE), (ControlWord.IPCSIZ2, ControlWord.IPC1)) });
-                    procedures.Add(procedure with { Operand2 = OperandType.DerefWordPgUImm, Code = ConcretizeMacroCode(procedure, (ControlWord.SIZ2, ControlWord.WORD), (ControlWord.IPCSIZ2, ControlWord.IPC2)) });
-                    continue;
-                }
+                int operandCount = procedure.Operands.Count;
 
-                // TODO Validate that SIZ* macro controlwords are not present after processing
-
-                var addr = procedure.Index << 9;
-                int operandCount;
-
-                if (procedure.Operand1 != OperandType.None
-                &&  procedure.Operand2 == OperandType.None
-                &&  procedure.Operand3 == OperandType.None)
-                {
-                    addr |= ((int)procedure.Operand1 & 0x07) << 6;
-                    operandCount = 1;
-                }
-                else if (procedure.Operand1 != OperandType.None
-                     &&  procedure.Operand2 != OperandType.None
-                     &&  procedure.Operand3 == OperandType.None)
-                {
-                    addr |= ((int)procedure.Operand1 & 0x07) << 6;
-                    addr |= ((int)procedure.Operand2 & 0x07) << 3;
-                    operandCount = 2;
-                }
-                else if (procedure.Operand1 != OperandType.None
-                     &&  procedure.Operand2 != OperandType.None
-                     &&  procedure.Operand3 != OperandType.None)
-                {
-                    addr |= ((int)procedure.Operand1 & 0x07) << 6;
-                    addr |= ((int)procedure.Operand3 & 0x07) << 3;
-                    operandCount = 3;
-                }
+                int addr = 0;
+                if (operandCount == 0)
+                    addr |= (procedure.Index & 0x07) << 7;
                 else
-                    operandCount = 0;
-
+                {
+                    addr |= (procedure.Index & 0x1F) << 10;
+                    addr |= ResolveOperandIndex(procedure.Operands, false) << 4;
+                }
+                
                 if (!opcodes.TryAdd(addr, procedure))
-                    throw new AssemblyException(procedure.DeclarationLine, $"Opcode '{procedure.Name} {procedure.Operand1} {procedure.Operand2}' is already declared");
+                    throw new AssemblyException(procedure.DeclarationLine, $"Opcode '{procedure.Name} {string.Join(" ", procedure.Operands)}' is already declared");
 
                 if (!opcodesMetadata.TryGetValue(procedure.Name, out var opcodeMetadata))
                 {
@@ -329,16 +238,12 @@ namespace Emulator
                         Name = procedure.Name,
                         Index = procedure.Index,
                         OperandCount =  operandCount,
-                        OperandCombinations = new List<MicrocodeRom.Opcode.OperandCombination>()
+                        OperandCombinations = new List<IReadOnlyList<OperandType>>()
                     };
                     opcodesMetadata.Add(procedure.Name, opcodeMetadata);
                 }
 
-                opcodeMetadata.OperandCombinations.Add(new MicrocodeRom.Opcode.OperandCombination(
-                    procedure.OperandOrder,
-                    procedure.Operand1,
-                    procedure.Operand3 == OperandType.None ? procedure.Operand2 : procedure.Operand3
-                ));
+                opcodeMetadata.OperandCombinations.Add(procedure.Operands);
             }
 
             // SERIALIZE OPCODES & MICROCODE
@@ -367,20 +272,23 @@ namespace Emulator
             };
         }
 
+        private static int ResolveOperandIndex(IReadOnlyList<OperandType> operands, bool hasConditional)
+        {
+            // TODO Error handling
+            return OperandIndices[string.Join(' ', operands)];
+        }
+
+        private static Dictionary<string, int> OperandIndices = new()
+        {
+            ["REG"] = 0b000000,
+        };
+
         private static OperandType ParseOperand(string value, int line)
         {
             return value switch
             {
                 "REG" => OperandType.Reg,
                 "IMM" => OperandType.Imm,
-                "BYTE[PG:REG+sIMM]" => OperandType.DerefBytePgRegPlusSImm,
-                "WORD[PG:REG+sIMM]" => OperandType.DerefWordPgRegPlusSImm,
-                "BYTE[PG:REG]" => OperandType.DerefBytePgReg,
-                "WORD[PG:REG]" => OperandType.DerefWordPgReg,
-                "BYTE[PG:uIMM]" => OperandType.DerefBytePgUImm,
-                "WORD[PG:uIMM]" => OperandType.DerefWordPgUImm,
-
-                //"IMM" => OperandType.Imm,
                 "SZ[PG:REG+sIMM]" => OperandType.DerefSizePgRegPlusSImm,
                 "SZ[PG:REG]" => OperandType.DerefSizePgReg,
                 "SZ[PG:uIMM]" => OperandType.DerefSizePgUImm,
@@ -423,7 +331,7 @@ namespace Emulator
 
         private sealed record Procedure
         {
-            public const int MaxMicrocodeCount = 8;
+            public const int MaxMicrocodeCount = 16;
 
             public int DeclarationLine { get; init; }
 
@@ -431,15 +339,9 @@ namespace Emulator
 
             public int Index { get; init; }
 
-            public bool OperandOrder { get; init; } // AB = false; BA = true
+            public IReadOnlyList<OperandType> Operands { get; init; }
 
-            public OperandType Operand1 { get; init; }
-
-            public OperandType Operand2 { get; init;  }
-
-            public OperandType Operand3 { get; init;  }
-
-            public ControlWord[] Code { get; init; }
+            public ControlWord[] Code { get; }
 
             public int CodeLength { get; set; }
 
@@ -459,16 +361,9 @@ namespace Emulator
 
     public enum OperandType
     {
+        None,
         Reg,
         Imm,
-        DerefBytePgRegPlusSImm,
-        DerefWordPgRegPlusSImm,
-        DerefBytePgReg,
-        DerefWordPgReg,
-        DerefBytePgUImm,
-        DerefWordPgUImm,
-
-        None,
         DerefSizePgRegPlusSImm,
         DerefSizePgReg,
         DerefSizePgUImm
@@ -529,11 +424,12 @@ namespace Emulator
                 writer.Write((byte)opcodeMetadata.OperandCombinations.Count);
                 foreach (var operandCombination in opcodeMetadata.OperandCombinations)
                 {
-                    writer.Write((byte)(
-                          (operandCombination.RTL ? 0x80 : 0)
-                        | (((int)operandCombination.A & 0x07) << 4)
-                        | ((int)operandCombination.B & 0x07)
-                    ));
+                    // TODO
+                    //writer.Write((byte)(
+                    //      (operandCombination.RTL ? 0x80 : 0)
+                    //    | (((int)operandCombination.A & 0x07) << 4)
+                    //    | ((int)operandCombination.B & 0x07)
+                    //));
                 }
             }
 
@@ -584,15 +480,17 @@ namespace Emulator
                 var opcodeIndex = reader.ReadByte();
                 var operandCount = reader.ReadByte();
                 var combinationCount = reader.ReadByte();
-                var operandCombinations = new List<Opcode.OperandCombination>();
+                var operandCombinations = new List<IReadOnlyList<OperandType>>();
                 for (int j = 0; j < combinationCount; ++j)
                 {
                     var value = reader.ReadByte();
-                    operandCombinations[j] = new Opcode.OperandCombination(
-                        (value & 0x80) == 0x80,
-                        (OperandType)((value & 0x70) >> 4),
-                        (OperandType)(value & 0x07)
-                    );
+                    // operandCombinations[j] = ResolveOperandIndex()
+                    // TODO
+                    //operandCombinations[j] = new Opcode.OperandCombination(
+                    //    (value & 0x80) == 0x80,
+                    //    (OperandType)((value & 0x70) >> 4),
+                    //    (OperandType)(value & 0x07)
+                    //);
                 }
 
                 opcodeMetadata[opcodeName] = new Opcode
@@ -622,9 +520,7 @@ namespace Emulator
             
             public int OperandCount { get; init; }
 
-            public List<OperandCombination> OperandCombinations { get; init; }
-
-            public sealed record OperandCombination(bool RTL, OperandType A, OperandType B);
+            public List<IReadOnlyList<OperandType>> OperandCombinations { get; init; }
         }
     }
 
@@ -637,8 +533,8 @@ namespace Emulator
         IPC2        = 0b00000000_00000000_00000000_00000010,
         IPC3        = 0b00000000_00000000_00000000_00000011,
         IPC4        = 0b00000000_00000000_00000000_00000100,
-        IPCIMMW     = 0b00000000_00000000_00000000_00000101,
-        TGC         = 0b00000000_00000000_00000000_00000110,
+        IPC5        = 0b00000000_00000000_00000000_00000101,
+        IPC6        = 0b00000000_00000000_00000000_00000110,
         JMP         = 0b00000000_00000000_00000000_00000111,
         MASK_IPC    = 0b00000000_00000000_00000000_00000111,
 
@@ -656,13 +552,13 @@ namespace Emulator
         SPO         = 0b00000000_00000000_00000000_11100000,
         MASK_A      = 0b00000000_00000000_00000000_11100000,
 
-        bRSO2       = 0b00000000_00000000_00000001_00000000,
-        bRSO1       = 0b00000000_00000000_00000010_00000000,
+        bRSO1       = 0b00000000_00000000_00000001_00000000,
+        bRSO2       = 0b00000000_00000000_00000010_00000000,
         bTBO        = 0b00000000_00000000_00000011_00000000,
         bTCO        = 0b00000000_00000000_00000100_00000000,
         FO          = 0b00000000_00000000_00000101_00000000,
-        B_XX_1      = 0b00000000_00000000_00000110_00000000,
-        ISO1        = 0b00000000_00000000_00000111_00000000,
+        ISO1        = 0b00000000_00000000_00000110_00000000,
+        ISO2        = 0b00000000_00000000_00000111_00000000,
         MASK_B      = 0b00000000_00000000_00000111_00000000,
         
         RSI1        = 0b00000000_00000000_00001000_00000000,
@@ -679,8 +575,8 @@ namespace Emulator
 
         BYTE        = 0b00000000_00000000_00000000_00000000,
         WORD        = 0b00000000_00000001_00000000_00000000,
-        DWORD       = 0b00000000_00000010_00000000_00000000,
-        IMMW        = 0b00000000_00000011_00000000_00000000,
+        XX          = 0b00000000_00000010_00000000_00000000,
+        IWORD       = 0b00000000_00000011_00000000_00000000,
         MASK_BUSW   = 0b00000000_00000011_00000000_00000000,
 
         ADD         = 0b00000000_00000100_00000000_00000000,
@@ -715,7 +611,7 @@ namespace Emulator
         Const3      = 0b00011000_00000000_00000000_00000000,
         Const4      = 0b00100000_00000000_00000000_00000000,
         CGI         = 0b00101000_00000000_00000000_00000000,
-        CONST_XX_1  = 0b00110000_00000000_00000000_00000000,
+        TGC         = 0b00110000_00000000_00000000_00000000,
         PRVCHK      = 0b00111000_00000000_00000000_00000000,
         MASK_CONST  = 0b00111000_00000000_00000000_00000000,
 
@@ -727,28 +623,28 @@ namespace Emulator
         // NOTE Not real control words
         SIZ1        = 0b00000001_00000000_00000000_00000000_00000000,
         SIZ2        = 0b00000010_00000000_00000000_00000000_00000000,
-        IPCSIZ1     = 0b00000100_00000000_00000000_00000000_00000000,
-        IPCSIZ2     = 0b00001000_00000000_00000000_00000000_00000000,
+        SIZ3        = 0b00000100_00000000_00000000_00000000_00000000,
+        IPCIW       = 0b00001000_00000000_00000000_00000000_00000000
     }
 
     public enum Conditional : byte
     {
-        None        = 0b0000,
-        EQ          = 0b0001,
-        NEQ         = 0b0010,
-        GTu         = 0b0011,
-        GTEu        = 0b0100,
-        LTu         = 0b0101,
-        LTEu        = 0b0110,
-        GTs         = 0b0111,
-        GTEs        = 0b1000,
-        LTs         = 0b1001,
-        LTEs        = 0b1010,
-        SF          = 0b1011,
-        COND_XX_2   = 0b1100,
-        COND_XX_3   = 0b1101,
-        fIMM8       = 0b1110,
-        f32         = 0b1111,
+        Operandless = 0b0000,
+        None        = 0b0001,
+        EQ          = 0b0010,
+        NEQ         = 0b0011,
+        GTu         = 0b0100,
+        GTEu        = 0b0101,
+        LTu         = 0b0110,
+        LTEu        = 0b0111,
+        GTs         = 0b1000,
+        GTEs        = 0b1001,
+        LTs         = 0b1010,
+        LTEs        = 0b1011,
+        SF          = 0b1100,
+        SX          = 0b1101,
+        XX_0        = 0b1110,
+        XX_1        = 0b1111,
 
         Z = EQ,
         NZ = NEQ
@@ -772,10 +668,8 @@ namespace Emulator
                     sb.Append("BYTE ");
                 else if ((cw & ControlWord.MASK_BUSW) == ControlWord.WORD)
                     sb.Append("WORD ");
-                else if ((cw & ControlWord.MASK_BUSW) == ControlWord.DWORD)
-                    sb.Append("DWORD ");
-                else if ((cw & ControlWord.MASK_BUSW) == ControlWord.IMMW)
-                    sb.Append("IMMW ");
+                else if ((cw & ControlWord.MASK_BUSW) == ControlWord.IWORD)
+                    sb.Append("IWORD ");
             }
 
             if ((cw & ControlWord.MASK_SEG) == ControlWord.CG)
@@ -837,10 +731,10 @@ namespace Emulator
                     sb.Append("ROR ");
             }
 
-            if ((cw & ControlWord.MASK_B) == ControlWord.bRSO2)
-                sb.Append("RSO2 ");
-            else if ((cw & ControlWord.MASK_B) == ControlWord.bRSO1)
+            if ((cw & ControlWord.MASK_B) == ControlWord.bRSO1)
                 sb.Append("RSO1 ");
+            else if ((cw & ControlWord.MASK_B) == ControlWord.bRSO2)
+                sb.Append("RSO2 ");
             else if ((cw & ControlWord.MASK_B) == ControlWord.bTBO)
                 sb.Append("TBO ");
             else if ((cw & ControlWord.MASK_B) == ControlWord.bTCO)
@@ -849,6 +743,8 @@ namespace Emulator
                 sb.Append("FO ");
             else if ((cw & ControlWord.MASK_B) == ControlWord.ISO1)
                 sb.Append("ISO1 ");
+            else if ((cw & ControlWord.MASK_B) == ControlWord.ISO2)
+                sb.Append("ISO2 ");
 
             if ((cw & ControlWord.MASK_RI) == ControlWord.RSI1)
                 sb.Append("RSI1 ");
@@ -875,6 +771,8 @@ namespace Emulator
                 sb.Append("4 ");
             else if ((cw & ControlWord.MASK_CONST) == ControlWord.CGI)
                 sb.Append("CGI ");
+            else if ((cw & ControlWord.MASK_CONST) == ControlWord.TGC)
+                sb.Append("TGC ");
             else if ((cw & ControlWord.MASK_CONST) == ControlWord.PRVCHK)
                 sb.Append("PRVCHK ");
 
@@ -912,10 +810,10 @@ namespace Emulator
                 sb.Append("IPC3");
             else if ((cw & ControlWord.MASK_IPC) == ControlWord.IPC4)
                 sb.Append("IPC4");
-            else if ((cw & ControlWord.MASK_IPC) == ControlWord.IPCIMMW)
-                sb.Append("IPCIMMW");
-            else if ((cw & ControlWord.MASK_IPC) == ControlWord.TGC)
-                sb.Append("TGC");
+            else if ((cw & ControlWord.MASK_IPC) == ControlWord.IPC5)
+                sb.Append("IPC5");
+            else if ((cw & ControlWord.MASK_IPC) == ControlWord.IPC6)
+                sb.Append("IPC6");
             else if ((cw & ControlWord.MASK_IPC) == ControlWord.JMP)
                 sb.Append("JMP");
 

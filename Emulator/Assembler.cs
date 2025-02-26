@@ -267,7 +267,7 @@ namespace Emulator
                 if (conditional == Conditional.None
                 && (IsImmRefOperand(operandA) || IsImmRefOperand(operandB) || IsImmRefOperand(operandC)))
                 {
-                    conditional = Conditional.fIMM8;
+                    //conditional = Conditional.fIMM8;
                     if (IsImmRefOperand(operandA) && !IsImm8(operandA))
                         conditional = Conditional.None;
                     if (IsImmRefOperand(operandB) && !IsImm8(operandB))
@@ -328,7 +328,7 @@ namespace Emulator
                     else
                         throw new AssemblyException(i, $"Unable to encode operand {k + 1}");
 
-                    int width = conditional == Conditional.fIMM8 ? 1 : 2;
+                    int width = 1;//conditional == Conditional.fIMM8 ? 1 : 2;
 
                     ushort data;
                     switch (operand.Type)
