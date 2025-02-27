@@ -589,23 +589,23 @@ namespace Emulator
         {
             return operand != null && operand.Type
                 is OperandType.Reg
-                or OperandType.DerefBytePgRegPlusSImm or OperandType.DerefWordPgRegPlusSImm
-                or OperandType.DerefBytePgReg or OperandType.DerefWordPgReg
-                or OperandType.DerefBytePgUImm;
+                or OperandType.DerefSizePgRegPlusSImm
+                or OperandType.DerefSizePgReg
+                or OperandType.DerefSizePgUImm;
         }
 
         private static bool IsImmRefOperand(Operand? operand)
         {
             return operand != null && operand.Type
                 is OperandType.Imm
-                or OperandType.DerefBytePgRegPlusSImm or OperandType.DerefWordPgRegPlusSImm
-                or OperandType.DerefBytePgUImm;
+                or OperandType.DerefSizePgRegPlusSImm
+                or OperandType.DerefSizePgUImm;
         }
 
         private static bool IsNegImmRefOperand(Operand? operand)
         {
             return operand != null && operand.Type
-                is OperandType.DerefBytePgRegPlusSImm or OperandType.DerefWordPgRegPlusSImm;
+                is OperandType.DerefSizePgRegPlusSImm;
         }
 
         private static bool IsImm8(Operand? operand)

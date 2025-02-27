@@ -213,37 +213,49 @@ namespace Emulator
             var opcodesMetadata = new Dictionary<string, MicrocodeRom.Opcode>();
             for (var i = 0; i < procedures.Count; ++i)
             {
-                var procedure = procedures[i];
-                var size = 0; // TODO
-                //procedure.Code = ConcretizeMacroCode(procedure, (ControlWord.IPCIW, (ControlWord)(ControlWord.IPC1 + size));
-
-                int operandCount = procedure.Operands.Count;
-
-                int addr = 0;
-                if (operandCount == 0)
-                    addr |= (procedure.Index & 0x07) << 7;
-                else
-                {
-                    addr |= (procedure.Index & 0x1F) << 10;
-                    addr |= ResolveOperandIndex(procedure.Operands, false) << 4;
-                }
+                var rootProcedure = procedures[i];
                 
-                if (!opcodes.TryAdd(addr, procedure))
-                    throw new AssemblyException(procedure.DeclarationLine, $"Opcode '{procedure.Name} {string.Join(" ", procedure.Operands)}' is already declared");
+                int operandCount = rootProcedure.Operands.Count;
+                var operandIndices = ResolveOperandIndices(rootProcedure.Operands);
+                var jCount = operandIndices?.Count ?? 1;
 
-                if (!opcodesMetadata.TryGetValue(procedure.Name, out var opcodeMetadata))
+                for (int j = 0; j < jCount; ++j)
                 {
-                    opcodeMetadata = new MicrocodeRom.Opcode
-                    {
-                        Name = procedure.Name,
-                        Index = procedure.Index,
-                        OperandCount =  operandCount,
-                        OperandCombinations = new List<IReadOnlyList<OperandType>>()
-                    };
-                    opcodesMetadata.Add(procedure.Name, opcodeMetadata);
-                }
+                    var operandIndex = operandIndices?[j];
+                    var size = ResolveEncodedInstructionSizeInBytes(rootProcedure.Operands, operandIndex);
+                    var code = ConcretizeMacroCode(
+                        rootProcedure,
+                        (ControlWord.IPCIW, (ControlWord)((int)ControlWord.IPC1 + size))
+                    );
 
-                opcodeMetadata.OperandCombinations.Add(procedure.Operands);
+                    var procedure = rootProcedure with { Code = code };
+
+                    int addr = 0;
+                    if (operandCount == 0)
+                        addr |= (procedure.Index & 0x07) << 7;
+                    else
+                    {
+                        addr |= (procedure.Index & 0x1F) << 10;
+                        addr |= operandIndex!.Value << 4;
+                    }
+
+                    if (!opcodes.TryAdd(addr, procedure))
+                        throw new AssemblyException(procedure.DeclarationLine, $"Opcode '{procedure.Name} {string.Join(" ", procedure.Operands)}' is already declared");
+
+                    if (!opcodesMetadata.TryGetValue(procedure.Name, out var opcodeMetadata))
+                    {
+                        opcodeMetadata = new MicrocodeRom.Opcode
+                        {
+                            Name = procedure.Name,
+                            Index = procedure.Index,
+                            OperandCount =  operandCount,
+                            OperandCombinations = new List<IReadOnlyList<OperandType>>()
+                        };
+                        opcodesMetadata.Add(procedure.Name, opcodeMetadata);
+                    }
+
+                    opcodeMetadata.OperandCombinations.Add(procedure.Operands);
+                }
             }
 
             // SERIALIZE OPCODES & MICROCODE
@@ -272,16 +284,140 @@ namespace Emulator
             };
         }
 
-        private static int ResolveOperandIndex(IReadOnlyList<OperandType> operands, bool hasConditional)
+        private static int ResolveEncodedInstructionSizeInBytes(IReadOnlyList<OperandType> operands, int? operandIndex)
         {
-            // TODO Error handling
-            return OperandIndices[string.Join(' ', operands)];
+            if (operandIndex == null || operands.Count == 0)
+                return 1;
+
+            // TIIFFF
+            var value = operandIndex.Value;
+            var format = OperandFormats[value & 0x07];
+            var hasFlag = (value & 0b10000) == 0;
+
+            var regBits = 0;
+            var immABits = 0;
+            var immBBits = 0;
+
+            foreach (var operand in operands)
+            {
+                if (IsRegRefOperand(operand))
+                    regBits += 4;
+                if (immABits == 0 && IsImmRefOperand(operand))
+                    immABits += format.LengthA;
+                else if (immBBits == 0 && IsImmRefOperand(operand))
+                    immBBits += format.LengthB;
+            }
+
+            if (hasFlag)
+                regBits -= 4;
+
+            var bits = 16 + regBits + immABits + immBBits;
+            return bits / 8;
         }
 
-        private static Dictionary<string, int> OperandIndices = new()
+        private static bool IsRegRefOperand(OperandType operandType)
         {
-            ["REG"] = 0b000000,
+            return operandType
+                is OperandType.Reg
+                or OperandType.DerefSizePgRegPlusSImm
+                or OperandType.DerefSizePgReg
+                or OperandType.DerefSizePgUImm;
+        }
+
+        private static bool IsImmRefOperand(OperandType operandType)
+        {
+            return operandType
+                is OperandType.Imm
+                or OperandType.DerefSizePgRegPlusSImm
+                or OperandType.DerefSizePgUImm;
+        }
+
+        private static IReadOnlyList<int>? ResolveOperandIndices(IReadOnlyList<OperandType> operands)
+        {
+            var key = string.Join(' ', operands.Select(x => x switch
+            {
+                OperandType.Reg => "REG",
+                OperandType.Imm => "IMM",
+                OperandType.DerefSizePgRegPlusSImm => "SZ[PG:REG+sIMM]",
+                OperandType.DerefSizePgReg => "SZ[PG:REG]",
+                OperandType.DerefSizePgUImm => "SZ[PG:uIMM]",
+                _ => throw new ArgumentOutOfRangeException(nameof(x), x, null)
+            }));
+
+            return OperandTable.GetValueOrDefault(key);
+        }
+
+        private static Dictionary<string, int[]> OperandTable = new()
+        {
+            ["REG"] = new[] { 0b000000, 0b100111 },
+            ["SZ[PG:REG+sIMM]"] = new[] { 0b001000, 0b000001, 0b100010, 0b100011 },
+            ["SZ[PG:REG]"] = new[] { 0b010000, 0b110111 },
+            ["SZ[PG:uIMM]"] = new[] { 0b011000, 0b001001, 0b101010, 0b101011 },
+            ["IMM"] = new[] { 0b100000, 0b100001, 0b101111 },
+
+            ["REG REG"] = new[] { 0b101000 },
+            ["REG IMM"] = new[] { 0b000000, 0b000001, 0b100010, 0b100011 },
+            ["REG SZ[PG:REG+sIMM]"] = new[] { 0b101011, 0b100100, 0b000111 },
+            ["REG SZ[PG:REG]"] = new[] { 0b111000 },
+            ["REG SZ[PG:uIMM]"] = new[] { 0b101100, 0b010101, 0b001111 },
+
+            ["IMM IMM"] = new[] { 0b100001, 0b111111 },
+
+            ["SZ[PG:REG+sIMM] REG"] = new[] { 0b100101 },
+            ["SZ[PG:REG+sIMM] IMM"] = new[] { 0b001001, 0b111011, 0b011100, 0b101101, 0b100110, 0b100111 },
+            ["SZ[PG:REG+sIMM] SZ[PG:REG+sIMM]"] = new[] { 0b000011, 0b010100, 0b110101, 0b000110, 0b101110, 0b011111 },
+            ["SZ[PG:REG+sIMM] SZ[PG:REG]"] = new[] { 0b110001, 0b001011, 0b110110 },
+            ["SZ[PG:REG+sIMM] SZ[PG:uIMM]"] = new[] { 0b010010, 0b110011, 0b001100, 0b111101, 0b111110 },
+
+            ["SZ[PG:REG] REG"] = new[] { 0b110000 },
+            ["SZ[PG:REG] IMM"] = new[] { 0b001000, 0b010001, 0b101010, 0b101111 },
+            ["SZ[PG:REG] SZ[PG:REG+sIMM]"] = new[] { 0b111001, 0b001010, 0b000101 },
+            ["SZ[PG:REG] SZ[PG:REG]"] = new[] { 0b100000 },
+            ["SZ[PG:REG] SZ[PG:uIMM]"] = new[] { 0b101001, 0b001101 },
+
+            ["SZ[PG:uIMM] REG"] = new[] { 0b000010, 0b010011, 0b110100 },
+            ["SZ[PG:uIMM] IMM"] = new[] { 0b010000, 0b011001, 0b110010, 0b011011, 0b010111, 0b110111 },
+            ["SZ[PG:uIMM] SZ[PG:REG+sIMM]"] = new[] { 0b111100, 0b011101 },
+            ["SZ[PG:uIMM] SZ[PG:REG]"] = new[] { 0b011010 },
+            ["SZ[PG:uIMM] SZ[PG:uIMM]"] = new[] { 0b111010, 0b000100 },
+
+            ["REG REG REG"] = new[] { 0b100010, 0b000110 },
+            ["REG REG IMM"] = new[] { 0b110011, 0b100100 },
+            ["REG REG SZ[PG:REG+sIMM]"] = new[] { 0b101000, 0b100011, 0b000100 },
+            ["REG REG SZ[PG:REG]"] = new[] { 0b101011, 0b001101, 0b001110 },
+            ["REG REG SZ[PG:uIMM]"] = new[] { 0b100001, 0b111101 },
+
+            ["IMM IMM REG"] = new[] { 0b000000, 0b000001, 0b100111 },
+            ["IMM IMM SZ[PG:REG]"] = new[] { 0b001000, 0b001001 },
+
+            ["SZ[PG:REG+sIMM] SZ[PG:REG+sIMM] REG"] = new[] { 0b001100, 0b011101 },
+            ["SZ[PG:REG+sIMM] SZ[PG:REG+sIMM] IMM"] = new[] { 0b111011, 0b111100 },
+            ["SZ[PG:REG+sIMM] SZ[PG:REG+sIMM] SZ[PG:REG]"] = new[] { 0b001010, 0b010101 },
+            ["SZ[PG:REG+sIMM] SZ[PG:REG+sIMM] SZ[PG:uIMM]"] = new[] { 0b000101 },
+
+            ["SZ[PG:REG] SZ[PG:REG] REG"] = new[] { 0b101010 },
+            ["SZ[PG:REG] SZ[PG:REG] IMM"] = new[] { 0b000010, 0b101100 },
+            ["SZ[PG:REG] SZ[PG:REG] SZ[PG:REG+sIMM]"] = new[] { 0b000011, 0b010100, 0b110100 },
+            ["SZ[PG:REG] SZ[PG:REG] SZ[PG:REG]"] = new[] { 0b110010 },
+            ["SZ[PG:REG] SZ[PG:REG] SZ[PG:uIMM]"] = new[] { 0b001011, 0b011100 },
+
+            ["SZ[PG:uIMM] SZ[PG:uIMM] REG"] = new[] { 0b101001, 0b100101 },
+            ["SZ[PG:uIMM] SZ[PG:uIMM] IMM"] = new[] { 0b101101 },
         };
+
+        private static readonly IReadOnlyList<OperandFormat> OperandFormats = new[]
+        {
+            new OperandFormat(16, 8, 24, 8),
+            new OperandFormat(16, 16, 32, 16),
+            new OperandFormat(20, 16, 36, 12),
+            new OperandFormat(24, 8, 32, 16),
+            new OperandFormat(24, 16, 40, 8),
+            new OperandFormat(24, 8, 32, 8),
+            new OperandFormat(24, 12, 36, 12),
+            new OperandFormat(20, 4, 24, 8),
+        };
+
+        public sealed record OperandFormat(int OffsetA, int LengthA, int OffsetB, int LengthB);
 
         private static OperandType ParseOperand(string value, int line)
         {
@@ -341,7 +477,7 @@ namespace Emulator
 
             public IReadOnlyList<OperandType> Operands { get; init; }
 
-            public ControlWord[] Code { get; }
+            public ControlWord[] Code { get; init; }
 
             public int CodeLength { get; set; }
 
