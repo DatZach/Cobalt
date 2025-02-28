@@ -61,7 +61,7 @@ namespace Emulator
                         operands.Add(operand);
                     }
                     
-                    // TODO Validate
+                    // TODO Validate that we don't have duplicate or conflicting operands
                     //if (operand1 != operand2)
                     //    throw new AssemblyException(i, $"Illegal operand combination: {operand1}, {operand2}, {operand3}");
 
@@ -259,7 +259,7 @@ namespace Emulator
             }
 
             // SERIALIZE OPCODES & MICROCODE
-            var microcode = new ControlWord[MicrocodeRom.MaxControlWordCount];
+            var microcode = new ControlWord[MicrocodeRom.RomSize];
             for (int addr = 0x0000; addr <= 0x7FF8; addr += 0x08)
             {
                 if (!opcodes.TryGetValue(addr, out var proc))
@@ -332,7 +332,7 @@ namespace Emulator
                 or OperandType.DerefSizePgUImm;
         }
 
-        private static IReadOnlyList<int>? ResolveOperandIndices(IReadOnlyList<OperandType> operands)
+        public static IReadOnlyList<int>? ResolveOperandIndices(IReadOnlyList<OperandType> operands)
         {
             var key = string.Join(' ', operands.Select(x => x switch
             {
@@ -347,7 +347,7 @@ namespace Emulator
             return OperandTable.GetValueOrDefault(key);
         }
 
-        private static Dictionary<string, int[]> OperandTable = new()
+        public static Dictionary<string, int[]> OperandTable = new()
         {
             ["REG"] = new[] { 0b000000, 0b100111 },
             ["SZ[PG:REG+sIMM]"] = new[] { 0b001000, 0b000001, 0b100010, 0b100011 },
@@ -405,7 +405,7 @@ namespace Emulator
             ["SZ[PG:uIMM] SZ[PG:uIMM] IMM"] = new[] { 0b101101 },
         };
 
-        private static readonly IReadOnlyList<OperandFormat> OperandFormats = new[]
+        public static readonly IReadOnlyList<OperandFormat> OperandFormats = new[]
         {
             new OperandFormat(16, 8, 24, 8),
             new OperandFormat(16, 16, 32, 16),
@@ -509,7 +509,7 @@ namespace Emulator
     {
         public const int Magic = 0x52434D43;
         public const int CurrentFileVersion = 1;
-        public const int MaxControlWordCount = 0x7FFF; // 8 microcode instructions per opcode
+        public const int RomSize = 0x7FFF; // 15-bit address line
         public const int BytesPerControlWord = 4;
 
         public int FileVersion { get; init; }
@@ -535,10 +535,10 @@ namespace Emulator
             writer.Write((int)rom.RevisionTs.ToCobaltTime());
             writer.Write((short)rom.OpcodeMetadata.Count);
             writer.Write((byte)BytesPerControlWord);
-            writer.Write((int)MaxControlWordCount);
+            writer.Write((int)RomSize);
             writer.BaseStream.Position += 14;
 
-            var result = new byte[MaxControlWordCount * BytesPerControlWord];
+            var result = new byte[RomSize * BytesPerControlWord];
             for (int i = 0; i < rom.Microcode.Length; ++i)
             {
                 var microcode = (int)rom.Microcode[i];
@@ -560,12 +560,14 @@ namespace Emulator
                 writer.Write((byte)opcodeMetadata.OperandCombinations.Count);
                 foreach (var operandCombination in opcodeMetadata.OperandCombinations)
                 {
-                    // TODO
-                    //writer.Write((byte)(
-                    //      (operandCombination.RTL ? 0x80 : 0)
-                    //    | (((int)operandCombination.A & 0x07) << 4)
-                    //    | ((int)operandCombination.B & 0x07)
-                    //));
+                    ushort combination = 0;
+                    foreach (var operand in operandCombination)
+                    {
+                        combination |= (ushort)((int)operand & 0x07);
+                        combination <<= 3;
+                    }
+                    
+                    writer.Write(combination);
                 }
             }
 
@@ -596,7 +598,7 @@ namespace Emulator
                 i += reader.Read(microcodeBytes, i, microcodeBytes.Length - i);
 
             var microcode = new ControlWord[bytesPerBank];
-            for (i = 0; i < MaxControlWordCount; ++i)
+            for (i = 0; i < RomSize; ++i)
             {
                 int cword = 0;
                 var romAddr = i * BytesPerControlWord;
@@ -619,14 +621,17 @@ namespace Emulator
                 var operandCombinations = new List<IReadOnlyList<OperandType>>();
                 for (int j = 0; j < combinationCount; ++j)
                 {
-                    var value = reader.ReadByte();
-                    // operandCombinations[j] = ResolveOperandIndex()
-                    // TODO
-                    //operandCombinations[j] = new Opcode.OperandCombination(
-                    //    (value & 0x80) == 0x80,
-                    //    (OperandType)((value & 0x70) >> 4),
-                    //    (OperandType)(value & 0x07)
-                    //);
+                    var value = reader.ReadUInt16();
+                    var operands = new List<OperandType>();
+                    while (value != 0)
+                    {
+                        var operand = (OperandType)(value & 0x07);
+                        value >>= 3;
+
+                        operands.Add(operand);
+                    }
+
+                    operandCombinations.Add(operands);
                 }
 
                 opcodeMetadata[opcodeName] = new Opcode

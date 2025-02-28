@@ -1,4 +1,4 @@
-﻿using System.Runtime.Intrinsics.Arm;
+﻿using System.Numerics;
 
 namespace Emulator
 {
@@ -6,7 +6,6 @@ namespace Emulator
     {
         private readonly Dictionary<string, short> labels = new();
         private readonly Dictionary<long, (string, bool)> fixups = new();
-        private Action<long, Operand?>? resolveFixup1, resolveFixup2, resolveFixup3;
         private int origin;
 
         private readonly Dictionary<string, MicrocodeRom.Opcode> opcodeMetadata;
@@ -157,7 +156,8 @@ namespace Emulator
 
                         var operandString = line.Substring(j, l - j).Trim().ToUpperInvariant();
                         TryParseImm(operandString, 0, out _, out var result);
-                        resolveFixup1?.Invoke(stream.Position, null); // TODO Clean this up
+                        // TODO Reimplement
+                        //resolveFixup1?.Invoke(stream.Position, null); // TODO Clean this up
 
                         writer.Write((byte)(result >> 8));
                         writer.Write((byte)(result & 0xFF));
@@ -176,12 +176,7 @@ namespace Emulator
                 if (!opcodeMetadata.TryGetValue(opcodeString, out var metadata))
                     throw new AssemblyException(i, $"Unknown opcode '{opcodeString}'");
 
-                Operand? operand1 = null;
-                Operand? operand2 = null;
-                Operand? operand3 = null;
-                int operandCount = 0;
-
-                resolveFixup1 = resolveFixup2 = resolveFixup3 = null;
+                var operands = new List<Operand>();
 
                 while (j < line.Length)
                 {
@@ -189,183 +184,79 @@ namespace Emulator
                     if (l == -1) l = line.Length;
 
                     var operandString = line.Substring(j, l - j).Trim().ToUpperInvariant();
-                    if (operandCount == 0)
-                        operand1 = ParseOperand(i, operandCount, operandString);
-                    else if (operandCount == 1)
-                        operand2 = ParseOperand(i, operandCount, operandString);
-                    else if (operandCount == 2)
-                        operand3 = ParseOperand(i, operandCount, operandString);
-                    ++operandCount;
+                    var operand = ParseOperand(i, operands.Count, operandString);
+                    operands.Add(operand);
 
                     j = l + 1;
                 }
 
-                if (metadata.OperandCount != operandCount)
-                    throw new AssemblyException(i, $"Opcode '{metadata.Name}' expected {metadata.OperandCount} operands, received {operandCount} instead");
+                if (metadata.OperandCount != operands.Count)
+                    throw new AssemblyException(i, $"Opcode '{metadata.Name}' expected {metadata.OperandCount} operands, received {operands.Count} instead");
 
-                var aType = operand1?.Type ?? OperandType.None;
-                var bType = operand3?.Type ?? operand2?.Type ?? OperandType.None;
-                
-                bool operandOrder;
-                if (operandCount > 0)
+                // TOOOCCCC OOSIIFFF
+                var operandTypes = operands.Select(x => x.Type).ToList();
+                var operandCombo = metadata.OperandCombinations.FirstOrDefault(x => x.SequenceEqual(operandTypes));
+                if (operandCombo == null)
+                    throw new AssemblyException(i, $"Opcode '{metadata.Name}' does not support the operand combination {string.Join(' ', operands)}");
+                if (operands.Count == 0 && conditional != Conditional.None)
+                    throw new AssemblyException(i, $"Opcode '{metadata.Name}' does not support flags");
+
+                var iS = 0;
+                var immALength = 0;
+                var immBLength = 0;
+                foreach (var operand in operands)
                 {
-                    var operandCombo = metadata.OperandCombinations.FirstOrDefault(x => x.A == aType && x.B == bType);
-                    if (operandCombo == null)
-                        throw new AssemblyException(i, $"Opcode '{metadata.Name}' does not support the operand combination {operand1}, {operand2}");
-
-                    operandOrder = operandCombo.RTL;
+                    if (!IsImmRefOperand(operand))
+                        continue;
+                    if (immALength == 0)
+                        immALength = GetImmSizeBits((uint)operand.Data1);
+                    else if (immBLength == 0)
+                        immBLength = GetImmSizeBits((uint)operand.Data1);
                 }
-                else
-                    operandOrder = false;
 
-                Operand? operandA, operandB, operandC;
-                Action<long, Operand?>? resolveFixupC, resolveFixupB, resolveFixupA;
-                if (operandCount == 3)
+                var operandIndex = 0;
+                var operandIndices = Microcode.ResolveOperandIndices(operandTypes);
+                if (operandIndices != null)
                 {
-                    if (!operandOrder)
+                    int fmtImmALen = int.MaxValue;
+                    int fmtImmBLen = int.MaxValue;
+                    foreach (var lOperandIndex in operandIndices)
                     {
-                        operandA = operand1; resolveFixupA = resolveFixup1;
-                        operandB = operand2; resolveFixupB = resolveFixup2;
-                        operandC = operand3; resolveFixupC = resolveFixup3;
-                    }
-                    else
-                    {
-                        operandA = operand3; resolveFixupA = resolveFixup3;
-                        operandB = operand2; resolveFixupB = resolveFixup2;
-                        operandC = operand1; resolveFixupC = resolveFixup1;
-                    }
-                }
-                else if (operandCount == 2)
-                {
-                    if (!operandOrder)
-                    {
-                        operandA = operand1; resolveFixupA = resolveFixup1;
-                        operandB = operand2; resolveFixupB = resolveFixup2;
-                        operandC = null; resolveFixupC = null;
-                    }
-                    else
-                    {
-                        operandA = operand2; resolveFixupA = resolveFixup2;
-                        operandB = operand1; resolveFixupB = resolveFixup1;
-                        operandC = null; resolveFixupC = null;
+                        var formatIndex = lOperandIndex & 0x07;
+                        var operandFormat = Microcode.OperandFormats[formatIndex];
+                        if (operandFormat.LengthA < fmtImmALen && operandFormat.LengthA >= immALength
+                        &&  operandFormat.LengthB < fmtImmBLen && operandFormat.LengthB >= immBLength)
+                        {
+                            operandIndex = lOperandIndex;
+                            fmtImmALen = operandFormat.LengthA;
+                            fmtImmBLen = operandFormat.LengthB;
+                        }
                     }
                 }
-                else if (operandCount == 1)
-                {
-                    operandA = operand1; resolveFixupA = resolveFixup1;
-                    operandB = null; resolveFixupB = null;
-                    operandC = null; resolveFixupC = null;
-                }
-                else
-                {
-                    operandA = null; resolveFixupA = null;
-                    operandB = null; resolveFixupB = null;
-                    operandC = null; resolveFixupC = null;
-                }
 
-                // ENCODE
-                if (conditional == Conditional.None
-                && (IsImmRefOperand(operandA) || IsImmRefOperand(operandB) || IsImmRefOperand(operandC)))
-                {
-                    //conditional = Conditional.fIMM8;
-                    if (IsImmRefOperand(operandA) && !IsImm8(operandA))
-                        conditional = Conditional.None;
-                    if (IsImmRefOperand(operandB) && !IsImm8(operandB))
-                        conditional = Conditional.None;
-                    if (IsImmRefOperand(operandC) && !IsImm8(operandC))
-                        conditional = Conditional.None;
-                }
-
-                if (operandCount == 0)
-                    writer.Write((byte)(((metadata.Index & 0x1C) << 2) | ((byte)conditional & 0x0F)));
+                var iT = (byte)(conditional != Conditional.None ? 0 : 1);
+                if (operands.Count == 0)
+                    writer.Write((byte)((iT << 7) | (metadata.Index & 0x07) << 4));
                 else
                 {
                     var opcode = (ushort)(
-                          ((metadata.Index & 0x3F) << 10)
-                        | (((byte)aType & 0x07) << 3)
-                        |  ((byte)bType & 0x07)
+                          (iT << 15)
+                        | ((metadata.Index & 0x1C) << 10)
+                        | ((metadata.Index & 0x03) << 6)
+                        | (iS << 5)
+                        | operandIndex
                     );
 
-                    var ii = (ushort)((opcode & 0xFC3F) | ((byte)conditional & 0x0F) << 6);
-                    writer.Write((byte)(ii >> 8));
-                    writer.Write((byte)(ii & 0xFF));
+                    writer.Write((byte)(opcode >> 8));
+                    writer.Write((byte)(opcode & 0xFF));
                 }
 
-                var aIsRegRef = IsRegRefOperand(operandA);
-                var bIsRegRef = IsRegRefOperand(operandB);
-                var cIsRegRef = IsRegRefOperand(operandC);
-                if (aIsRegRef || bIsRegRef)
+                for (int k = 0; k < operands.Count; ++k)
                 {
-                    byte rd0 = 0x00;
-                    if (aIsRegRef) rd0 |= (byte)((operandA!.Data1 & 0x0F) << 4);
-                    if (bIsRegRef) rd0 |= (byte)(operandB!.Data1 & 0x0F);
-                    writer.Write(rd0);
-                }
-                if (cIsRegRef)
-                {
-                    byte rd1 = (byte)((operandC!.Data1 & 0x0F) << 4);
-                    writer.Write(rd1);
-                }
+                    var operand = operands[k];
+                    operand.Fixup?.Invoke(stream.Position, operand);
 
-                for (int k = 0; k < operandCount; ++k)
-                {
-                    Operand operand;
-                    if (k == 0)
-                    {
-                        resolveFixupA?.Invoke(stream.Position, operandA);
-                        operand = operandA!;
-                    }
-                    else if (k == 1)
-                    {
-                        resolveFixupB?.Invoke(stream.Position, operandB);
-                        operand = operandB!;
-                    }
-                    else if (k == 2)
-                    {
-                        resolveFixupC?.Invoke(stream.Position, operandC);
-                        operand = operandC!;
-                    }
-                    else
-                        throw new AssemblyException(i, $"Unable to encode operand {k + 1}");
-
-                    int width = 1;//conditional == Conditional.fIMM8 ? 1 : 2;
-
-                    ushort data;
-                    switch (operand.Type)
-                    {
-                        case OperandType.Reg:
-                            data = 0;
-                            width = 0; // Already encoded
-                            break;
-                        case OperandType.Imm:
-                            data = (ushort)operand.Data1;
-                            break;
-                        case OperandType.DerefBytePgRegPlusSImm:
-                        case OperandType.DerefWordPgRegPlusSImm:
-                            data = (ushort)operand.Data2;
-                            break;
-                        case OperandType.DerefBytePgReg:
-                        case OperandType.DerefWordPgReg:
-                            data = 0;
-                            width = 0;
-                            break;
-                        case OperandType.DerefBytePgUImm:
-                            data = (ushort)operand.Data2;
-                            break;
-                        case OperandType.DerefWordPgUImm:
-                            data = (ushort)operand.Data2;
-                            break;
-                        default:
-                            throw new AssemblyException(i, $"Unhandled operandA type {operand.Type}");
-                    }
-
-                    if (width == 1)
-                        writer.Write((byte)data);
-                    else if (width == 2)
-                    {
-                        writer.Write((byte)(data >> 8));
-                        writer.Write((byte)(data & 0xFF));
-                    }
+                    // TODO Encode immediates
                 }
             }
 
@@ -617,7 +508,20 @@ namespace Emulator
             return (data & 0xFF00) == 0;
         }
 
-        private sealed record Operand(OperandType Type, short Data1 = 0, short Data2 = 0);
+        private static int GetImmSizeBits(uint value)
+        {
+            if (value == 0)
+                return 0;
+
+            return BitOperations.Log2(value) + 1;
+        }
+
+        private sealed record Operand(
+            OperandType Type,
+            short Data1 = 0,
+            short Data2 = 0,
+            Action<long, Operand?>? Fixup = null
+        );
 
         private enum OutputFormat
         {
