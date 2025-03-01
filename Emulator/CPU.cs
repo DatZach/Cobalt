@@ -421,7 +421,7 @@ namespace Emulator
             {
                 0x0000 => (iword & 0x7000)      | (iword & 0x00C0) << 4 | 
                           (iword & 0x8000) >> 6 | (iword & 0x001F) << 4 | (mci & 0x07),
-                _      => (iword & 0x7000) >> 5 | (mci & 0x07)
+                _      => (iword & 0x7000) >> 8 | (mci & 0x07) | 0x7F80
             };
 
             return microcode[iaddr];

@@ -4,6 +4,7 @@
 ;
 
 ; 105 Bytes v4
+; 89  Bytes v4.2
 
 format bin
 origin 0x0000

@@ -1,4 +1,5 @@
-﻿using System.Numerics;
+﻿using System.Collections;
+using System.Numerics;
 
 namespace Emulator
 {
@@ -17,7 +18,7 @@ namespace Emulator
 
         public byte[] AssembleSource(string source)
         {
-            var format = OutputFormat.Bin;
+            var outputFormat = OutputFormat.Bin;
             origin = 0;
 
             using var stream = new MemoryStream();
@@ -93,13 +94,13 @@ namespace Emulator
                 if (opcodeString == "FORMAT")
                 {
                     var operandString = line[j..];
-                    format = Enum.Parse<OutputFormat>(operandString, true);
+                    outputFormat = Enum.Parse<OutputFormat>(operandString, true);
                     continue;
                 }
                 else if (opcodeString == "ORIGIN")
                 {
                     var operandString = line[j..].ToUpperInvariant();
-                    TryParseImm(operandString, -1, out _, out var sOrigin);
+                    TryParseImm(operandString, out var sOrigin, out _);
                     origin = sOrigin & 0xFFFF;
                     continue;
                 }
@@ -141,8 +142,10 @@ namespace Emulator
                     else
                     {
                         operandString = operandString[j..];
-                        TryParseImm(operandString, -1, out var resultWidth, out var result);
-                        if (resultWidth != 1) throw new AssemblyException(i, $"The value {result:X16} does not fit within 1 byte of data.");
+                        if (!TryParseImm(operandString, out var result, out var fixup)
+                        ||  (result & 0xFF00) is not (0xFF or 0x00))
+                            throw new AssemblyException(i, $"The value {result:X16} does not fit within 1 byte of data.");
+                        fixup?.Invoke(stream.Position, null);
                         writer.Write((byte)(result & 0xFF));
                     }
                     continue;
@@ -155,9 +158,8 @@ namespace Emulator
                         if (l == -1) l = line.Length;
 
                         var operandString = line.Substring(j, l - j).Trim().ToUpperInvariant();
-                        TryParseImm(operandString, 0, out _, out var result);
-                        // TODO Reimplement
-                        //resolveFixup1?.Invoke(stream.Position, null); // TODO Clean this up
+                        TryParseImm(operandString, out var result, out var fixup);
+                        fixup?.Invoke(stream.Position, null); // TODO Clean this up
 
                         writer.Write((byte)(result >> 8));
                         writer.Write((byte)(result & 0xFF));
@@ -184,7 +186,7 @@ namespace Emulator
                     if (l == -1) l = line.Length;
 
                     var operandString = line.Substring(j, l - j).Trim().ToUpperInvariant();
-                    var operand = ParseOperand(i, operands.Count, operandString);
+                    var operand = ParseOperand(i, operandString);
                     operands.Add(operand);
 
                     j = l + 1;
@@ -194,25 +196,64 @@ namespace Emulator
                     throw new AssemblyException(i, $"Opcode '{metadata.Name}' expected {metadata.OperandCount} operands, received {operands.Count} instead");
 
                 // TOOOCCCC OOSIIFFF
-                var operandTypes = operands.Select(x => x.Type).ToList();
+                var operandTypes = operands.Select(x => x.Type switch
+                {
+                    OperandType.None => OperandType.None,
+                    OperandType.Reg => OperandType.Reg,
+                    OperandType.Imm => OperandType.Imm,
+                    OperandType.DerefSizePgRegPlusSImm => OperandType.DerefSizePgRegPlusSImm,
+                    OperandType.DerefSizePgReg => OperandType.DerefSizePgReg,
+                    OperandType.DerefSizePgUImm => OperandType.DerefSizePgUImm,
+                    OperandType.DerefBytePgRegPlusSImm => OperandType.DerefSizePgRegPlusSImm,
+                    OperandType.DerefWordPgRegPlusSImm => OperandType.DerefSizePgRegPlusSImm,
+                    OperandType.DerefBytePgReg => OperandType.DerefSizePgReg,
+                    OperandType.DerefWordPgReg => OperandType.DerefSizePgReg,
+                    OperandType.DerefBytePgUImm => OperandType.DerefSizePgUImm,
+                    OperandType.DerefWordPgUImm => OperandType.DerefSizePgUImm,
+                    _ => throw new ArgumentOutOfRangeException()
+                }).ToList();
                 var operandCombo = metadata.OperandCombinations.FirstOrDefault(x => x.SequenceEqual(operandTypes));
                 if (operandCombo == null)
                     throw new AssemblyException(i, $"Opcode '{metadata.Name}' does not support the operand combination {string.Join(' ', operands)}");
                 if (operands.Count == 0 && conditional != Conditional.None)
                     throw new AssemblyException(i, $"Opcode '{metadata.Name}' does not support flags");
-
-                var iS = 0;
+                
+                var iS = -1;
                 var immALength = 0;
                 var immBLength = 0;
                 foreach (var operand in operands)
                 {
-                    if (!IsImmRefOperand(operand))
-                        continue;
-                    if (immALength == 0)
-                        immALength = GetImmSizeBits((uint)operand.Data1);
-                    else if (immBLength == 0)
-                        immBLength = GetImmSizeBits((uint)operand.Data1);
+                    if (IsImmRefOperand(operand))
+                    {
+                        if (immALength == 0)
+                            immALength = GetImmSizeBits(operand.ImmValue);
+                        else if (immBLength == 0)
+                            immBLength = GetImmSizeBits(operand.ImmValue);
+                    }
+
+                    var sz = operand.Type switch
+                    {
+                        OperandType.Reg => -1,
+                        OperandType.Imm => -1,
+                        OperandType.DerefBytePgRegPlusSImm => 0,
+                        OperandType.DerefWordPgRegPlusSImm => 1,
+                        OperandType.DerefBytePgReg => 0,
+                        OperandType.DerefWordPgReg => 1,
+                        OperandType.DerefBytePgUImm => 0,
+                        OperandType.DerefWordPgUImm => 1,
+                        _ => throw new ArgumentOutOfRangeException(nameof(operand.Type), operand.Type, "Illegal Operand Type")
+                    };
+
+                    if (sz != -1)
+                    {
+                        if (iS == -1)
+                            iS = sz;
+                        else if (sz != iS)
+                            throw new AssemblyException(i, "Cannot mix byte and word addressing modes");
+                    }
                 }
+
+                iS = Math.Clamp(iS, 0, 1);
 
                 var operandIndex = 0;
                 var operandIndices = Microcode.ResolveOperandIndices(operandTypes);
@@ -234,30 +275,72 @@ namespace Emulator
                     }
                 }
 
-                var iT = (byte)(conditional != Conditional.None ? 0 : 1);
+                var ba = new BitArray(48);
+                
+                var iT = conditional == Conditional.None ? 1 : 0;
                 if (operands.Count == 0)
-                    writer.Write((byte)((iT << 7) | (metadata.Index & 0x07) << 4));
+                    ba.Write(1, 3, metadata.Index);
                 else
                 {
-                    var opcode = (ushort)(
-                          (iT << 15)
-                        | ((metadata.Index & 0x1C) << 10)
-                        | ((metadata.Index & 0x03) << 6)
-                        | (iS << 5)
-                        | operandIndex
-                    );
-
-                    writer.Write((byte)(opcode >> 8));
-                    writer.Write((byte)(opcode & 0xFF));
+                    ba.Write(0, 1, iT);
+                    ba.Write(1, 3, (metadata.Index & 0x1C) >> 2);
+                    ba.Write(4, 4, (int)conditional);
+                    ba.Write(8, 2, metadata.Index & 0x03);
+                    ba.Write(10, 1, iS);
+                    ba.Write(11, 5, operandIndex);
                 }
 
+                int regIndex = 0, immIndex = 0;
                 for (int k = 0; k < operands.Count; ++k)
                 {
                     var operand = operands[k];
-                    operand.Fixup?.Invoke(stream.Position, operand);
 
-                    // TODO Encode immediates
+                    if (IsRegRefOperand(operand))
+                    {
+                        var idx = (iT << 4) | regIndex;
+                        var offset = idx switch
+                        {
+                            0x00 => 16,
+                            0x01 => 20,
+                            0x02 => 24,
+                            0x10 => 4,
+                            0x11 => 16,
+                            0x12 => 20,
+                            _ => throw new ArgumentOutOfRangeException(nameof(idx), idx, "Illegal RegIndex")
+                        };
+
+                        ba.Write(offset, 4, operand.RegIndex);
+                        ++regIndex;
+                    }
+
+                    if (IsImmRefOperand(operand))
+                    {
+                        var operandFormat = Microcode.OperandFormats[operandIndex & 0x07];
+                        int offset, length;
+                        if (immIndex == 0)
+                        {
+                            offset = operandFormat.OffsetA;
+                            length = operandFormat.LengthA;
+                        }
+                        else if (immIndex == 1)
+                        {
+                            offset = operandFormat.OffsetB;
+                            length = operandFormat.LengthB;
+                        }
+                        else
+                            throw new ArgumentOutOfRangeException(nameof(immIndex), immIndex, "Illegal ImmIndex");
+
+                        operand.Fixup?.Invoke(stream.Position + offset / 8, operand); // TODO unaligned write
+                        ba.Write(offset, length, operand.ImmValue);
+                        ++immIndex;
+                    }
                 }
+
+                var size = Microcode.ResolveEncodedInstructionSizeInBytes(operandTypes, operandIndex);
+                var inst = new byte[48 / 8];
+                ba.CopyTo(inst, 0);
+                Array.Reverse(inst);
+                writer.Write(inst, 0, size);
             }
 
             foreach (var kvp in fixups)
@@ -276,9 +359,10 @@ namespace Emulator
             return stream.ToArray();
         }
 
-        private Operand ParseOperand(int line, int operandIdx, string? operand)
+        private Operand ParseOperand(int line, string? operand)
         {
-            short data1, data2;
+            Action<long, Operand?>? fixup;
+            short regIndex, immValue;
             
             if (string.IsNullOrEmpty(operand))
                 return new Operand(OperandType.None);
@@ -287,18 +371,17 @@ namespace Emulator
             if (operand.Length >= 2 && operand[0] == '\'')
             {
                 // TODO Escape codes '^n
-                return new Operand(OperandType.Imm, (byte)operand[1]);
+                return new Operand(OperandType.Imm, ImmValue: (byte)operand[1]);
             }
 
             // REG
-            if ((data1 = ParseRegisterIndex(operand)) != -1)
-                return new Operand(OperandType.Reg, data1);
+            if ((regIndex = ParseRegisterIndex(operand)) != -1)
+                return new Operand(OperandType.Reg, RegIndex: regIndex);
             
             // IMM
-            if (TryParseImm(operand, operandIdx, out var data1Width, out data1))
+            if (TryParseImm(operand, out immValue, out fixup))
             {
-                var imm1Type = data1Width == 1 ? OperandType.Imm : OperandType.Imm;
-                return new Operand(imm1Type, data1);
+                return new Operand(OperandType.Imm, ImmValue: immValue, Fixup: fixup);
             }
 
             // [REG+IMM] / [IMM]
@@ -325,12 +408,9 @@ namespace Emulator
                 var regOperand = operand.Substring(1, signIdx != -1 ? signIdx - 1 : operand.Length - 2);
 
                 // [PG:REG] / [PG:REG+sIMM]
-                ParsePgRegIndex(regOperand, out data1, out var data1ImmWidth);
-                if (data1 != -1)
+                regIndex = ParsePgRegIndex(regOperand);
+                if (regIndex != -1)
                 {
-                    //if (data1ImmWidth != (isByte ? 1 : 2))
-                    //    throw new AssemblyException(line,  $"Illegal Addressing Mode for SEG:REG '{operand}'");
-
                     OperandType operandType;
 
                     if ((signIdx = indOperand.IndexOfAny(SignChars)) != -1)
@@ -338,35 +418,33 @@ namespace Emulator
                         // [PG:REG+sIMM]
                         var sign = indOperand[signIdx] == '-' ? -1 : 1;
                         var numberString = indOperand.Substring(signIdx + 1, indOperand.Length - signIdx - 1);
-                        if (!TryParseImm(numberString, operandIdx, out var data2ImmWidth, out data2))
+                        if (!TryParseImm(numberString, out immValue, out fixup))
                             throw new AssemblyException(line, $"Illegal operand '{operand}'");
-                        if (data2ImmWidth > data1ImmWidth)
-                            throw new AssemblyException(line, $"Operand sImm would overflow {data2ImmWidth} > {data1ImmWidth}");
                         
                         operandType = isByte ? OperandType.DerefBytePgRegPlusSImm : OperandType.DerefWordPgRegPlusSImm;
-                        data2 = (short)(data2 * -sign); // Negative sign because we SUB for sign purposes
+                        immValue = (short)(immValue * -sign); // Negative sign because we SUB for sign purposes
                     }
                     else
                     {
                         // [PG:REG]
                         operandType = isByte ? OperandType.DerefBytePgReg : OperandType.DerefWordPgReg;
-                        data2 = 0;
+                        immValue = 0;
                     }
 
-                    return new Operand(operandType, data1, data2);
+                    return new Operand(operandType, regIndex, immValue);
                 }
 
                 // [PG:uIMM]
                 int colonIdx = operand.IndexOf(':');
                 var pagOperand = operand[1..colonIdx];
                 var immOperand = operand[(colonIdx + 1)..^1];
-                data1 = ParsePageIndex(pagOperand, isByte);
+                regIndex = ParsePageIndex(pagOperand, isByte);
 
-                if (data1 == -1)
+                if (regIndex == -1)
                     throw new AssemblyException(line, $"Illegal Addressing Mode for PG:REG '{operand}'");
 
-                if (TryParseImm(immOperand, operandIdx, out _, out data2))
-                    return new Operand(OperandType.DerefBytePgUImm, data1, data2);
+                if (TryParseImm(immOperand, out immValue, out fixup))
+                    return new Operand(OperandType.DerefBytePgUImm, regIndex, immValue, fixup);
             }
 
             throw new AssemblyException(line, $"Illegal operand '{operand}'");
@@ -387,10 +465,9 @@ namespace Emulator
             "DG:R0", "DG:R1", "DG:R2", "DG:R3", "DG:R4", "SG:R5", "TG:R6", "CG:R7",
             "SG:SP", "SG:R1", "0XE000:R5", "0XC000:R5", "0X8000:R6", "0X4000:R6", "0X2000:R7", "0X0000:R7"
         };
-        private static void ParsePgRegIndex(string registerName, out short idx, out int width)
+        private static short ParsePgRegIndex(string registerName)
         {
-            idx = (short)Array.IndexOf(PgRegs, registerName);
-            width = SelectOperandWidth(idx);
+            return (short)Array.IndexOf(PgRegs, registerName);
         }
 
         private readonly static string[] ByteAddressingPages =
@@ -410,10 +487,8 @@ namespace Emulator
                 : (short)Array.IndexOf(WordAddressingPages, registerName);
         }
 
-        private static int SelectOperandWidth(int index) => (index & 0xC) == 0x4 ? 1 : 2;
-
         private readonly static char[] SignChars = { '+', '-' };
-        private bool TryParseImm(string value, int operandIdx, out int resultWidth, out short result)
+        private bool TryParseImm(string value, out short result, out Action<long, Operand?>? fixup)
         {
             int sign = value[0] == '-' ? -1 : 1;
             if (value[0] is '+' or '-')
@@ -423,7 +498,7 @@ namespace Emulator
             {
                 var uResult = ushort.Parse(value);
                 result = (short)(uResult * sign);
-                resultWidth = (result & 0xFF00) == 0 ? 1 : 2;
+                fixup = null;
                 return true;
             }
 
@@ -432,7 +507,7 @@ namespace Emulator
             {
                 var uResult = (ushort)Convert.ToInt16(value[2..], 16);
                 result = (short)(uResult * sign);
-                resultWidth = (result & 0xFF00) == 0 ? 1 : 2;
+                fixup = null;
                 return true;
             }
 
@@ -444,28 +519,19 @@ namespace Emulator
                 if (labels.TryGetValue(value, out result))
                 {
                     result += (short)origin;
-                    resultWidth = 2; // TODO Wrong??
+                    fixup = null;
                     return true;
                 }
 
                 // TODO Clean this up...
-                void Fixup(long x, Operand? operand) => fixups.Add(x, (value, IsNegImmRefOperand(operand)));
-                if (operandIdx == 0)
-                    resolveFixup1 = Fixup;
-                else if (operandIdx == 1)
-                    resolveFixup2 = Fixup;
-                else if (operandIdx == 2)
-                    resolveFixup3 = Fixup;
-                else if (operandIdx != -1)
-                    throw new ArgumentOutOfRangeException(nameof(operandIdx), operandIdx, "Must be 0, 1, or 2");
+                fixup = (x, operand) => fixups.Add(x, (value, IsNegImmRefOperand(operand)));
                 
                 result = -1;
-                resultWidth = 0; // TODO Wrong??
                 return true;
             }
 
             result = 0;
-            resultWidth = 0;
+            fixup = null;
             return false;
         }
 
@@ -499,27 +565,18 @@ namespace Emulator
                 is OperandType.DerefSizePgRegPlusSImm;
         }
 
-        private static bool IsImm8(Operand? operand)
-        {
-            if (operand == null || !IsImmRefOperand(operand))
-                return false;
-
-            var data = operand.Type == OperandType.Imm ? operand.Data1 : operand.Data2;
-            return (data & 0xFF00) == 0;
-        }
-
-        private static int GetImmSizeBits(uint value)
+        private static int GetImmSizeBits(short value)
         {
             if (value == 0)
                 return 0;
 
-            return BitOperations.Log2(value) + 1;
+            return BitOperations.Log2((uint)(value & 0xFFFF)) + 1;
         }
 
         private sealed record Operand(
             OperandType Type,
-            short Data1 = 0,
-            short Data2 = 0,
+            short RegIndex = 0,
+            short ImmValue = 0,
             Action<long, Operand?>? Fixup = null
         );
 
@@ -527,6 +584,25 @@ namespace Emulator
         {
             Bin,
             Exe
+        }
+    }
+
+    internal static class BitArrayUtility
+    {
+        public static void Write(this BitArray array, int offset, int length, int value)
+        {
+            for (int i = 0; i < length; ++i)
+            {
+                array.Set(
+                    array.Length - 1 - offset - i,
+                    (value & (1 << (length - 1 - i))) != 0
+                );
+            }
+        }
+
+        public static void Write(this BitArray array, int offset, bool value)
+        {
+            array.Set(array.Length - 1 - offset, value);
         }
     }
 }

@@ -180,6 +180,7 @@ namespace Emulator
                                     "RSO3" => IsAluOp(parts, p + 1) ? ControlWord.aRSO3 : throw new AssemblyException(i, "RSO3 is LHS-only"),
                                     "TBO" => IsAluOp(parts, p + 1) ? ControlWord.aTBO : ControlWord.bTBO,
                                     "TCO" => IsAluOp(parts, p + 1) ? ControlWord.aTCO : ControlWord.bTCO,
+                                    "ISO3" => ControlWord.ISO1,
                                     _ => Enum.Parse<ControlWord>(subPart)
                                 };
                             }
@@ -232,7 +233,10 @@ namespace Emulator
 
                     int addr = 0;
                     if (operandCount == 0)
-                        addr |= (procedure.Index & 0x07) << 7;
+                    {
+                        addr |= (procedure.Index & 0x07) << 4;
+                        addr |= 0x7F80;
+                    }
                     else
                     {
                         addr |= (procedure.Index & 0x1F) << 10;
@@ -284,7 +288,7 @@ namespace Emulator
             };
         }
 
-        private static int ResolveEncodedInstructionSizeInBytes(IReadOnlyList<OperandType> operands, int? operandIndex)
+        public static int ResolveEncodedInstructionSizeInBytes(IReadOnlyList<OperandType> operands, int? operandIndex)
         {
             if (operandIndex == null || operands.Count == 0)
                 return 1;
@@ -308,11 +312,11 @@ namespace Emulator
                     immBBits += format.LengthB;
             }
 
-            if (hasFlag)
+            if (hasFlag && regBits > 0)
                 regBits -= 4;
 
             var bits = 16 + regBits + immABits + immBBits;
-            return bits / 8;
+            return (bits + 7) / 8;
         }
 
         private static bool IsRegRefOperand(OperandType operandType)
@@ -502,7 +506,14 @@ namespace Emulator
         Imm,
         DerefSizePgRegPlusSImm,
         DerefSizePgReg,
-        DerefSizePgUImm
+        DerefSizePgUImm,
+
+        DerefBytePgRegPlusSImm,
+        DerefWordPgRegPlusSImm,
+        DerefBytePgReg,
+        DerefWordPgReg,
+        DerefBytePgUImm,
+        DerefWordPgUImm,
     }
 
     public sealed class MicrocodeRom
