@@ -5,8 +5,11 @@ namespace Emulator
 {
     public sealed class Assembler
     {
+        private static readonly Microcode.OperandFormat Imm8Format = new Microcode.OperandFormat(0, 8, 0, 0);
+        private static readonly Microcode.OperandFormat Imm16Format = new Microcode.OperandFormat(0, 16, 0, 0);
+
         private readonly Dictionary<string, short> labels = new();
-        private readonly Dictionary<long, (string, bool)> fixups = new();
+        private readonly List<Fixup> fixups = new();
         private int origin;
 
         private readonly Dictionary<string, MicrocodeRom.Opcode> opcodeMetadata;
@@ -21,6 +24,7 @@ namespace Emulator
             var outputFormat = OutputFormat.Bin;
             origin = 0;
 
+            var inst = new byte[48 / 8];
             using var stream = new MemoryStream();
             using var writer = new BinaryWriter(stream);
 
@@ -145,7 +149,7 @@ namespace Emulator
                         if (!TryParseImm(operandString, out var result, out var fixup)
                         ||  (result & 0xFF00) is not (0xFF or 0x00))
                             throw new AssemblyException(i, $"The value {result:X16} does not fit within 1 byte of data.");
-                        fixup?.Invoke(stream.Position, null);
+                        fixup?.Invoke(stream.Position, 0, null, Imm8Format);
                         writer.Write((byte)(result & 0xFF));
                     }
                     continue;
@@ -159,7 +163,7 @@ namespace Emulator
 
                         var operandString = line.Substring(j, l - j).Trim().ToUpperInvariant();
                         TryParseImm(operandString, out var result, out var fixup);
-                        fixup?.Invoke(stream.Position, null); // TODO Clean this up
+                        fixup?.Invoke(stream.Position, 0, null, Imm16Format);
 
                         writer.Write((byte)(result >> 8));
                         writer.Write((byte)(result & 0xFF));
@@ -229,6 +233,8 @@ namespace Emulator
                             immALength = GetImmSizeBits(operand.ImmValue);
                         else if (immBLength == 0)
                             immBLength = GetImmSizeBits(operand.ImmValue);
+                        else
+                            throw new AssemblyException(i, "Excessive immediates");
                     }
 
                     var sz = operand.Type switch
@@ -255,7 +261,9 @@ namespace Emulator
 
                 iS = Math.Clamp(iS, 0, 1);
 
-                var operandIndex = 0;
+                var iT = conditional == Conditional.None ? 1 : 0;
+
+                var operandIndex = -1;
                 var operandIndices = Microcode.ResolveOperandIndices(operandTypes);
                 if (operandIndices != null)
                 {
@@ -265,7 +273,8 @@ namespace Emulator
                     {
                         var formatIndex = lOperandIndex & 0x07;
                         var operandFormat = Microcode.OperandFormats[formatIndex];
-                        if (operandFormat.LengthA < fmtImmALen && operandFormat.LengthA >= immALength
+                        if ((lOperandIndex & 0x20) >> 5 == iT
+                        &&  operandFormat.LengthA < fmtImmALen && operandFormat.LengthA >= immALength
                         &&  operandFormat.LengthB < fmtImmBLen && operandFormat.LengthB >= immBLength)
                         {
                             operandIndex = lOperandIndex;
@@ -273,15 +282,37 @@ namespace Emulator
                             fmtImmBLen = operandFormat.LengthB;
                         }
                     }
+
+                    if (operandIndex == -1) // TODO Roll into above loop, just set iT appropriately
+                    {
+                        fmtImmALen = int.MaxValue;
+                        fmtImmBLen = int.MaxValue;
+                        foreach (var lOperandIndex in operandIndices)
+                        {
+                            var formatIndex = lOperandIndex & 0x07;
+                            var operandFormat = Microcode.OperandFormats[formatIndex];
+                            if ((lOperandIndex & 0x20) >> 5 == 0
+                            &&  operandFormat.LengthA < fmtImmALen && operandFormat.LengthA >= immALength
+                            &&  operandFormat.LengthB < fmtImmBLen && operandFormat.LengthB >= immBLength)
+                            {
+                                operandIndex = lOperandIndex;
+                                iT = 0;
+                                fmtImmALen = operandFormat.LengthA;
+                                fmtImmBLen = operandFormat.LengthB;
+                            }
+                        }
+                    }
                 }
 
                 var ba = new BitArray(48);
                 
-                var iT = conditional == Conditional.None ? 1 : 0;
                 if (operands.Count == 0)
                     ba.Write(1, 3, metadata.Index);
                 else
                 {
+                    if (operandIndex == -1)
+                        throw new AssemblyException(i, $"Unsupported Encoding {(conditional == Conditional.None ? "OP" : "OP.FL")} {string.Join(' ', operandTypes)}");
+
                     ba.Write(0, 1, iT);
                     ba.Write(1, 3, (metadata.Index & 0x1C) >> 2);
                     ba.Write(4, 4, (int)conditional);
@@ -330,30 +361,43 @@ namespace Emulator
                         else
                             throw new ArgumentOutOfRangeException(nameof(immIndex), immIndex, "Illegal ImmIndex");
 
-                        operand.Fixup?.Invoke(stream.Position + offset / 8, operand); // TODO unaligned write
+                        operand.Fixup?.Invoke(stream.Position, immIndex, operand, operandFormat);
+                        
                         ba.Write(offset, length, operand.ImmValue);
                         ++immIndex;
                     }
                 }
 
                 var size = Microcode.ResolveEncodedInstructionSizeInBytes(operandTypes, operandIndex);
-                var inst = new byte[48 / 8];
                 ba.CopyTo(inst, 0);
                 Array.Reverse(inst);
                 writer.Write(inst, 0, size);
             }
 
-            foreach (var kvp in fixups)
+            writer.Flush();
+            var buffer = stream.GetBuffer();
+            foreach (var fixup in fixups)
             {
-                if (!labels.TryGetValue(kvp.Value.Item1, out var address))
-                    throw new AssemblyException(-1, $"Reference to undeclared label '{kvp.Value}'");
+                if (!labels.TryGetValue(fixup.Label, out var address))
+                    throw new AssemblyException(-1, $"Reference to undeclared label '{fixup.Label}'");
 
-                address = (short)(kvp.Value.Item2 ? -address : address);
+                if (fixup.IsNegative)
+                    address = (short)-address;
 
-                stream.Position = kvp.Key;
-                var imm16 = (ushort)(origin + address);
-                writer.Write((byte)(imm16 >> 8));
-                writer.Write((byte)(imm16 & 0xFF));
+                Array.Copy(buffer, fixup.Position, inst, 0, 6);
+                Array.Reverse(inst);
+                var ba = new BitArray(inst);
+                if (fixup.ImmIndex == 0)
+                    ba.Write(fixup.Format.OffsetA, fixup.Format.LengthA, address);
+                else if (fixup.ImmIndex == 1)
+                    ba.Write(fixup.Format.OffsetB, fixup.Format.LengthB, address);
+                else
+                    throw new ArgumentOutOfRangeException(nameof(fixup.ImmIndex), fixup.ImmIndex, "Illegal ImmIndex");
+
+                writer.BaseStream.Position = fixup.Position;
+                ba.CopyTo(inst, 0);
+                Array.Reverse(inst);
+                writer.Write(inst, 0, 6);
             }
 
             return stream.ToArray();
@@ -361,7 +405,7 @@ namespace Emulator
 
         private Operand ParseOperand(int line, string? operand)
         {
-            Action<long, Operand?>? fixup;
+            RegisterFixup? fixup;
             short regIndex, immValue;
             
             if (string.IsNullOrEmpty(operand))
@@ -431,7 +475,7 @@ namespace Emulator
                         immValue = 0;
                     }
 
-                    return new Operand(operandType, regIndex, immValue);
+                    return new Operand(operandType, regIndex, immValue, fixup);
                 }
 
                 // [PG:uIMM]
@@ -488,7 +532,7 @@ namespace Emulator
         }
 
         private readonly static char[] SignChars = { '+', '-' };
-        private bool TryParseImm(string value, out short result, out Action<long, Operand?>? fixup)
+        private bool TryParseImm(string value, out short result, out RegisterFixup? fixup)
         {
             int sign = value[0] == '-' ? -1 : 1;
             if (value[0] is '+' or '-')
@@ -523,9 +567,14 @@ namespace Emulator
                     return true;
                 }
 
-                // TODO Clean this up...
-                fixup = (x, operand) => fixups.Add(x, (value, IsNegImmRefOperand(operand)));
+                fixup = (position, immIndex, operand, operandFormat) =>
+                {
+                    fixups.Add(new Fixup(value, position, immIndex, IsNegImmRefOperand(operand), operandFormat));
+                };
                 
+                // TODO This forces unresolved lookups to use the largest instruction encoding
+                //      it would be nice if there was some way to rewrite the encoding if it could
+                //      be fit into a smaller encoding
                 result = -1;
                 return true;
             }
@@ -546,23 +595,23 @@ namespace Emulator
         {
             return operand != null && operand.Type
                 is OperandType.Reg
-                or OperandType.DerefSizePgRegPlusSImm
-                or OperandType.DerefSizePgReg
-                or OperandType.DerefSizePgUImm;
+                or OperandType.DerefSizePgRegPlusSImm or OperandType.DerefBytePgRegPlusSImm or OperandType.DerefWordPgRegPlusSImm
+                or OperandType.DerefSizePgReg or OperandType.DerefBytePgReg or OperandType.DerefWordPgReg
+                or OperandType.DerefSizePgUImm or OperandType.DerefBytePgUImm or OperandType.DerefWordPgUImm;
         }
 
         private static bool IsImmRefOperand(Operand? operand)
         {
             return operand != null && operand.Type
                 is OperandType.Imm
-                or OperandType.DerefSizePgRegPlusSImm
-                or OperandType.DerefSizePgUImm;
+                or OperandType.DerefSizePgRegPlusSImm or OperandType.DerefBytePgRegPlusSImm or OperandType.DerefWordPgRegPlusSImm
+                or OperandType.DerefSizePgUImm or OperandType.DerefBytePgUImm or OperandType.DerefWordPgUImm;
         }
 
         private static bool IsNegImmRefOperand(Operand? operand)
         {
             return operand != null && operand.Type
-                is OperandType.DerefSizePgRegPlusSImm;
+                is OperandType.DerefSizePgRegPlusSImm or OperandType.DerefBytePgRegPlusSImm or OperandType.DerefWordPgRegPlusSImm;
         }
 
         private static int GetImmSizeBits(short value)
@@ -577,8 +626,12 @@ namespace Emulator
             OperandType Type,
             short RegIndex = 0,
             short ImmValue = 0,
-            Action<long, Operand?>? Fixup = null
+            RegisterFixup? Fixup = null
         );
+
+        private sealed record Fixup(string Label, long Position, int ImmIndex, bool IsNegative, Microcode.OperandFormat Format);
+
+        private delegate void RegisterFixup(long position, int immIndex, Operand? operand, Microcode.OperandFormat format);
 
         private enum OutputFormat
         {

@@ -153,11 +153,11 @@ namespace Emulator
             {
                 Register? reg;
                 if (acword == ControlWord.aRSO1)
-                    reg = SelectRegister((operand0.Word & 0xF000) >> 12);
+                    reg = SelectRegister(0);
                 else if (acword == ControlWord.aRSO2)
-                    reg = SelectRegister((operand0.Word & 0x0F00) >> 8);
+                    reg = SelectRegister(1);
                 else if (acword == ControlWord.aRSO3)
-                    reg = SelectRegister((operand0.Word & 0x00F0) >> 4);
+                    reg = SelectRegister(2);
                 else if (acword == ControlWord.TAO)
                     reg = ta;
                 else if (acword == ControlWord.aTBO)
@@ -299,6 +299,13 @@ namespace Emulator
                     }
                     else if ((cword & ControlWord.MASK_BUSW) == ControlWord.WORD) // 16-bit
                         dbusWord = machine.ReadWord(seg, abusWord);
+                    else if ((cword & ControlWord.MASK_BUSW) == ControlWord.SIZE)
+                    {
+                        if ((instruction.Word & 0x20) == 0)
+                            dbusWord = machine.ReadByte(seg, abusWord);
+                        else
+                            dbusWord = machine.ReadWord(seg, abusWord);
+                    }
                     else
                         dbusWord = machine.ReadByte(seg, abusWord);
                 }
@@ -312,6 +319,13 @@ namespace Emulator
                     }
                     else if ((cword & ControlWord.MASK_BUSW) == ControlWord.WORD) // 16-bit
                         machine.WriteWord(seg, abusWord, dbusWord);
+                    else if ((cword & ControlWord.MASK_BUSW) == ControlWord.SIZE)
+                    {
+                        if ((instruction.Word & 0x20) == 0)
+                            machine.WriteByte(seg, abusWord, (byte)(dbusWord & 0xFF));
+                        else
+                            machine.WriteWord(seg, abusWord, dbusWord);
+                    }
                     else
                         machine.WriteByte(seg, abusWord, (byte)(dbusWord & 0xFF));
                 }
@@ -395,7 +409,7 @@ namespace Emulator
                 latchINT = (dbusWord & 1) == 1;
 
             // CLOCK
-            mci = (mci + 1) & 0x07;
+            mci = (mci + 1) & 0x0F;
 
             // CLOCK FALLING EDGE
             if ((cword & ControlWord.MASK_IPC) == ControlWord.IPC1)
@@ -417,14 +431,16 @@ namespace Emulator
         private ControlWord ResolveControlWord()
         {
             var iword = instruction.Word;
-            var iaddr = (iword & 0x8F00) switch
-            {
-                0x0000 => (iword & 0x7000)      | (iword & 0x00C0) << 4 | 
-                          (iword & 0x8000) >> 6 | (iword & 0x001F) << 4 | (mci & 0x07),
-                _      => (iword & 0x7000) >> 8 | (mci & 0x07) | 0x7F80
-            };
+            int iaddr;
+            if ((iword & 0x8F00) == 0)
+                iaddr = ((iword & 0x7000) >> 8) | 0x7F80;
+            else
+                iaddr = (iword & 0x7000)        | ((iword & 0x00C0) << 4) |
+                        ((iword & 0x8000) >> 6) | ((iword & 0x001F) << 4);
 
-            return microcode[iaddr];
+            iaddr |= mci & 0x0F;
+
+            return microcode[iaddr]; // .rom = iaddr*4 + 32
         }
 
         private Conditional ResolveConditional()
@@ -486,7 +502,7 @@ namespace Emulator
                     1 => (value & 0x0000FFFF) >> 0,
                     2 => (value & 0x00000FFF) >> 0,
                     3 => (value & 0x0000FFFF) >> 0,
-                    4 => (value & 0x0000FFFF) >> 0,
+                    4 => (value & 0x000000FF) >> 0,
                     5 => (value & 0x0000FF00) >> 8,
                     6 => (value & 0x00000FFF) >> 0,
                     7 => (value & 0x00FF0000) >> 16,

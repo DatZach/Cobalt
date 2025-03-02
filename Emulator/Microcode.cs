@@ -226,7 +226,7 @@ namespace Emulator
                     var size = ResolveEncodedInstructionSizeInBytes(rootProcedure.Operands, operandIndex);
                     var code = ConcretizeMacroCode(
                         rootProcedure,
-                        (ControlWord.IPCIW, (ControlWord)((int)ControlWord.IPC1 + size))
+                        (ControlWord.IPCIW, (ControlWord)((int)ControlWord.IPC1 + size - 1))
                     );
 
                     var procedure = rootProcedure with { Code = code };
@@ -264,7 +264,7 @@ namespace Emulator
 
             // SERIALIZE OPCODES & MICROCODE
             var microcode = new ControlWord[MicrocodeRom.RomSize];
-            for (int addr = 0x0000; addr <= 0x7FF8; addr += 0x08)
+            for (int addr = 0x0000; addr <= 0x7FF8; addr += 0x10)
             {
                 if (!opcodes.TryGetValue(addr, out var proc))
                     proc = macros["ILLEGAL"] ?? throw new AssemblyException(-1, "Missing 'ILLEGAL' macro");
@@ -296,7 +296,7 @@ namespace Emulator
             // TIIFFF
             var value = operandIndex.Value;
             var format = OperandFormats[value & 0x07];
-            var hasFlag = (value & 0b10000) == 0;
+            var hasFlag = (value & 0b100000) == 0;
 
             var regBits = 0;
             var immABits = 0;
@@ -312,7 +312,7 @@ namespace Emulator
                     immBBits += format.LengthB;
             }
 
-            if (hasFlag && regBits > 0)
+            if (!hasFlag && regBits > 0)
                 regBits -= 4;
 
             var bits = 16 + regBits + immABits + immBBits;
@@ -353,60 +353,60 @@ namespace Emulator
 
         public static Dictionary<string, int[]> OperandTable = new()
         {
-            ["REG"] = new[] { 0b000000, 0b100111 },
-            ["SZ[PG:REG+sIMM]"] = new[] { 0b001000, 0b000001, 0b100010, 0b100011 },
-            ["SZ[PG:REG]"] = new[] { 0b010000, 0b110111 },
-            ["SZ[PG:uIMM]"] = new[] { 0b011000, 0b001001, 0b101010, 0b101011 },
-            ["IMM"] = new[] { 0b100000, 0b100001, 0b101111 },
+            ["REG"] = new[] { 0b100000, 0b000111 },
+            ["SZ[PG:REG+sIMM]"] = new[] { 0b101000, 0b100001, 0b000010, 0b000011 },
+            ["SZ[PG:REG]"] = new[] { 0b110000, 0b010111 },
+            ["SZ[PG:uIMM]"] = new[] { 0b111000, 0b101001, 0b001010, 0b001011 },
+            ["IMM"] = new[] { 0b000000, 0b000001, 0b001111 },
 
-            ["REG REG"] = new[] { 0b101000 },
-            ["REG IMM"] = new[] { 0b000000, 0b000001, 0b100010, 0b100011 },
-            ["REG SZ[PG:REG+sIMM]"] = new[] { 0b101011, 0b100100, 0b000111 },
-            ["REG SZ[PG:REG]"] = new[] { 0b111000 },
-            ["REG SZ[PG:uIMM]"] = new[] { 0b101100, 0b010101, 0b001111 },
+            ["REG REG"] = new[] { 0b001000 },
+            ["REG IMM"] = new[] { 0b100000, 0b100001, 0b000010, 0b000011 }, // !!
+            ["REG SZ[PG:REG+sIMM]"] = new[] { 0b001011, 0b000100, 0b100111 },
+            ["REG SZ[PG:REG]"] = new[] { 0b011000 },
+            ["REG SZ[PG:uIMM]"] = new[] { 0b001100, 0b110101, 0b101111 },
 
-            ["IMM IMM"] = new[] { 0b100001, 0b111111 },
+            ["IMM IMM"] = new[] { 0b000001, 0b011111 },
 
-            ["SZ[PG:REG+sIMM] REG"] = new[] { 0b100101 },
-            ["SZ[PG:REG+sIMM] IMM"] = new[] { 0b001001, 0b111011, 0b011100, 0b101101, 0b100110, 0b100111 },
-            ["SZ[PG:REG+sIMM] SZ[PG:REG+sIMM]"] = new[] { 0b000011, 0b010100, 0b110101, 0b000110, 0b101110, 0b011111 },
-            ["SZ[PG:REG+sIMM] SZ[PG:REG]"] = new[] { 0b110001, 0b001011, 0b110110 },
-            ["SZ[PG:REG+sIMM] SZ[PG:uIMM]"] = new[] { 0b010010, 0b110011, 0b001100, 0b111101, 0b111110 },
+            ["SZ[PG:REG+sIMM] REG"] = new[] { 0b000101 },
+            ["SZ[PG:REG+sIMM] IMM"] = new[] { 0b101001, 0b011011, 0b111100, 0b001101, 0b000110, 0b000111 },
+            ["SZ[PG:REG+sIMM] SZ[PG:REG+sIMM]"] = new[] { 0b100011, 0b110100, 0b010101, 0b100110, 0b001110, 0b111111 },
+            ["SZ[PG:REG+sIMM] SZ[PG:REG]"] = new[] { 0b010001, 0b101011, 0b010110 },
+            ["SZ[PG:REG+sIMM] SZ[PG:uIMM]"] = new[] { 0b110010, 0b010011, 0b101100, 0b011101, 0b011110 },
 
-            ["SZ[PG:REG] REG"] = new[] { 0b110000 },
-            ["SZ[PG:REG] IMM"] = new[] { 0b001000, 0b010001, 0b101010, 0b101111 },
-            ["SZ[PG:REG] SZ[PG:REG+sIMM]"] = new[] { 0b111001, 0b001010, 0b000101 },
-            ["SZ[PG:REG] SZ[PG:REG]"] = new[] { 0b100000 },
-            ["SZ[PG:REG] SZ[PG:uIMM]"] = new[] { 0b101001, 0b001101 },
+            ["SZ[PG:REG] REG"] = new[] { 0b010000 },
+            ["SZ[PG:REG] IMM"] = new[] { 0b101000, 0b110001, 0b001010, 0b001111 },
+            ["SZ[PG:REG] SZ[PG:REG+sIMM]"] = new[] { 0b011001, 0b101010, 0b100101 },
+            ["SZ[PG:REG] SZ[PG:REG]"] = new[] { 0b000000 },
+            ["SZ[PG:REG] SZ[PG:uIMM]"] = new[] { 0b001001, 0b101101 },
 
-            ["SZ[PG:uIMM] REG"] = new[] { 0b000010, 0b010011, 0b110100 },
-            ["SZ[PG:uIMM] IMM"] = new[] { 0b010000, 0b011001, 0b110010, 0b011011, 0b010111, 0b110111 },
-            ["SZ[PG:uIMM] SZ[PG:REG+sIMM]"] = new[] { 0b111100, 0b011101 },
-            ["SZ[PG:uIMM] SZ[PG:REG]"] = new[] { 0b011010 },
-            ["SZ[PG:uIMM] SZ[PG:uIMM]"] = new[] { 0b111010, 0b000100 },
+            ["SZ[PG:uIMM] REG"] = new[] { 0b100010, 0b110011, 0b010100 },
+            ["SZ[PG:uIMM] IMM"] = new[] { 0b110000, 0b111001, 0b010010, 0b111011, 0b110111, 0b010111 },
+            ["SZ[PG:uIMM] SZ[PG:REG+sIMM]"] = new[] { 0b011100, 0b111101 },
+            ["SZ[PG:uIMM] SZ[PG:REG]"] = new[] { 0b111010 },
+            ["SZ[PG:uIMM] SZ[PG:uIMM]"] = new[] { 0b011010, 0b100100 },
 
-            ["REG REG REG"] = new[] { 0b100010, 0b000110 },
-            ["REG REG IMM"] = new[] { 0b110011, 0b100100 },
-            ["REG REG SZ[PG:REG+sIMM]"] = new[] { 0b101000, 0b100011, 0b000100 },
-            ["REG REG SZ[PG:REG]"] = new[] { 0b101011, 0b001101, 0b001110 },
-            ["REG REG SZ[PG:uIMM]"] = new[] { 0b100001, 0b111101 },
+            ["REG REG REG"] = new[] { 0b000010, 0b100110 },
+            ["REG REG IMM"] = new[] { 0b010011, 0b000100 },
+            ["REG REG SZ[PG:REG+sIMM]"] = new[] { 0b001000, 0b000011, 0b100100 },
+            ["REG REG SZ[PG:REG]"] = new[] { 0b001011, 0b101101, 0b101110 },
+            ["REG REG SZ[PG:uIMM]"] = new[] { 0b000001, 0b011101 },
 
-            ["IMM IMM REG"] = new[] { 0b000000, 0b000001, 0b100111 },
-            ["IMM IMM SZ[PG:REG]"] = new[] { 0b001000, 0b001001 },
+            ["IMM IMM REG"] = new[] { 0b100000, 0b100001, 0b000111 },
+            ["IMM IMM SZ[PG:REG]"] = new[] { 0b101000, 0b101001 },
 
-            ["SZ[PG:REG+sIMM] SZ[PG:REG+sIMM] REG"] = new[] { 0b001100, 0b011101 },
-            ["SZ[PG:REG+sIMM] SZ[PG:REG+sIMM] IMM"] = new[] { 0b111011, 0b111100 },
-            ["SZ[PG:REG+sIMM] SZ[PG:REG+sIMM] SZ[PG:REG]"] = new[] { 0b001010, 0b010101 },
-            ["SZ[PG:REG+sIMM] SZ[PG:REG+sIMM] SZ[PG:uIMM]"] = new[] { 0b000101 },
+            ["SZ[PG:REG+sIMM] SZ[PG:REG+sIMM] REG"] = new[] { 0b101100, 0b111101 },
+            ["SZ[PG:REG+sIMM] SZ[PG:REG+sIMM] IMM"] = new[] { 0b011011, 0b011100 },
+            ["SZ[PG:REG+sIMM] SZ[PG:REG+sIMM] SZ[PG:REG]"] = new[] { 0b101010, 0b110101 },
+            ["SZ[PG:REG+sIMM] SZ[PG:REG+sIMM] SZ[PG:uIMM]"] = new[] { 0b100101 },
 
-            ["SZ[PG:REG] SZ[PG:REG] REG"] = new[] { 0b101010 },
-            ["SZ[PG:REG] SZ[PG:REG] IMM"] = new[] { 0b000010, 0b101100 },
-            ["SZ[PG:REG] SZ[PG:REG] SZ[PG:REG+sIMM]"] = new[] { 0b000011, 0b010100, 0b110100 },
-            ["SZ[PG:REG] SZ[PG:REG] SZ[PG:REG]"] = new[] { 0b110010 },
-            ["SZ[PG:REG] SZ[PG:REG] SZ[PG:uIMM]"] = new[] { 0b001011, 0b011100 },
+            ["SZ[PG:REG] SZ[PG:REG] REG"] = new[] { 0b001010 },
+            ["SZ[PG:REG] SZ[PG:REG] IMM"] = new[] { 0b100010, 0b001100 },
+            ["SZ[PG:REG] SZ[PG:REG] SZ[PG:REG+sIMM]"] = new[] { 0b100011, 0b110100, 0b010100 },
+            ["SZ[PG:REG] SZ[PG:REG] SZ[PG:REG]"] = new[] { 0b010010 },
+            ["SZ[PG:REG] SZ[PG:REG] SZ[PG:uIMM]"] = new[] { 0b101011, 0b111100 },
 
-            ["SZ[PG:uIMM] SZ[PG:uIMM] REG"] = new[] { 0b101001, 0b100101 },
-            ["SZ[PG:uIMM] SZ[PG:uIMM] IMM"] = new[] { 0b101101 },
+            ["SZ[PG:uIMM] SZ[PG:uIMM] REG"] = new[] { 0b001001, 0b000101 },
+            ["SZ[PG:uIMM] SZ[PG:uIMM] IMM"] = new[] { 0b001101 },
         };
 
         public static readonly IReadOnlyList<OperandFormat> OperandFormats = new[]
@@ -727,7 +727,7 @@ namespace Emulator
 
         BYTE        = 0b00000000_00000000_00000000_00000000,
         WORD        = 0b00000000_00000001_00000000_00000000,
-        XX          = 0b00000000_00000010_00000000_00000000,
+        SIZE        = 0b00000000_00000010_00000000_00000000,
         IWORD       = 0b00000000_00000011_00000000_00000000,
         MASK_BUSW   = 0b00000000_00000011_00000000_00000000,
 
@@ -773,9 +773,9 @@ namespace Emulator
         MASK_IP     = 0b11000000_00000000_00000000_00000000,
 
         // NOTE Not real control words
-        SIZ1        = 0b00000001_00000000_00000000_00000000_00000000,
-        SIZ2        = 0b00000010_00000000_00000000_00000000_00000000,
-        SIZ3        = 0b00000100_00000000_00000000_00000000_00000000,
+        XX_0        = 0b00000001_00000000_00000000_00000000_00000000,
+        XX_1        = 0b00000010_00000000_00000000_00000000_00000000,
+        XX_2        = 0b00000100_00000000_00000000_00000000_00000000,
         IPCIW       = 0b00001000_00000000_00000000_00000000_00000000
     }
 
@@ -820,6 +820,8 @@ namespace Emulator
                     sb.Append("BYTE ");
                 else if ((cw & ControlWord.MASK_BUSW) == ControlWord.WORD)
                     sb.Append("WORD ");
+                else if ((cw & ControlWord.MASK_BUSW) == ControlWord.SIZE)
+                    sb.Append("SIZE ");
                 else if ((cw & ControlWord.MASK_BUSW) == ControlWord.IWORD)
                     sb.Append("IWORD ");
             }

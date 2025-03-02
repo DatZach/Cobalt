@@ -4,7 +4,7 @@
 ;
 
 ; 105 Bytes v4
-; 89  Bytes v4.2
+; 92  Bytes v4.2
 
 format bin
 origin 0x0000
@@ -32,7 +32,7 @@ Wow:
     mov     r5, 0x1111
     nop
 
-    mov     r7, 2
+    mov     r7, 1
 
     cmp     r7, 3
     rcl.sf  r7, r7, 1
