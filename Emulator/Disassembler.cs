@@ -40,10 +40,6 @@ namespace Emulator
 
         public string Disassemble(ushort segment, ushort offset)
         {
-            // 0 Operand (0OOOOO00 XXXXXXXX) NO FLAGS
-            // 1 Operand (1OOOOOAA AXXXXXXX) + Flags
-            // 2 Operand (0OOOOOAA ABBBXXXX) NO FLAGS
-
             var iword = machine.ReadWord(segment, offset);
             var operand0 = machine.ReadWord(segment, (ushort)(offset + 2));
             var operand1 = machine.ReadWord(segment, (ushort)(offset + 4));
