@@ -45,4 +45,10 @@
     </Content>
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="Microcode42.cmc">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

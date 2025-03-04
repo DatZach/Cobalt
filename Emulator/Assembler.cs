@@ -1,5 +1,6 @@
 ﻿using System.Collections;
 using System.Numerics;
+using System.Reflection.Emit;
 
 namespace Emulator
 {
@@ -456,7 +457,10 @@ namespace Emulator
                     throw new AssemblyException(line, $"Illegal Addressing Mode for PG:REG '{operand}'");
 
                 if (TryParseImm(immOperand, out immValue, out fixup))
-                    return new Operand(OperandType.DerefBytePgUImm, regIndex, immValue, fixup);
+                {
+                    var operandType = isByte ? OperandType.DerefBytePgUImm : OperandType.DerefWordPgUImm;
+                    return new Operand(operandType, regIndex, immValue, fixup);
+                }
             }
 
             throw new AssemblyException(line, $"Illegal operand '{operand}'");

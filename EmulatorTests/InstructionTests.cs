@@ -2,6 +2,9 @@ using Emulator;
 
 namespace EmulatorTests
 {
+    // TODO Unit Tests for all Instruction Encodings
+    // TODO Unit Tests for all Conditionals
+
     [TestClass]
     public class InstructionTests
     {
@@ -9,7 +12,7 @@ namespace EmulatorTests
 
         public InstructionTests()
         {
-            microcodeRom = Microcode.AssembleRom("Microcode3.cmc");
+            microcodeRom = Microcode.AssembleRom("Microcode42.cmc");
         }
 
         [TestMethod]
@@ -33,22 +36,20 @@ namespace EmulatorTests
         {
             AssertState(
                 @"
-                mov r0, 0xFFFF
-                mov r0, 0x12
-                mov r1, 0x1234
-                mov r2h, 0x12
-                mov r2l, 0x34
-                mov r3h, 0x56
+                mov r0h, 0x12
+                mov r0l, 0x34
+                mov r1, 0xFFFF
+                mov r1, 0x12
+                mov r2, 0x1234
                 mov sp, 0x0F
-                mov ss, 0x80
-                mov ds, 0x01
+                mov sg, 0x80
+                mov dg, 0x01
                 ",
                 new CpuState
                 {
-                    r0 = 0x0012,
-                    r1 = 0x1234,
+                    r0 = 0x1234,
+                    r1 = 0x0012,
                     r2 = 0x1234,
-                    r3 = 0x5600,
                     sp = 0x000F,
                     sg = 0x0080,
                     dg = 0x0001,
@@ -61,23 +62,24 @@ namespace EmulatorTests
         {
             AssertState(
                 @"
-                mov word[ds:0x80], 0x1234
-                mov word[ds:0x90], 0x1234
+                mov word[dg:0x80], 0x1234
+                mov word[dg:0x90], 0x1234
                 mov r0, 0x70
-                mov r1, word[ds:r0+0x10]
-                mov r2, byte[ds:r0+0x11]
+                mov r1, word[dg:r0+0x10]
+                mov r2, byte[dg:r0+0x11]
                 mov r0, 0xA0
-                mov r3, word[ds:r0-0x10]
-                mov r0, byte[ds:r0-0x0F]
+                mov r3, word[dg:r0-0x10]
+                mov r4, byte[dg:r0-0x0F]
                 ",
                 new MachineState
                 {
                     CPU = new CpuState
                     {
-                        r0 = 0x0034,
+                        r0 = 0x00A0,
                         r1 = 0x1234,
                         r2 = 0x0034,
-                        r3 = 0x1234
+                        r3 = 0x1234,
+                        r4 = 0x0034
                     },
                     RAMChecks = new()
                     {
@@ -93,22 +95,22 @@ namespace EmulatorTests
         {
             AssertState(
                 @"
-                mov word[ds:0x80], 0x1234
-                mov r0, 0x80
-                mov r1, word[ds:r0]
-                mov r2, byte[ds:r0]
-                mov r3h, byte[ds:r0]
-                mov r0, 0x81
-                mov r3l, byte[ds:r0]
+                mov word[dg:0x80], 0x1234
+                mov r4, 0x80
+                mov r1, word[dg:r4]
+                mov r2, byte[dg:r4]
+                mov r0h, byte[dg:r4]
+                mov r4, 0x81
+                mov r0l, byte[dg:r4]
                 ",
                 new MachineState
                 {
                     CPU = new CpuState
                     {
-                        r0 = 0x0081,
+                        r0 = 0x1234,
                         r1 = 0x1234,
                         r2 = 0x0012,
-                        r3 = 0x1234
+                        r4 = 0x0081
                     },
                     RAMChecks = new()
                     {
@@ -6847,7 +6849,7 @@ namespace EmulatorTests
             var assembler = new Assembler(microcodeRom);
             var program = assembler.AssembleSource(
                 "nop\n" +
-                "sie 0\n" +
+                "sff 0\n" +
                 source
             );
             var hlt = assembler.AssembleSource("hlt");

@@ -415,6 +415,8 @@ namespace Emulator
         public static Dictionary<string, (ControlWord mask, ControlWord value)[]> OperandMacros = new()
         {
             ["REG IMM"] = new[] { (ControlWord.ISO2, ControlWord.ISO1) },
+            ["REG SZ[PG:REG+sIMM]"] = new[] { (ControlWord.ISO2, ControlWord.ISO1) },
+            ["REG SZ[PG:uIMM]"] = new[] { (ControlWord.ISO2, ControlWord.ISO1) },
             
             ["SZ[PG:REG] IMM"] = new[] { (ControlWord.ISO2, ControlWord.ISO1) },
             ["SZ[PG:REG] SZ[PG:REG+sIMM]"] = new[] { (ControlWord.ISO2, ControlWord.ISO1) },
