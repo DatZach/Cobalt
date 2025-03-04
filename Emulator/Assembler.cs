@@ -200,22 +200,7 @@ namespace Emulator
                     throw new AssemblyException(i, $"Opcode '{metadata.Name}' expected {metadata.OperandCount} operands, received {operands.Count} instead");
 
                 // TOOOCCCC OOSIIFFF
-                var operandTypes = operands.Select(x => x.Type switch
-                {
-                    OperandType.None => OperandType.None,
-                    OperandType.Reg => OperandType.Reg,
-                    OperandType.Imm => OperandType.Imm,
-                    OperandType.DerefSizePgRegPlusSImm => OperandType.DerefSizePgRegPlusSImm,
-                    OperandType.DerefSizePgReg => OperandType.DerefSizePgReg,
-                    OperandType.DerefSizePgUImm => OperandType.DerefSizePgUImm,
-                    OperandType.DerefBytePgRegPlusSImm => OperandType.DerefSizePgRegPlusSImm,
-                    OperandType.DerefWordPgRegPlusSImm => OperandType.DerefSizePgRegPlusSImm,
-                    OperandType.DerefBytePgReg => OperandType.DerefSizePgReg,
-                    OperandType.DerefWordPgReg => OperandType.DerefSizePgReg,
-                    OperandType.DerefBytePgUImm => OperandType.DerefSizePgUImm,
-                    OperandType.DerefWordPgUImm => OperandType.DerefSizePgUImm,
-                    _ => throw new ArgumentOutOfRangeException()
-                }).ToList();
+                var operandTypes = operands.Select(x => ToGenericType(x.Type)).ToList();
                 var operandCombo = metadata.OperandCombinations.FirstOrDefault(x => x.SequenceEqual(operandTypes));
                 if (operandCombo == null)
                     throw new AssemblyException(i, $"Opcode '{metadata.Name}' does not support the operand combination {string.Join(' ', operands)}");
@@ -264,7 +249,8 @@ namespace Emulator
                 var iT = conditional == Conditional.None ? 1 : 0;
 
                 var operandIndex = -1;
-                var operandIndices = Microcode.ResolveOperandIndices(operandTypes);
+                var operandKey = Microcode.ResolveOperandKey(operandTypes);
+                var operandIndices = Microcode.OperandTable.GetValueOrDefault(operandKey);
                 if (operandIndices != null)
                 {
                     int fmtImmALen = int.MaxValue;
@@ -273,7 +259,7 @@ namespace Emulator
                     {
                         var formatIndex = lOperandIndex & 0x07;
                         var operandFormat = Microcode.OperandFormats[formatIndex];
-                        if ((lOperandIndex & 0x20) >> 5 == iT
+                        if (((lOperandIndex & 0x20) >> 5 == iT || (lOperandIndex & 0x20) >> 5 == 0)
                         &&  operandFormat.LengthA < fmtImmALen && operandFormat.LengthA >= immALength
                         &&  operandFormat.LengthB < fmtImmBLen && operandFormat.LengthB >= immBLength)
                         {
@@ -283,25 +269,7 @@ namespace Emulator
                         }
                     }
 
-                    if (operandIndex == -1) // TODO Roll into above loop, just set iT appropriately
-                    {
-                        fmtImmALen = int.MaxValue;
-                        fmtImmBLen = int.MaxValue;
-                        foreach (var lOperandIndex in operandIndices)
-                        {
-                            var formatIndex = lOperandIndex & 0x07;
-                            var operandFormat = Microcode.OperandFormats[formatIndex];
-                            if ((lOperandIndex & 0x20) >> 5 == 0
-                            &&  operandFormat.LengthA < fmtImmALen && operandFormat.LengthA >= immALength
-                            &&  operandFormat.LengthB < fmtImmBLen && operandFormat.LengthB >= immBLength)
-                            {
-                                operandIndex = lOperandIndex;
-                                iT = 0;
-                                fmtImmALen = operandFormat.LengthA;
-                                fmtImmBLen = operandFormat.LengthB;
-                            }
-                        }
-                    }
+                    iT = (operandIndex & 0x20) >> 5;
                 }
 
                 var ba = new BitArray(48);
@@ -612,6 +580,26 @@ namespace Emulator
         {
             return operand != null && operand.Type
                 is OperandType.DerefSizePgRegPlusSImm or OperandType.DerefBytePgRegPlusSImm or OperandType.DerefWordPgRegPlusSImm;
+        }
+
+        private static OperandType ToGenericType(OperandType type)
+        {
+            return type switch
+            {
+                OperandType.None => OperandType.None,
+                OperandType.Reg => OperandType.Reg,
+                OperandType.Imm => OperandType.Imm,
+                OperandType.DerefSizePgRegPlusSImm => OperandType.DerefSizePgRegPlusSImm,
+                OperandType.DerefSizePgReg => OperandType.DerefSizePgReg,
+                OperandType.DerefSizePgUImm => OperandType.DerefSizePgUImm,
+                OperandType.DerefBytePgRegPlusSImm => OperandType.DerefSizePgRegPlusSImm,
+                OperandType.DerefWordPgRegPlusSImm => OperandType.DerefSizePgRegPlusSImm,
+                OperandType.DerefBytePgReg => OperandType.DerefSizePgReg,
+                OperandType.DerefWordPgReg => OperandType.DerefSizePgReg,
+                OperandType.DerefBytePgUImm => OperandType.DerefSizePgUImm,
+                OperandType.DerefWordPgUImm => OperandType.DerefSizePgUImm,
+                _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown Type")
+            };
         }
 
         private static int GetImmSizeBits(short value)

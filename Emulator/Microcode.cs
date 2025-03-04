@@ -180,7 +180,6 @@ namespace Emulator
                                     "RSO3" => IsAluOp(parts, p + 1) ? ControlWord.aRSO3 : throw new AssemblyException(i, "RSO3 is LHS-only"),
                                     "TBO" => IsAluOp(parts, p + 1) ? ControlWord.aTBO : ControlWord.bTBO,
                                     "TCO" => IsAluOp(parts, p + 1) ? ControlWord.aTCO : ControlWord.bTCO,
-                                    "ISO3" => ControlWord.ISO1,
                                     _ => Enum.Parse<ControlWord>(subPart)
                                 };
                             }
@@ -217,18 +216,24 @@ namespace Emulator
                 var rootProcedure = procedures[i];
                 
                 int operandCount = rootProcedure.Operands.Count;
-                var operandIndices = ResolveOperandIndices(rootProcedure.Operands);
-                var jCount = operandIndices?.Count ?? 1;
+                var operandKey = ResolveOperandKey(rootProcedure.Operands);
+                var operandIndices = OperandTable.GetValueOrDefault(operandKey);
+                var jCount = operandIndices?.Length ?? 1;
 
                 for (int j = 0; j < jCount; ++j)
                 {
                     var operandIndex = operandIndices?[j];
-                    var size = ResolveEncodedInstructionSizeInBytes(rootProcedure.Operands, operandIndex);
-                    var code = ConcretizeMacroCode(
-                        rootProcedure,
-                        (ControlWord.IPCIW, (ControlWord)((int)ControlWord.IPC1 + size - 1))
-                    );
 
+                    var size = ResolveEncodedInstructionSizeInBytes(rootProcedure.Operands, operandIndex);
+                    var macro = new List<(ControlWord mask, ControlWord value)>
+                    {
+                        (ControlWord.IPCIW, (ControlWord)((int)ControlWord.IPC1 + size - 1))
+                    };
+
+                    if (OperandMacros.TryGetValue(operandKey, out var operandMacro))
+                        macro.AddRange(operandMacro);
+
+                    var code = ConcretizeMacroCode(rootProcedure, macro);
                     var procedure = rootProcedure with { Code = code };
 
                     int addr = 0;
@@ -336,9 +341,9 @@ namespace Emulator
                 or OperandType.DerefSizePgUImm;
         }
 
-        public static IReadOnlyList<int>? ResolveOperandIndices(IReadOnlyList<OperandType> operands)
+        public static string ResolveOperandKey(IReadOnlyList<OperandType> operands)
         {
-            var key = string.Join(' ', operands.Select(x => x switch
+            return string.Join(' ', operands.Select(x => x switch
             {
                 OperandType.Reg => "REG",
                 OperandType.Imm => "IMM",
@@ -347,8 +352,6 @@ namespace Emulator
                 OperandType.DerefSizePgUImm => "SZ[PG:uIMM]",
                 _ => throw new ArgumentOutOfRangeException(nameof(x), x, null)
             }));
-
-            return OperandTable.GetValueOrDefault(key);
         }
 
         public static Dictionary<string, int[]> OperandTable = new()
@@ -360,7 +363,7 @@ namespace Emulator
             ["IMM"] = new[] { 0b000000, 0b000001, 0b001111 },
 
             ["REG REG"] = new[] { 0b001000 },
-            ["REG IMM"] = new[] { 0b100000, 0b100001, 0b000010, 0b000011 }, // !!
+            ["REG IMM"] = new[] { 0b100000, 0b100001, 0b000010, 0b000011 },
             ["REG SZ[PG:REG+sIMM]"] = new[] { 0b001011, 0b000100, 0b100111 },
             ["REG SZ[PG:REG]"] = new[] { 0b011000 },
             ["REG SZ[PG:uIMM]"] = new[] { 0b001100, 0b110101, 0b101111 },
@@ -409,6 +412,25 @@ namespace Emulator
             ["SZ[PG:uIMM] SZ[PG:uIMM] IMM"] = new[] { 0b001101 },
         };
 
+        public static Dictionary<string, (ControlWord mask, ControlWord value)[]> OperandMacros = new()
+        {
+            ["REG IMM"] = new[] { (ControlWord.ISO2, ControlWord.ISO1) },
+            
+            ["SZ[PG:REG] IMM"] = new[] { (ControlWord.ISO2, ControlWord.ISO1) },
+            ["SZ[PG:REG] SZ[PG:REG+sIMM]"] = new[] { (ControlWord.ISO2, ControlWord.ISO1) },
+            ["SZ[PG:REG] SZ[PG:uIMM]"] = new[] { (ControlWord.ISO2, ControlWord.ISO1) },
+            
+            ["REG REG IMM"] = new[] { (ControlWord.ISO3, ControlWord.ISO1) },
+            ["REG REG SZ[PG:REG+sIMM]"] = new[] { (ControlWord.ISO3, ControlWord.ISO1) },
+            ["REG REG SZ[PG:uIMM]"] = new[] { (ControlWord.ISO3, ControlWord.ISO1) },
+
+            ["SZ[PG:REG] SZ[PG:REG] IMM"] = new[] { (ControlWord.ISO3, ControlWord.ISO1) },
+            ["SZ[PG:REG] SZ[PG:REG] SZ[PG:REG+sIMM]"] = new[] { (ControlWord.ISO3, ControlWord.ISO1) },
+            ["SZ[PG:REG] SZ[PG:REG] SZ[PG:uIMM]"] = new[] { (ControlWord.ISO3, ControlWord.ISO1) },
+
+            ["SZ[PG:uIMM] SZ[PG:uIMM] IMM"] = new[] { (ControlWord.ISO2, ControlWord.ISO1), (ControlWord.ISO3, ControlWord.ISO2) },
+        };
+
         public static readonly IReadOnlyList<OperandFormat> OperandFormats = new[]
         {
             new OperandFormat(16, 8, 24, 8),
@@ -444,7 +466,7 @@ namespace Emulator
 
         private static ControlWord[] ConcretizeMacroCode(
             Procedure procedure,
-            params (ControlWord mask, ControlWord value)[] kvps
+            IReadOnlyList<(ControlWord mask, ControlWord value)> kvps
         )
         {
             var code = new ControlWord[procedure.CodeLength];
@@ -453,7 +475,7 @@ namespace Emulator
             for (int i = 0; i < code.Length; ++i)
             {
                 var cword = code[i];
-                for (var j = 0; j < kvps.Length; ++j)
+                for (var j = 0; j < kvps.Count; ++j)
                 {
                     var kvp = kvps[j];
                     if ((cword & kvp.mask) == kvp.mask)
@@ -773,7 +795,7 @@ namespace Emulator
         MASK_IP     = 0b11000000_00000000_00000000_00000000,
 
         // NOTE Not real control words
-        XX_0        = 0b00000001_00000000_00000000_00000000_00000000,
+        ISO3        = 0b00000001_00000000_00000000_00000000_00000000,
         XX_1        = 0b00000010_00000000_00000000_00000000_00000000,
         XX_2        = 0b00000100_00000000_00000000_00000000_00000000,
         IPCIW       = 0b00001000_00000000_00000000_00000000_00000000
