@@ -353,11 +353,11 @@ namespace EmulatorTests
             AssertState(
                 @"
                 mov r0, 0x80
-                mov word[ds:r0], 0x1234
+                mov word[dg:r0], 0x1234
                 mov r0, 0x50
-                mov byte[ds:r0], 0x12
+                mov byte[dg:r0], 0x12
                 mov r0, 0x51
-                mov byte[ds:r0], 0x34
+                mov byte[dg:r0], 0x34
                 ",
                 new MachineState
                 {
@@ -381,16 +381,14 @@ namespace EmulatorTests
                 @"
                 mov r0, 0x80
                 mov r1, 0x40
-                mov r2, 0x90
                 mov r3, 0xA0
-                mov word[ds:0x50], 0x1234
-                mov word[ds:0x60], 0x1234
-                mov word[ds:r0], word[ds:r1+0x10]
-                mov word[ds:r2], byte[ds:r1+0x20]
-                mov byte[ds:r3], byte[ds:r1+0x20]
+                mov word[dg:0x50], 0x1234
+                mov word[dg:0x60], 0x1234
+                mov word[dg:r0], word[dg:r1+0x10]
+                mov byte[dg:r3], byte[dg:r1+0x20]
                 mov r3, 0xA1
                 mov r1, 0x52
-                mov byte[ds:r3], byte[ds:r1-0x01]
+                mov byte[dg:r3], byte[dg:r1-0x01]
                 ",
                 new MachineState
                 {
@@ -398,7 +396,6 @@ namespace EmulatorTests
                     {
                         r0 = 0x0080,
                         r1 = 0x0052,
-                        r2 = 0x0090,
                         r3 = 0x00A1
                     },
                     RAMChecks = new()
@@ -406,7 +403,6 @@ namespace EmulatorTests
                         [0x50] = 0x1234,
                         [0x60] = 0x1234,
                         [0x80] = 0x1234,
-                        [0x90] = 0x0012,
                         [0xA0] = 0x1234
                     }
                 }
@@ -420,13 +416,11 @@ namespace EmulatorTests
                 @"
                 mov r0, 0x80
                 mov r1, 0x40
-                mov r2, 0x90
                 mov r3, 0xA0
-                mov word[ds:0x40], 0x1234
-                mov word[ds:0x60], 0x1234
-                mov word[ds:r0], word[ds:r1]
-                mov word[ds:r2], byte[ds:r1]
-                mov byte[ds:r3], byte[ds:r1]
+                mov word[dg:0x40], 0x1234
+                mov word[dg:0x60], 0x1234
+                mov word[dg:r0], word[dg:r1]
+                mov byte[dg:r3], byte[dg:r1]
                 ",
                 new MachineState
                 {
@@ -434,7 +428,6 @@ namespace EmulatorTests
                     {
                         r0 = 0x0080,
                         r1 = 0x0040,
-                        r2 = 0x0090,
                         r3 = 0x00A0
                     },
                     RAMChecks = new()
@@ -442,7 +435,6 @@ namespace EmulatorTests
                         [0x40] = 0x1234,
                         [0x60] = 0x1234,
                         [0x80] = 0x1234,
-                        [0x90] = 0x0012,
                         [0xA0] = 0x1200
                     }
                 }
@@ -457,10 +449,9 @@ namespace EmulatorTests
                 mov r0, 0x80
                 mov r1, 0x90
                 mov r2, 0xA0
-                mov word[ds:0x40], 0x1234
-                mov word[ds:r0], word[ds:0x40]
-                mov word[ds:r1], byte[ds:0x40]
-                mov byte[ds:r2], byte[ds:0x40]
+                mov word[dg:0x40], 0x1234
+                mov word[dg:r0], word[dg:0x40]
+                mov byte[dg:r2], byte[dg:0x40]
                 ",
                 new MachineState
                 {
@@ -474,7 +465,6 @@ namespace EmulatorTests
                     {
                         [0x40] = 0x1234,
                         [0x80] = 0x1234,
-                        [0x90] = 0x0012,
                         [0xA0] = 0x1200
                     }
                 }
@@ -487,9 +477,9 @@ namespace EmulatorTests
             AssertState(
                 @"
                 mov r0, 0x1234
-                mov word[ds:0x40], r0
-                mov word[ds:0x50], r0h
-                mov byte[ds:0x60], r0l
+                mov word[dg:0x40], r0
+                mov word[dg:0x50], r0h
+                mov byte[dg:0x60], r0l
                 ",
                 new MachineState
                 {
@@ -512,9 +502,9 @@ namespace EmulatorTests
         {
             AssertState(
                 @"
-                mov word[ds:0x40], 0x1234
-                mov word[ds:0x50], 0x12
-                mov byte[ds:0x60], 0x34
+                mov word[dg:0x40], 0x1234
+                mov word[dg:0x50], 0x12
+                mov byte[dg:0x60], 0x34
                 ",
                 new MachineState
                 {
@@ -539,12 +529,11 @@ namespace EmulatorTests
                 @"
                 mov r0, 0x80
                 mov r1, 0x90
-                mov word[ds:r1], 0x1234
-                mov word[ds:0x40], word[ds:r0+0x10]
-                mov word[ds:0x50], byte[ds:r0+0x10]
-                mov byte[ds:0x60], byte[ds:r0+0x10]
+                mov word[dg:r1], 0x1234
+                mov word[dg:0x40], word[dg:r0+0x10]
+                mov byte[dg:0x60], byte[dg:r0+0x10]
                 mov r0, 0xA0
-                mov byte[ds:0x61], byte[ds:r0-0x0F]
+                mov byte[dg:0x61], byte[dg:r0-0x0F]
                 ",
                 new MachineState
                 {
@@ -557,7 +546,6 @@ namespace EmulatorTests
                     {
                         [0x90] = 0x1234,
                         [0x40] = 0x1234,
-                        [0x50] = 0x0012,
                         [0x60] = 0x1234,
                     }
                 }
@@ -570,10 +558,9 @@ namespace EmulatorTests
             AssertState(
                 @"
                 mov r0, 0x80
-                mov word[ds:0x80], 0x1234
-                mov word[ds:0x40], word[ds:r0]
-                mov word[ds:0x50], byte[ds:r0]
-                mov byte[ds:0x60], byte[ds:r0]
+                mov word[dg:0x80], 0x1234
+                mov word[dg:0x40], word[dg:r0]
+                mov byte[dg:0x60], byte[dg:r0]
                 ",
                 new MachineState
                 {
@@ -585,7 +572,6 @@ namespace EmulatorTests
                     {
                         [0x80] = 0x1234,
                         [0x40] = 0x1234,
-                        [0x50] = 0x0012,
                         [0x60] = 0x1200,
                     }
                 }
@@ -597,10 +583,9 @@ namespace EmulatorTests
         {
             AssertState(
                 @"
-                mov word[ds:0x80], 0x1234
-                mov word[ds:0x40], word[ds:0x80]
-                mov word[ds:0x50], byte[ds:0x80]
-                mov byte[ds:0x60], byte[ds:0x80]
+                mov word[dg:0x80], 0x1234
+                mov word[dg:0x40], word[dg:0x80]
+                mov byte[dg:0x60], byte[dg:0x80]
                 ",
                 new MachineState
                 {
@@ -612,7 +597,6 @@ namespace EmulatorTests
                     {
                         [0x80] = 0x1234,
                         [0x40] = 0x1234,
-                        [0x50] = 0x0012,
                         [0x60] = 0x1200,
                     }
                 }
