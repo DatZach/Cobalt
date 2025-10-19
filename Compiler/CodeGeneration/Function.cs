@@ -41,7 +41,7 @@ namespace Compiler.CodeGeneration
             Parameters = parameters;
             ReturnType = returnType;
             Body = new InstructionBuffer();
-            ReturnLabel = new Label(Body);
+            ReturnLabel = Body.AllocateLabel();
 
             freeRegisterIndex = 0;
             registers = 0;

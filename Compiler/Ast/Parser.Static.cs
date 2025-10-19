@@ -37,6 +37,13 @@ namespace Compiler.Ast
             Register(TokenType.BitOr, new BinaryOperatorParselet(PrecedenceTable.BitOr));
             Register(TokenType.BitXor, new BinaryOperatorParselet(PrecedenceTable.BitXor));
 
+            Register(TokenType.Equals, new BinaryOperatorParselet(PrecedenceTable.ConditionalExpression));
+            Register(TokenType.NotEquals, new BinaryOperatorParselet(PrecedenceTable.ConditionalExpression));
+            Register(TokenType.LessThan, new BinaryOperatorParselet(PrecedenceTable.ConditionalExpression));
+            Register(TokenType.LessThanOrEquals, new BinaryOperatorParselet(PrecedenceTable.ConditionalExpression));
+            Register(TokenType.MoreThan, new BinaryOperatorParselet(PrecedenceTable.ConditionalExpression));
+            Register(TokenType.MoreThanOrEquals, new BinaryOperatorParselet(PrecedenceTable.ConditionalExpression));
+
             // Assignments
             Register(TokenType.Assign, new BinaryOperatorParselet(PrecedenceTable.Assignment));
 
@@ -47,6 +54,7 @@ namespace Compiler.Ast
             Register(TokenType.Import, new ImportParselet());
             Register(TokenType.Return, new ReturnParselet());
             Register(TokenType.AheadOfTime, new AheadOfTimeParselet());
+            Register(TokenType.If, new IfParselet());
         }
 
         private static void Register(TokenType type, IPrefixExpressionParselet parselet)

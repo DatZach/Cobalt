@@ -14,4 +14,9 @@ namespace Compiler.Ast.Parselets
     {
         Expression Parse(Parser parser, Token token);
     }
+
+    internal interface IPrefixStatementParselet
+    {
+        Expression Parse(Parser parser, Token token);
+    }
 }

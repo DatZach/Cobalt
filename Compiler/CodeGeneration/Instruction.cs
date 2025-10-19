@@ -45,6 +45,8 @@ namespace Compiler.CodeGeneration
                            + Value.ToString("G")
                            + "."
                            + Size.ToString("G");
+                case OperandType.Label:
+                    return $".label{Value}";
                 default:
                     throw new ArgumentOutOfRangeException();
             }
@@ -61,8 +63,15 @@ namespace Compiler.CodeGeneration
 
         Call,
         Return,
-        Jump,
 
+        Compare,
+        JumpIfFalse,
+        JumpIfTrue,
+        JumpIfLessThan,
+        JumpIfLessThanOrEqual,
+        JumpIfMoreThan,
+        JumpIfMoreThanOrEqual,
+        Jump,
         
         Push, // TODO Remove
         Pop,  // TODO Remove
@@ -93,6 +102,7 @@ namespace Compiler.CodeGeneration
         Register,
         Argument,
         Local,
-        Global
+        Global,
+        Label
     }
 }

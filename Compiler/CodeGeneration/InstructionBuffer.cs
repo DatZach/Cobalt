@@ -6,6 +6,8 @@ namespace Compiler.CodeGeneration
     {
         public List<Instruction> Instructions => instructions; // TODO Implement interface on base
 
+        public IReadOnlyList<Label> Labels => labels;
+
         private readonly List<Label> labels;
 
         private readonly List<Instruction> instructions;
@@ -26,10 +28,12 @@ namespace Compiler.CodeGeneration
             });
         }
 
-        public void FixLabels()
+        public Label AllocateLabel() // TODO Should be moved to CurrentFunction, perhaps
         {
-            for (var i = 0; i < labels.Count; ++i)
-                labels[i].Fix();
+            var label = new Label(this, labels.Count);
+            labels.Add(label);
+
+            return label;
         }
 
         public void Emit(Opcode opcode)
@@ -68,45 +72,38 @@ namespace Compiler.CodeGeneration
                 C = argC
             });
         }
+
+        public void EmitL(Opcode opcode, Label label)
+        {
+            instructions.Add(new Instruction
+            {
+                Opcode = opcode,
+                A = new Operand { Type = OperandType.Label, Size = - 1, Value = label.Index }
+            });
+        }
     }
 
     internal sealed class Label
     {
-        private int labelOffset;
+        public int Index { get; } // TODO Better names
+
+        public int Location { get; private set; }
 
         private readonly InstructionBuffer buffer;
-        private readonly List<int> patches;
 
-        public Label(InstructionBuffer buffer)
+        public Label(InstructionBuffer buffer, int index)
         {
+            Index = index;
             this.buffer = buffer;
-            patches = new List<int>();
-            labelOffset = 0;
+
+            Location = -1;
         }
 
         public void Mark()
         {
-            labelOffset = buffer.Instructions.Count;
-        }
+            if (Location >= 0) throw new InvalidOperationException("Label is already marked");
 
-        public void PatchHere()
-        {
-            //buffer.Instructions.Last().Operand.IntValue = 0;
-            patches.Add(buffer.Instructions.Count - 1);
-        }
-
-        public void Fix()
-        {
-            for (var i = 0; i < patches.Count; i++)
-            {
-                //var offset = patches[i];
-                //buffer.Instructions[offset].A!.Value = labelOffset;
-            }
-        }
-
-        public void ClearPatches()
-        {
-            patches.Clear();
+            Location = buffer.Instructions.Count;
         }
     }
 }

@@ -4,7 +4,7 @@ using Compiler.Ast.Expressions.Statements;
 
 namespace Compiler.Ast.Parselets.Statements
 {
-    internal class VarParselet : IPrefixStatementParselet
+    internal sealed class VarParselet : IPrefixStatementParselet
     {
         public Expression Parse(Parser parser, Token token)
         {

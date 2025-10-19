@@ -131,6 +131,32 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
+        public Storage? Visit(IfStatement expression)
+        {
+            var elseLabel = CurrentFunction.Body.AllocateLabel();
+            var endLabel = CurrentFunction.Body.AllocateLabel();
+
+            var conditional = expression.Conditional.Accept(this);
+            CurrentFunction.Body.EmitOO(
+                Opcode.Compare,
+                conditional.Operand,
+                new Operand { Type = OperandType.ImmediateUnsigned, Size = 32, Value = 0 }
+            );
+            CurrentFunction.Body.EmitL(Opcode.JumpIfFalse, elseLabel);
+            conditional.Free();
+
+            expression.Then.Accept(this)?.Free();
+            CurrentFunction.Body.EmitL(Opcode.Jump, endLabel);
+
+            elseLabel.Mark();
+
+            expression.Else?.Accept(this);
+
+            endLabel.Mark();
+
+            return null;
+        }
+
         public Storage? Visit(ReturnStatement expression)
         {
             if (expression.Expression == null)
@@ -169,7 +195,6 @@ namespace Compiler.CodeGeneration
             evalStorage.Free();
 
             function.ReturnLabel.Mark();
-            function.Body.FixLabels();
             
             functionStack.Pop();
 
@@ -202,7 +227,6 @@ namespace Compiler.CodeGeneration
             function.Body.Emit(Opcode.Return); // TODO Error if not all paths return
 
             function.ReturnLabel.Mark();
-            function.Body.FixLabels();
             
             functionStack.Pop();
             Functions.Add(function);
@@ -222,24 +246,60 @@ namespace Compiler.CodeGeneration
             var b = expression.Right.Accept(this);
             var cType = a.Type; // TODO Verify types
 
-            var opcode = expression.Operator switch
-            {
-                TokenType.Add => Opcode.Add,
-                TokenType.Subtract => Opcode.Sub,
-                TokenType.Multiply => Opcode.Mul,
-                TokenType.Divide => Opcode.Div,
-                TokenType.Modulo => Opcode.Mod,
-                TokenType.BitLeftShift => Opcode.BitShl,
-                TokenType.BitRightShift => Opcode.BitShr,
-                TokenType.BitAnd => Opcode.BitAnd,
-                TokenType.BitOr => Opcode.BitOr,
-                TokenType.BitXor => Opcode.BitXor,
-                _ => throw new ArgumentOutOfRangeException(nameof(expression))
-            };
-            
             var c = CurrentFunction.AllocateStorage(cType);
-            CurrentFunction.Body.EmitOO(Opcode.Move, c.Operand, a.Operand);
-            CurrentFunction.Body.EmitOO(opcode, c.Operand, b.Operand);
+
+            var cmpOpcode = expression.Operator switch
+            {
+                TokenType.Equals => Opcode.JumpIfFalse,
+                TokenType.NotEquals => Opcode.JumpIfTrue,
+                TokenType.MoreThan => Opcode.JumpIfLessThanOrEqual,
+                TokenType.MoreThanOrEquals => Opcode.JumpIfLessThan,
+                TokenType.LessThan => Opcode.JumpIfMoreThanOrEqual,
+                TokenType.LessThanOrEquals => Opcode.JumpIfMoreThan,
+                _ => Opcode.None
+            };
+
+            if (cmpOpcode != Opcode.None)
+            {
+                var labelElse = CurrentFunction.Body.AllocateLabel();
+                var labelEnd = CurrentFunction.Body.AllocateLabel();
+
+                CurrentFunction.Body.EmitOO(Opcode.Move, c.Operand, a.Operand);
+                CurrentFunction.Body.EmitOO(Opcode.Compare, c.Operand, b.Operand);
+                CurrentFunction.Body.EmitL(cmpOpcode, labelElse);
+
+                var const0 = CurrentFunction.AllocateStorage(CobType.Int, 0);
+                CurrentFunction.Body.EmitOO(Opcode.Move, c.Operand, const0.Operand);
+                CurrentFunction.Body.EmitL(Opcode.Jump, labelEnd);
+
+                labelElse.Mark();
+
+                var const1 = CurrentFunction.AllocateStorage(CobType.Int, 1);
+                CurrentFunction.Body.EmitOO(Opcode.Move, c.Operand, const1.Operand);
+
+                labelEnd.Mark();
+            }
+            else
+            {
+                var opcode = expression.Operator switch
+                {
+                    TokenType.Add => Opcode.Add,
+                    TokenType.Subtract => Opcode.Sub,
+                    TokenType.Multiply => Opcode.Mul,
+                    TokenType.Divide => Opcode.Div,
+                    TokenType.Modulo => Opcode.Mod,
+                    TokenType.BitLeftShift => Opcode.BitShl,
+                    TokenType.BitRightShift => Opcode.BitShr,
+                    TokenType.BitAnd => Opcode.BitAnd,
+                    TokenType.BitOr => Opcode.BitOr,
+                    TokenType.BitXor => Opcode.BitXor,
+                    _ => throw new ArgumentOutOfRangeException(nameof(expression))
+                };
+
+                CurrentFunction.Body.EmitOO(Opcode.Move, c.Operand, a.Operand);
+                CurrentFunction.Body.EmitOO(opcode, c.Operand, b.Operand);
+            }
+
             a.Free();
             b.Free();
 

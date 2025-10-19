@@ -7,7 +7,7 @@ namespace Compiler.CodeGeneration.Platform
 {
     internal sealed class X86Assembler : ArtifactAssembler
     {
-        public const string DefaultFasmPath = @"C:\Tools\fasmw17330\fasm.exe";
+        public const string DefaultFasmPath = @"C:\Tools\fasmw17332\fasm.exe";
 
         private const int BusWidth = 64;
 
@@ -149,7 +149,7 @@ namespace Compiler.CodeGeneration.Platform
                 currentFunction = f;
                 EmitIntermediateInstructionBuffer(buffer, f.Body);
 
-                buffer.EmitLine(".return:");
+                buffer.EmitLine($"{GetLabelString(currentFunction.ReturnLabel)}:");
                 if (f.CallingConvention != CallingConvention.None)
                 {
                     for (int j = 0, k = 0; j < MaxRegisters; j++) // TODO Clean this up
@@ -308,6 +308,11 @@ namespace Compiler.CodeGeneration.Platform
 
             for (var i = 0; i < body.Instructions.Count; i++)
             {
+                // TODO Optimize to Dictionary before?
+                var label = body.Labels.FirstOrDefault(x => x.Location == i);
+                if (label != null)
+                    buffer.EmitLine($"{GetLabelString(label)}:");
+                
                 var inst = body.Instructions[i];
                 switch (inst.Opcode)
                 {
@@ -340,7 +345,7 @@ namespace Compiler.CodeGeneration.Platform
                         {
                             buffer.EmitLine($"mov rax, {GetOperandString(inst.A)}");
                         }
-                        buffer.EmitLine("jmp .return");
+                        buffer.EmitLine($"jmp {GetLabelString(currentFunction.ReturnLabel)}");
                         break;
                     }
                     case Opcode.Move:
@@ -482,6 +487,31 @@ namespace Compiler.CodeGeneration.Platform
                         }
                         break;
                     }
+                    case Opcode.Compare:
+                        buffer.EmitLine($"cmp {GetOperandString(inst.A)}, {GetOperandString(inst.B)}");
+                        break;
+                    case Opcode.Jump:
+                        buffer.EmitLine($"jmp {GetOperandString(inst.A)}");
+                        break;
+                    case Opcode.JumpIfFalse:
+                        buffer.EmitLine($"jne {GetOperandString(inst.A)}");
+                        break;
+                    case Opcode.JumpIfTrue:
+                        buffer.EmitLine($"je {GetOperandString(inst.A)}");
+                        break;
+                    case Opcode.JumpIfLessThanOrEqual:
+                        buffer.EmitLine($"jle {GetOperandString(inst.A)}");
+                        break;
+                    case Opcode.JumpIfLessThan:
+                        buffer.EmitLine($"jl {GetOperandString(inst.A)}");
+                        break;
+                    case Opcode.JumpIfMoreThanOrEqual:
+                        buffer.EmitLine($"jge {GetOperandString(inst.A)}");
+                        break;
+                    case Opcode.JumpIfMoreThan:
+                        buffer.EmitLine($"jg {GetOperandString(inst.A)}");
+                        break;
+
                     default:
                         throw new ArgumentOutOfRangeException();
                 }
@@ -789,9 +819,19 @@ namespace Compiler.CodeGeneration.Platform
 
                     return $"rdata_{operand.Value} + 8"; // TODO HACK SHould not + 8 this
                 }
+                case OperandType.Label:
+                {
+                    var label = currentFunction.Body.Labels[(int)operand.Value];
+                    return GetLabelString(label);
+                }
                 default:
                     throw new ArgumentOutOfRangeException();
             }
+        }
+
+        private string GetLabelString(Label label)
+        {
+            return $".{currentFunction.Name}_{label.Index}";
         }
 
         private const int MaxRegisters = 12;

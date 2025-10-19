@@ -173,7 +173,7 @@ namespace Compiler.Lexer
                 ident = TakeWhile(x => !char.IsWhiteSpace(x));
 
                 // ERROR CONDITION - UNEXPECTED TOKEN
-                var errToken = YieldToken(TokenType.Error, ident);
+                var errToken = YieldToken(TokenType.IllegalToken, ident);
                 messages.Add(Message.UnexpectedToken0, errToken);
             }
 
