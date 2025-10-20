@@ -2,7 +2,7 @@
 {
     internal sealed record CobVariable
     {
-        public string Name { get; set; } // TODO HACK set
+        public string Name { get; }
 
         public CobType Type { get; }
 
@@ -208,7 +208,7 @@
         Float,
         Array,
         Struct,
-        Reference,
+        Tuple,
         Lens,
         Function
     }

@@ -248,6 +248,24 @@ namespace Compiler.CodeGeneration
 
             var c = CurrentFunction.AllocateStorage(cType);
 
+            // Assignment
+            var asnOpcode = expression.Operator switch
+            {
+                TokenType.AddAssign => Opcode.Add,
+                TokenType.SubtractAssign => Opcode.Sub,
+                TokenType.MultiplyAssign => Opcode.Mul,
+                TokenType.DivideAssign => Opcode.Div,
+                TokenType.ModuloAssign => Opcode.Mod,
+                TokenType.BitLeftShiftAssign => Opcode.BitShl,
+                TokenType.BitRightShiftAssign => Opcode.BitShr,
+                TokenType.BitAndAssign => Opcode.BitAnd,
+                TokenType.BitOrAssign => Opcode.BitOr,
+                TokenType.BitXorAssign => Opcode.BitXor,
+                TokenType.Assign => Opcode.Move,
+                _ => Opcode.None
+            };
+
+            // Equality
             var cmpOpcode = expression.Operator switch
             {
                 TokenType.Equals => Opcode.JumpIfFalse,
@@ -259,8 +277,25 @@ namespace Compiler.CodeGeneration
                 _ => Opcode.None
             };
 
+            // Arithmetic
+            var artOpcode = expression.Operator switch
+            {
+                TokenType.Add => Opcode.Add,
+                TokenType.Subtract => Opcode.Sub,
+                TokenType.Multiply => Opcode.Mul,
+                TokenType.Divide => Opcode.Div,
+                TokenType.Modulo => Opcode.Mod,
+                TokenType.BitLeftShift => Opcode.BitShl,
+                TokenType.BitRightShift => Opcode.BitShr,
+                TokenType.BitAnd => Opcode.BitAnd,
+                TokenType.BitOr => Opcode.BitOr,
+                TokenType.BitXor => Opcode.BitXor,
+                _ => Opcode.None //throw new ArgumentOutOfRangeException(nameof(expression))
+            };
+
             if (cmpOpcode != Opcode.None)
             {
+                // TODO There needs to be a more concise opcode here
                 var labelElse = CurrentFunction.Body.AllocateLabel();
                 var labelEnd = CurrentFunction.Body.AllocateLabel();
 
@@ -279,26 +314,25 @@ namespace Compiler.CodeGeneration
 
                 labelEnd.Mark();
             }
-            else
+            else if (artOpcode != Opcode.None)
             {
-                var opcode = expression.Operator switch
-                {
-                    TokenType.Add => Opcode.Add,
-                    TokenType.Subtract => Opcode.Sub,
-                    TokenType.Multiply => Opcode.Mul,
-                    TokenType.Divide => Opcode.Div,
-                    TokenType.Modulo => Opcode.Mod,
-                    TokenType.BitLeftShift => Opcode.BitShl,
-                    TokenType.BitRightShift => Opcode.BitShr,
-                    TokenType.BitAnd => Opcode.BitAnd,
-                    TokenType.BitOr => Opcode.BitOr,
-                    TokenType.BitXor => Opcode.BitXor,
-                    _ => throw new ArgumentOutOfRangeException(nameof(expression))
-                };
-
+                // HACK The mov instructions are because the x86 CG does not support certain mem, mem operands
                 CurrentFunction.Body.EmitOO(Opcode.Move, c.Operand, a.Operand);
-                CurrentFunction.Body.EmitOO(opcode, c.Operand, b.Operand);
+                CurrentFunction.Body.EmitOO(artOpcode, c.Operand, b.Operand);
             }
+            else if (asnOpcode != Opcode.None)
+            {
+                // HACK The mov instructions are because the x86 CG does not support certain mem, mem operands
+                CurrentFunction.Body.EmitOO(Opcode.Move, c.Operand, a.Operand);
+                CurrentFunction.Body.EmitOO(asnOpcode, c.Operand, b.Operand);
+                CurrentFunction.Body.EmitOO(Opcode.Move, a.Operand, c.Operand);
+
+                //CurrentFunction.Body.EmitOO(asnOpcode, a.Operand, b.Operand);
+                c.Free();
+                c = a;
+            }
+            else
+                throw new ArgumentOutOfRangeException(nameof(expression));
 
             a.Free();
             b.Free();

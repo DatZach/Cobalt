@@ -46,6 +46,7 @@ namespace Compiler.Ast
 
             // Assignments
             Register(TokenType.Assign, new BinaryOperatorParselet(PrecedenceTable.Assignment));
+            Register(TokenType.AddAssign, new BinaryOperatorParselet(PrecedenceTable.Assignment));
 
             // Statements
             Register(TokenType.Artifact, new ArtifactParselet());

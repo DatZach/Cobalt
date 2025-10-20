@@ -17,10 +17,20 @@ namespace Compiler.Ast.Parselets
                 var lParameters = new List<Function.Parameter>(4);
                 while (!parser.Match(TokenType.RightParen))
                 {
+                    var isSpread = parser.MatchAndTakeToken(TokenType.Spread) != null;
+
                     var name = parser.Take(TokenType.Identifier);
                     parser.Take(TokenType.Colon);
-                    var isSpread = parser.MatchAndTakeToken(TokenType.Spread) != null;
+
+                    string typeName;
                     var type = parser.Take(TokenType.Identifier);
+                    var typeLs = parser.MatchAndTakeToken(TokenType.LeftSquare);
+                    var typeRs = parser.MatchAndTakeToken(TokenType.RightSquare);
+                    if (typeLs != null && typeRs != null)
+                        typeName = type.Value + "[]";
+                    else
+                        typeName = type.Value;
+
                     parser.MatchAndTakeToken(TokenType.Comma);
 
                     if (isSpread && hasSpread)
@@ -30,11 +40,11 @@ namespace Compiler.Ast.Parselets
 
                     lParameters.Add(new Function.Parameter(
                         name.Value,
-                        CobType.FromString(type.Value),
+                        CobType.FromString(typeName),
                         isSpread
                     ));
                 }
-                
+
                 parameters = lParameters;
             }
             else
