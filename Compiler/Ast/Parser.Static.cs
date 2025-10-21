@@ -51,6 +51,7 @@ namespace Compiler.Ast
             // Statements
             Register(TokenType.Artifact, new ArtifactParselet());
             Register(TokenType.Const, new VarParselet());
+            Register(TokenType.Var, new VarParselet());
             Register(TokenType.Export, new VarParselet());
             Register(TokenType.Import, new ImportParselet());
             Register(TokenType.Return, new ReturnParselet());

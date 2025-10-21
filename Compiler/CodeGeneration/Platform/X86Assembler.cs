@@ -774,6 +774,7 @@ namespace Compiler.CodeGeneration.Platform
                         globalIdx = compiler.AllocateGlobal(new CobVariable(
                             valueName,
                             new CobType(eCobType.Float, operand.Size),
+                            false,
                             operand.Value
                         ));
                     }

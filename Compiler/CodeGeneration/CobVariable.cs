@@ -6,20 +6,24 @@
 
         public CobType Type { get; }
 
+        public bool Mutable { get; }
+
         public byte[]? Data { get; set; } // TODO HACK AAAAAA???
 
         public long Value { get; set; }
 
-        public CobVariable(string name, CobType type)
+        public CobVariable(string name, CobType type, bool mutable)
         {
             Name = name;
             Type = type;
+            Mutable = mutable;
         }
 
-        public CobVariable(string name, CobType type, long value)
+        public CobVariable(string name, CobType type, bool mutable, long value)
         {
             Name = name;
             Type = type;
+            Mutable = mutable;
             Value = value;
         }
 

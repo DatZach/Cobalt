@@ -53,21 +53,26 @@ namespace Compiler.CodeGeneration
             for (var i = 0; i < expression.Declarations.Count; ++i)
             {
                 var decl = expression.Declarations[i];
-                var rhs = decl.Initializer?.Accept(this);
 
-                if (CurrentFunction != null && rhs != null) // Local Decl
+                var rhs = decl.Initializer?.Accept(this);
+                if (rhs == null)
+                    continue;
+
+                var mutable = expression.Type == TokenType.Var;
+                var variable = new CobVariable(decl.Name, rhs.Type, mutable);
+
+                if (CurrentFunction != null) // Local Decl
                 {
-                    var local = CurrentFunction.AllocateLocal(new CobVariable(decl.Name, rhs.Type));
+                    var local = CurrentFunction.AllocateLocal(variable);
                     CurrentFunction.Body.EmitOO(
                         Opcode.Move,
                         new Operand { Type = OperandType.Local, Value = local, Size = rhs.Type.Size },
                         rhs.Operand
                     ); // TODO EmitLO
                 }
-                else if (CurrentFunction == null && rhs != null) // Global Decl
+                else if (CurrentFunction == null) // Global Decl
                 {
-                    //rhsType.Function.Name = decl.Name;
-                    AllocateGlobal(new CobVariable(decl.Name, rhs.Type));
+                    AllocateGlobal(variable);
 
                     // TODO Throw exception if export declared outside root level
                     // TODO Throw exception if export declared on non-function?
@@ -75,7 +80,7 @@ namespace Compiler.CodeGeneration
                         Exports.Add(decl.Name, rhs.Type.Function.Name);
                 }
 
-                rhs?.Free();
+                rhs.Free();
             }
 
             return null;
@@ -117,7 +122,8 @@ namespace Compiler.CodeGeneration
                     function.NativeImport = import;
                     AllocateGlobal(new CobVariable(
                         expression.SymbolName,
-                        new CobType(eCobType.Function, -1, function: function)
+                        new CobType(eCobType.Function, -1, function: function),
+                        false
                     ));
                 }
             }
@@ -322,6 +328,18 @@ namespace Compiler.CodeGeneration
             }
             else if (asnOpcode != Opcode.None)
             {
+                var cobVariable = ResolveVariableFromOperand(a.Operand);
+                if (cobVariable == null)
+                {
+                    messages.Add(Message.IllegalAssignment, expression);
+                    return null;
+                }
+                else if (!cobVariable.Mutable)
+                {
+                    messages.Add(Message.IllegalAssignmentImmutable, expression);
+                    return null;
+                }
+
                 // HACK The mov instructions are because the x86 CG does not support certain mem, mem operands
                 CurrentFunction.Body.EmitOO(Opcode.Move, c.Operand, a.Operand);
                 CurrentFunction.Body.EmitOO(asnOpcode, c.Operand, b.Operand);
@@ -545,7 +563,8 @@ namespace Compiler.CodeGeneration
             
             var global = AllocateGlobal(new CobVariable(
                 $"string{Globals.Count}",
-                CobType.String
+                CobType.String,
+                false
             ) { Data = data });
             
             // TODO AllocateStorage on Global "function"??
@@ -582,6 +601,17 @@ namespace Compiler.CodeGeneration
             Globals.Add(variable);
 
             return idx;
+        }
+
+        private CobVariable? ResolveVariableFromOperand(Operand operand)
+        {
+            return operand.Type switch
+            {
+                OperandType.Local => CurrentFunction?.Locals.ElementAtOrDefault((int)operand.Value),
+                OperandType.Global => Globals.ElementAtOrDefault((int)operand.Value),
+                OperandType.Argument => null, // TODO This should be possible
+                _ => null
+            };
         }
     }
 

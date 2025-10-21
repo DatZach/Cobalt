@@ -237,6 +237,10 @@ namespace Compiler.Ast
 
         public static Def ParameterTypeMismatch { get; } = new(MessageType.Error, "Expected type '{0}' but recieved '{1}' instead");
 
+        public static Def IllegalAssignment { get; } = new(MessageType.Error, "Illegal l-value for assignment");
+
+        public static Def IllegalAssignmentImmutable { get; } = new(MessageType.Error, "Cannot assign to a 'const' identifier.");
+
         public sealed record Def(
             MessageType Type,
             string Content,
