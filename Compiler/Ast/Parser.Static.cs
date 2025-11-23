@@ -50,6 +50,7 @@ namespace Compiler.Ast
 
             // Statements
             Register(TokenType.Artifact, new ArtifactParselet());
+            Register(TokenType.Module, new ModuleParselet());
             Register(TokenType.Const, new VarParselet());
             Register(TokenType.Var, new VarParselet());
             Register(TokenType.Export, new VarParselet());
@@ -57,6 +58,7 @@ namespace Compiler.Ast
             Register(TokenType.Return, new ReturnParselet());
             Register(TokenType.AheadOfTime, new AheadOfTimeParselet());
             Register(TokenType.If, new IfParselet());
+            Register(TokenType.FatArrow, new FatArrowParselet());
         }
 
         private static void Register(TokenType type, IPrefixExpressionParselet parselet)

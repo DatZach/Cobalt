@@ -6,12 +6,14 @@ namespace Compiler.Ast.Visitors
     internal interface IExpressionVisitor<out T>
     {
         T Visit(ScriptExpression expression);
+        T Visit(ModuleExpression expression);
         T Visit(VarExpression expression);
         T Visit(ImportExpression expression);
         T Visit(ArtifactExpression expression);
         T Visit(ReturnStatement expression);
         T Visit(IfStatement expression);
         T Visit(AheadOfTimeExpression expression);
+        T Visit(FatArrowExpression expression);
         
         T Visit(FunctionExpression expression);
         T Visit(BinaryOperatorExpression expression);

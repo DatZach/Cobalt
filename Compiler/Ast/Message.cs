@@ -241,6 +241,10 @@ namespace Compiler.Ast
 
         public static Def IllegalAssignmentImmutable { get; } = new(MessageType.Error, "Cannot assign to a 'const' identifier.");
 
+        public static Def CannotNestModules { get; } = new(MessageType.Error, "Modules may not be nested");
+
+        public static Def CannotRedeclareEntryPoint { get; } = new(MessageType.Error, "Multiple Entry Points may not be declared");
+
         public sealed record Def(
             MessageType Type,
             string Content,

@@ -30,8 +30,15 @@ namespace Compiler.CodeGeneration
                 if (!platforms.TryGetValue(artifact.Platform, out var platform))
                     throw new Exception($"Unsupported artifact platform '{artifact.Platform}'");
 
-                var outputFilename = artifact.Filename
-                                  ?? Path.ChangeExtension(Program.Config.EntrySourceFile, platform.DefaultExtension);
+                string outputFilename;
+                if (artifact.Filename != null)
+                {
+                    var sourceRoot = Path.GetDirectoryName(Program.Config.EntrySourceFile);
+                    outputFilename = Path.Combine(sourceRoot, artifact.Filename);
+                }
+                else
+                    outputFilename = Path.ChangeExtension(Program.Config.EntrySourceFile, platform.DefaultExtension);
+
                 platform.Assemble(compiler, artifact, outputFilename);
             }
         }

@@ -34,11 +34,8 @@ namespace Compiler.CodeGeneration.Platform
 
         private void EmitProgram(MachineCodeBuffer buffer, ArtifactExpression artifact, string outputFilename)
         {
-            if (compiler.Exports.Count == 0)
-                throw new Exception("Program is exportless");
-
-            var hasEntryPoint = compiler.Exports.TryGetValue("Main", out var entryPointName);
-
+            var hasEntryPoint = compiler.EntryFunction != null;
+            
             // Preamble
             buffer.Emit("format ");
             buffer.Emit(artifact.Container);
@@ -62,7 +59,7 @@ namespace Compiler.CodeGeneration.Platform
                 buffer.EmitLine("    sub     rsp, 32");
                 buffer.EmitLine("    mov     rcx, __UnhandledExceptionHandler");
                 buffer.EmitLine("    call    [SetUnhandledExceptionFilter]");
-                buffer.EmitLine("    call    " + entryPointName);
+                buffer.EmitLine("    call    " + compiler.EntryFunction!.FullyQualifiedName);
                 buffer.EmitLine("    xor     rcx, rcx");
                 buffer.EmitLine("    call    [ExitProcess]");
                 buffer.EmitLine("    add     rsp, 32");
@@ -90,84 +87,92 @@ namespace Compiler.CodeGeneration.Platform
                 });
             }
 
-            for (var i = 0; i < compiler.Functions.Count; i++)
+            for (int l = 0; l < compiler.Modules.Count; ++l)
             {
-                var f = compiler.Functions[i];
-                if (f.NativeImport != null)
-                    continue;
+                var module = compiler.Modules[l];
 
-                // TODO Clean this up
-                callReserve = 0;
-                var instructions = f.Body.Instructions;
-                for (int j = 0; j < instructions.Count; ++j)
+                for (var i = 0; i < module.Functions.Count; i++)
                 {
-                    var inst = instructions[j];
-                    if (inst.Opcode == Opcode.Call)
-                        callReserve = Math.Max(callReserve, 4);
-                    else if (inst.Opcode == Opcode.Move && inst.A.Type == OperandType.Argument)
-                        callReserve = Math.Max(callReserve, (int)inst.A.Value);
-                }
-
-                callReserve *= 8;
-
-                localReserve = f.Locals.Count * 8;
-
-                nvrReserve = 0;
-                for (int j = 0; j < MaxRegisters; ++j)
-                {
-                    if ((f.ClobberedRegisters & (1u << j)) == 0)
+                    var f = module.Functions[i];
+                    if (f.NativeImport != null)
                         continue;
 
-                    var regName = GetIntegerRegisterName(j, BusWidth);
-                    if (nonVolatileRegisters.Contains(regName))
-                        nvrReserve += 8;
-                }
+                    // TODO Clean this up
+                    callReserve = 0;
+                    var instructions = f.Body.Instructions;
+                    for (int j = 0; j < instructions.Count; ++j)
+                    {
+                        var inst = instructions[j];
+                        if (inst.Opcode == Opcode.Call)
+                            callReserve = Math.Max(callReserve, 4);
+                        else if (inst.Opcode == Opcode.Move && inst.A.Type == OperandType.Argument)
+                            callReserve = Math.Max(callReserve, (int)inst.A.Value);
+                    }
 
-                stackSpace = callReserve + localReserve + nvrReserve;
-                while (stackSpace % 16 != 0) ++stackSpace; // TODO Write a better implementation lol
-                //stackSpace += 16 - (stackSpace & ~16);
+                    callReserve *= 8;
 
-                buffer.EmitLine(f.Name + ":");
-                if (f.CallingConvention != CallingConvention.None)
-                {
-                    if (stackSpace > 0)
-                        buffer.EmitLine($"sub rsp, {stackSpace}");
-                    for (int j = 0, k = 0; j < MaxRegisters; j++) // TODO Clean this up
+                    localReserve = f.Locals.Count * 8;
+
+                    nvrReserve = 0;
+                    for (int j = 0; j < MaxRegisters; ++j)
                     {
                         if ((f.ClobberedRegisters & (1u << j)) == 0)
                             continue;
 
                         var regName = GetIntegerRegisterName(j, BusWidth);
                         if (nonVolatileRegisters.Contains(regName))
-                        {
-                            int nvrOffset = callReserve + localReserve + k * 8;
-                            buffer.EmitLine($"mov qword [rsp + {nvrOffset}], {GetIntegerRegisterName(j, BusWidth)}");
-                        }
+                            nvrReserve += 8;
                     }
-                }
 
-                currentFunction = f;
-                EmitIntermediateInstructionBuffer(buffer, f.Body);
+                    stackSpace = callReserve + localReserve + nvrReserve;
+                    while (stackSpace % 16 != 0) ++stackSpace; // TODO Write a better implementation lol
+                    //stackSpace += 16 - (stackSpace & ~16);
 
-                buffer.EmitLine($"{GetLabelString(currentFunction.ReturnLabel)}:");
-                if (f.CallingConvention != CallingConvention.None)
-                {
-                    for (int j = 0, k = 0; j < MaxRegisters; j++) // TODO Clean this up
+                    buffer.EmitLine(f.FullyQualifiedName + ":");
+                    buffer.Indent();
+                    if (f.CallingConvention != CallingConvention.None)
                     {
-                        if ((f.ClobberedRegisters & (1u << j)) == 0)
-                            continue;
-
-                        var regName = GetIntegerRegisterName(j, BusWidth);
-                        if (nonVolatileRegisters.Contains(regName))
+                        if (stackSpace > 0)
+                            buffer.EmitLine($"sub rsp, {stackSpace}");
+                        for (int j = 0, k = 0; j < MaxRegisters; j++) // TODO Clean this up
                         {
-                            int nvrOffset = callReserve + localReserve + k * 8;
-                            buffer.EmitLine($"mov {GetIntegerRegisterName(j, BusWidth)}, qword [rsp + {nvrOffset}]");
+                            if ((f.ClobberedRegisters & (1u << j)) == 0)
+                                continue;
+
+                            var regName = GetIntegerRegisterName(j, BusWidth);
+                            if (nonVolatileRegisters.Contains(regName))
+                            {
+                                int nvrOffset = callReserve + localReserve + k * 8;
+                                buffer.EmitLine($"mov qword [rsp + {nvrOffset}], {GetIntegerRegisterName(j, BusWidth)}");
+                            }
                         }
                     }
-                    
-                    if (stackSpace > 0)
-                        buffer.EmitLine($"add rsp, {stackSpace}");
-                    buffer.EmitLine("ret");
+
+                    currentFunction = f;
+                    EmitIntermediateInstructionBuffer(buffer, f.Body);
+
+                    buffer.EmitLine($"{GetLabelString(currentFunction.ReturnLabel)}:");
+                    if (f.CallingConvention != CallingConvention.None)
+                    {
+                        for (int j = 0, k = 0; j < MaxRegisters; j++) // TODO Clean this up
+                        {
+                            if ((f.ClobberedRegisters & (1u << j)) == 0)
+                                continue;
+
+                            var regName = GetIntegerRegisterName(j, BusWidth);
+                            if (nonVolatileRegisters.Contains(regName))
+                            {
+                                int nvrOffset = callReserve + localReserve + k * 8;
+                                buffer.EmitLine($"mov {GetIntegerRegisterName(j, BusWidth)}, qword [rsp + {nvrOffset}]");
+                            }
+                        }
+                        
+                        if (stackSpace > 0)
+                            buffer.EmitLine($"add rsp, {stackSpace}");
+                        buffer.EmitLine("ret");
+                    }
+
+                    buffer.Unindent();
                 }
             }
 
@@ -204,7 +209,7 @@ namespace Compiler.CodeGeneration.Platform
                         break;
                     }
                     case eCobType.Function:
-                        buffer.EmitLine($"rdata_{i} dd {global.Type.Function.Name}");
+                        buffer.EmitLine($"rdata_{i} dd {(global.Type.Function.NativeImport != null ? global.Type.Function.Name : global.Type.Function.FullyQualifiedName)}");
                         break;
                     case eCobType.Array: // T[] -> Struct { Length: uint, Data: ... }
                     {
@@ -311,7 +316,11 @@ namespace Compiler.CodeGeneration.Platform
                 // TODO Optimize to Dictionary before?
                 var label = body.Labels.FirstOrDefault(x => x.Location == i);
                 if (label != null)
+                {
+                    buffer.Unindent();
                     buffer.EmitLine($"{GetLabelString(label)}:");
+                    buffer.Indent();
+                }
                 
                 var inst = body.Instructions[i];
                 switch (inst.Opcode)
@@ -334,8 +343,7 @@ namespace Compiler.CodeGeneration.Platform
                             }
                         }
 
-                        buffer.Emit("call ");
-                        buffer.EmitLine(GetOperandString(inst.A));
+                        buffer.EmitLine($"call {GetOperandString(inst.A)}");
                         break;
                     }
                     case Opcode.Return:
@@ -374,30 +382,35 @@ namespace Compiler.CodeGeneration.Platform
                     //    buffer.EmitLine(GetOperandString(inst.A));
                     //    break;
                     case Opcode.BitShr:
+                        buffer.EmitIndent();
                         buffer.Emit("shr ");
                         buffer.Emit(GetOperandString(inst.A));
                         buffer.Emit(", ");
                         buffer.EmitLine(GetOperandString(inst.B));
                         break;
                     case Opcode.BitShl:
+                        buffer.EmitIndent();
                         buffer.Emit("shl ");
                         buffer.Emit(GetOperandString(inst.A));
                         buffer.Emit(", ");
                         buffer.EmitLine(GetOperandString(inst.B));
                         break;
                     case Opcode.BitAnd:
+                        buffer.EmitIndent();
                         buffer.Emit("and ");
                         buffer.Emit(GetOperandString(inst.A));
                         buffer.Emit(", ");
                         buffer.EmitLine(GetOperandString(inst.B));
                         break;
                     case Opcode.BitXor:
+                        buffer.EmitIndent();
                         buffer.Emit("xor ");
                         buffer.Emit(GetOperandString(inst.A));
                         buffer.Emit(", ");
                         buffer.EmitLine(GetOperandString(inst.B));
                         break;
                     case Opcode.BitOr:
+                        buffer.EmitIndent();
                         buffer.Emit("or ");
                         buffer.Emit(GetOperandString(inst.A));
                         buffer.Emit(", ");
@@ -405,6 +418,7 @@ namespace Compiler.CodeGeneration.Platform
                         break;
                     case Opcode.Add:
                     {
+                        buffer.EmitIndent();
                         var aType = GetOperandDataType(inst.A);
                         if (aType == eCobType.Float)
                             buffer.Emit(aType.Size == 32 ? "addss " : "addsd "); // TODO Account for width
@@ -417,6 +431,7 @@ namespace Compiler.CodeGeneration.Platform
                     }
                     case Opcode.Sub:
                     {
+                        buffer.EmitIndent();
                         var aType = GetOperandDataType(inst.A);
                         if (aType == eCobType.Float)
                             buffer.Emit(aType.Size == 32 ? "subss " : "subsd "); // TODO Account for width
@@ -429,6 +444,7 @@ namespace Compiler.CodeGeneration.Platform
                     }
                     case Opcode.Mul:
                     {
+                        buffer.EmitIndent();
                         var aType = GetOperandDataType(inst.A);
                         if (aType == eCobType.Float)
                             buffer.Emit(aType.Size == 32 ? "mulss " : "mulsd "); // TODO Account for width
@@ -444,6 +460,7 @@ namespace Compiler.CodeGeneration.Platform
                         var aType = GetOperandDataType(inst.A);
                         if (aType == eCobType.Float)
                         {
+                            buffer.EmitIndent();
                             buffer.Emit(aType.Size == 32 ? "divss " : "divsd ");
                             buffer.Emit(GetOperandString(inst.A));
                             buffer.Emit(", ");
@@ -815,7 +832,7 @@ namespace Compiler.CodeGeneration.Platform
                     {
                         if (global.Type.Function.NativeImport != null)
                             return "[" + global.Type.Function.Name + "]";
-                        return global.Type.Function.Name;
+                        return global.Type.Function.FullyQualifiedName;
                     }
 
                     return $"rdata_{operand.Value} + 8"; // TODO HACK SHould not + 8 this
@@ -832,7 +849,7 @@ namespace Compiler.CodeGeneration.Platform
 
         private string GetLabelString(Label label)
         {
-            return $".{currentFunction.Name}_{label.Index}";
+            return $".{currentFunction.FullyQualifiedName}_{label.Index}";
         }
 
         private const int MaxRegisters = 12;
@@ -935,6 +952,8 @@ namespace Compiler.CodeGeneration.Platform
 
     internal sealed class MachineCodeBuffer
     {
+        private int indent;
+
         private readonly StringBuilder builder;
 
         public MachineCodeBuffer()
@@ -949,12 +968,28 @@ namespace Compiler.CodeGeneration.Platform
 
         public void EmitLine(string op)
         {
+            EmitIndent();
             builder.AppendLine(op);
         }
 
         public void EmitLine()
         {
             builder.AppendLine();
+        }
+
+        public void Indent()
+        {
+            ++indent;
+        }
+
+        public void Unindent()
+        {
+            --indent;
+        }
+
+        public void EmitIndent()
+        {
+            builder.Append(new string(' ', indent * 4));
         }
 
         public override string ToString()

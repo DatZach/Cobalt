@@ -14,16 +14,21 @@ namespace Compiler.CodeGeneration
 
         public List<Import> Imports { get; }
 
-        public Dictionary<string, string> Exports { get; } // (ExternalName, InternalName)
+        public List<Module> Modules { get; }
 
-        public List<Function> Functions { get; }
+        public Dictionary<string, string> Exports { get; } // (ExternalName, InternalName)
 
         // TODO Optimization
         //public Dictionary<string, CobVariable> Globals { get; }
         public List<CobVariable> Globals { get; }
 
+        public Function? EntryFunction { get; private set; }
+
         private Function? CurrentFunction => functionStack.Count == 0 ? null : functionStack.Peek();
 
+        private Module CurrentModule { get; set; }
+
+        private readonly Module rootModule;
         private readonly Stack<Function> functionStack;
         private readonly MessageCollection messages;
         
@@ -32,9 +37,12 @@ namespace Compiler.CodeGeneration
             Artifacts = new List<ArtifactExpression>();
             Imports = new List<Import>();
             Exports = new Dictionary<string, string>();
-            Functions = new List<Function>();
+            Modules = new List<Module>();
             Globals = new List<CobVariable>();
             functionStack = new Stack<Function>();
+
+            CurrentModule = rootModule = new Module();
+            Modules.Add(rootModule);
 
             this.messages = messages ?? throw new ArgumentNullException(nameof(messages));
         }
@@ -44,6 +52,34 @@ namespace Compiler.CodeGeneration
             var expressions = expression.Expressions;
             for (int i = 0; i < expressions.Count; ++i)
                 expressions[i].Accept(this);
+
+            return null;
+        }
+
+        public Storage? Visit(ModuleExpression expression)
+        {
+            var module = Modules.FirstOrDefault(x => x.Name == expression.Name);
+            if (module == null)
+            {
+                module = new Module { Name = expression.Name };
+                Modules.Add(module);
+            }
+
+            if (CurrentModule != rootModule && module != rootModule)
+            {
+                messages.Add(Message.CannotNestModules, expression);
+                return null;
+            }
+
+            CurrentModule = module;
+
+            if (expression.Block != null)
+            {
+                var storage = expression.Block.Accept(this);
+                storage?.Free();
+
+                CurrentModule = rootModule;
+            }
 
             return null;
         }
@@ -100,6 +136,7 @@ namespace Compiler.CodeGeneration
                 {
                     function = new Function(
                         expression.SymbolName,
+                        CurrentModule,
                         expression.FunctionSignture.CallingConvention,
                         expression.FunctionSignture.Parameters,
                         new CobType(eCobType.None, 0)
@@ -186,6 +223,7 @@ namespace Compiler.CodeGeneration
         {
             var function = new Function(
                 "$aot_eval$",
+                CurrentModule,
                 CallingConvention.CCall,
                 Array.Empty<Function.Parameter>(),
                 CobType.None
@@ -218,10 +256,25 @@ namespace Compiler.CodeGeneration
             return evalStorage;
         }
 
+        public Storage? Visit(FatArrowExpression expression)
+        {
+            var value = expression.Expression.Accept(this);
+            if (CurrentModule == rootModule && value != null && value.Type == eCobType.Function)
+            {
+                if (EntryFunction != null)
+                    messages.Add(Message.CannotRedeclareEntryPoint, expression);
+                else
+                    EntryFunction = value.Type.Function;
+            }
+
+            return value;
+        }
+
         public Storage? Visit(FunctionExpression expression)
         {
             var function = new Function(
                 expression.Name,
+                CurrentModule,
                 expression.CallingConvention,
                 expression.Parameters,
                 expression.ReturnType
@@ -235,7 +288,7 @@ namespace Compiler.CodeGeneration
             function.ReturnLabel.Mark();
             
             functionStack.Pop();
-            Functions.Add(function);
+            CurrentModule.Functions.Add(function);
 
             function.Body.HACK_Optmize();
 
@@ -622,5 +675,12 @@ namespace Compiler.CodeGeneration
         public string? SymbolName { get; init; }
 
         public Function? Function { get; init; }
+    }
+
+    internal sealed record Module
+    {
+        public string? Name { get; init; }
+
+        public List<Function> Functions { get; } = new ();
     }
 }

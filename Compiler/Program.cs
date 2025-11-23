@@ -73,14 +73,13 @@ namespace Compiler
             else
             {
                 using var vm = new VirtualMachine(compiler);
-                if (!compiler.Exports.TryGetValue("Main", out var mainFunctionName))
+                if (compiler.EntryFunction == null)
                 {
                     Console.WriteLine("Aborting. No artifact specified, and no Main function exported.");
                     return;
                 }
 
-                var mainFunction = compiler.Functions.FirstOrDefault(x => x.Name == mainFunctionName);
-                vm.ExecuteFunction(mainFunction);
+                vm.ExecuteFunction(compiler.EntryFunction);
             }
         }
 
@@ -103,21 +102,27 @@ namespace Compiler
                 Console.WriteLine($"\t{global}");
             Console.WriteLine();
 
-            Console.WriteLine("Functions");
-            foreach (var function in compiler.Functions)
+            Console.WriteLine("Modules");
+            foreach (var module in compiler.Modules)
             {
-                Console.WriteLine($"\t{function.Name} -> {function.ReturnType}");
-                Console.WriteLine($"\t\t.locals = {function.Locals.Count}");
-                Console.WriteLine($"\t\t.cconv = {function.CallingConvention}");
-                if (function.Body == null)
+                Console.WriteLine($"\t{module.Name ?? "(root)"}");
+                Console.WriteLine("\tFunctions");
+                foreach (var function in module.Functions)
                 {
-                    Console.WriteLine("\tBodyless");
-                    continue;
-                }
+                    Console.WriteLine($"\t\t{function.Name} -> {function.ReturnType}");
+                    Console.WriteLine($"\t\t\t.locals = {function.Locals.Count}");
+                    Console.WriteLine($"\t\t\t.cconv = {function.CallingConvention}");
+                    if (function.Body == null)
+                    {
+                        Console.WriteLine("\t\tBodyless");
+                        continue;
+                    }
 
-                foreach (var inst in function.Body.Instructions)
-                    Console.WriteLine($"\t{inst}");
+                    foreach (var inst in function.Body.Instructions)
+                        Console.WriteLine($"\t\t{inst}");
+                }
             }
+
             Console.WriteLine();
         }
     }

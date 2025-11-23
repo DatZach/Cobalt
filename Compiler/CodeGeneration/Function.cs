@@ -1,12 +1,10 @@
-﻿using System.Runtime.InteropServices;
-using Compiler.Ast.Expressions;
-using Microsoft.Win32;
-
-namespace Compiler.CodeGeneration
+﻿namespace Compiler.CodeGeneration
 {
     internal sealed class Function
     {
         public string Name { get; }
+
+        public Module Module { get; }
 
         public List<CobVariable> Locals { get; }
 
@@ -24,17 +22,21 @@ namespace Compiler.CodeGeneration
 
         public Label ReturnLabel { get; }
 
+        public string FullyQualifiedName => (Module.Name ?? "root") + '_' + Name;
+
         private int freeRegisterIndex;
         private int registers;
 
         public Function(
             string name,
+            Module module,
             CallingConvention callingConvention,
             IReadOnlyList<Parameter> parameters,
             CobType returnType
         )
         {
             Name = name ?? throw new ArgumentNullException(nameof(name));
+            Module = module ?? throw new ArgumentNullException(nameof(module));
             Locals = new List<CobVariable>();
             ClobberedRegisters = 0;
             CallingConvention = callingConvention;
