@@ -1,5 +1,6 @@
 ﻿using Compiler.Lexer;
 using Compiler.Ast.Expressions;
+using Compiler.Ast.Expressions.Statements;
 using Compiler.CodeGeneration;
 
 namespace Compiler.Ast.Parselets
@@ -67,9 +68,17 @@ namespace Compiler.Ast.Parselets
             else
                 callingConvention = CallingConvention.CCall; // TODO Don't hardcode
 
+            Token? fatArrowToken;
             Expression? body;
             if (parser.Match(TokenType.LeftBrace))
                 body = parser.ParseBlock(true);
+            else if ((fatArrowToken = parser.MatchAndTakeToken(TokenType.FatArrow)) != null)
+            {
+                body = new ReturnStatement(
+                    fatArrowToken,
+                    parser.ParseStatement(false)
+                );
+            }
             else
                 body = null;
 

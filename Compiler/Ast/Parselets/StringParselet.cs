@@ -6,7 +6,7 @@ namespace Compiler.Ast.Parselets
 {
     internal sealed class StringParselet : IPrefixExpressionParselet
     {
-        private const char EscapeCharacter = '`';
+        private const char EscapeCharacter = '^';
 
         public Expression Parse(Parser parser, Token token)
         {
@@ -19,7 +19,7 @@ namespace Compiler.Ast.Parselets
             for (int i = 0; i < length; ++i)
             {
                 var ch = value[i];
-                if (ch == '`')
+                if (ch == EscapeCharacter)
                 {
                     var isIllegalEscape = false;
                     if (i + 1 < length)

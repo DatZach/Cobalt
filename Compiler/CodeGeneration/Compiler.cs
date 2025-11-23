@@ -97,6 +97,10 @@ namespace Compiler.CodeGeneration
             {
                 var decl = expression.Declarations[i];
 
+                // TODO x = Module
+                // TODO var a; illegal
+                // TODO var a: u16;
+                // TODO Throw error when initializer returns something unassignable
                 var rhs = decl.Initializer?.Accept(this);
                 if (rhs == null)
                     continue;
@@ -612,6 +616,12 @@ namespace Compiler.CodeGeneration
             if (CurrentContext.Variables.TryGetValue(expression.Value, out var global)
             &&  (idx = FindGlobal(global)) != -1)
             {
+                if (!IsSymbolVisible(global))
+                {
+                    messages.Add(Message.CannotAccessPrivateSymbol, expression, expression.Value, CurrentModule.Name ?? "(root)");
+                    return null;
+                }
+
                 var type = Globals[idx];
                 return new Storage(
                     CurrentFunction,
@@ -725,6 +735,14 @@ namespace Compiler.CodeGeneration
                 OperandType.Argument => null, // TODO This should be possible
                 _ => null
             };
+        }
+
+        private bool IsSymbolVisible(CobVariable variable)
+        {
+            if (CurrentFunction != null && CurrentFunction.Module == CurrentContext)
+                return true;
+
+            return variable.Name.Length > 0 && char.IsUpper(variable.Name[0]);
         }
     }
 

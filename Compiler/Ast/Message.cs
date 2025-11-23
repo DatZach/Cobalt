@@ -247,6 +247,8 @@ namespace Compiler.Ast
 
         public static Def MissingFunctionBody { get; } = new(MessageType.Error, "Missing function body");
 
+        public static Def CannotAccessPrivateSymbol { get; } = new(MessageType.Error, "Cannot access private symbol '{0}' from module '{1}'");
+
         public sealed record Def(
             MessageType Type,
             string Content,
