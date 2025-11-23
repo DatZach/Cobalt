@@ -10,6 +10,8 @@ namespace Compiler.Ast.Parselets
         {
             IReadOnlyList<Function.Parameter> parameters;
 
+            var name = parser.MatchAndTakeToken(TokenType.Identifier)?.Value;
+
             parser.Take(TokenType.LeftParen);
             if (!parser.Match(TokenType.RightParen))
             {
@@ -19,7 +21,7 @@ namespace Compiler.Ast.Parselets
                 {
                     var isSpread = parser.MatchAndTakeToken(TokenType.Spread) != null;
 
-                    var name = parser.Take(TokenType.Identifier);
+                    var paramName = parser.Take(TokenType.Identifier);
                     parser.Take(TokenType.Colon);
 
                     string typeName;
@@ -34,12 +36,12 @@ namespace Compiler.Ast.Parselets
                     parser.MatchAndTakeToken(TokenType.Comma);
 
                     if (isSpread && hasSpread)
-                        parser.Messages.Add(Message.ExcessiveSpreadParameters, name);
+                        parser.Messages.Add(Message.ExcessiveSpreadParameters, paramName);
 
                     hasSpread = hasSpread || isSpread;
 
                     lParameters.Add(new Function.Parameter(
-                        name.Value,
+                        paramName.Value,
                         CobType.FromString(typeName),
                         isSpread
                     ));
@@ -51,12 +53,6 @@ namespace Compiler.Ast.Parselets
                 parameters = Array.Empty<Function.Parameter>();
 
             parser.Take(TokenType.RightParen);
-
-            Expression? body;
-            if (parser.Match(TokenType.LeftBrace))
-                body = parser.ParseBlock(true);
-            else
-                body = null;
 
             var sReturnType = parser.MatchAndTakeToken(TokenType.Identifier)?.Value;
             var returnType = CobType.FromString(sReturnType);
@@ -71,8 +67,15 @@ namespace Compiler.Ast.Parselets
             else
                 callingConvention = CallingConvention.CCall; // TODO Don't hardcode
 
+            Expression? body;
+            if (parser.Match(TokenType.LeftBrace))
+                body = parser.ParseBlock(true);
+            else
+                body = null;
+
             return new FunctionExpression(
                 token,
+                name,
                 parameters,
                 body,
                 returnType,

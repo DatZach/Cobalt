@@ -21,6 +21,8 @@ namespace Compiler.CodeGeneration
 
     public sealed record Operand
     {
+        public static readonly Operand None = new() { Type = OperandType.None, Size = 0, Value = 0 };
+
         public OperandType Type { get; init; }
 
         public int Size { get; init; }

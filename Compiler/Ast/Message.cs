@@ -245,6 +245,8 @@ namespace Compiler.Ast
 
         public static Def CannotRedeclareEntryPoint { get; } = new(MessageType.Error, "Multiple Entry Points may not be declared");
 
+        public static Def MissingFunctionBody { get; } = new(MessageType.Error, "Missing function body");
+
         public sealed record Def(
             MessageType Type,
             string Content,

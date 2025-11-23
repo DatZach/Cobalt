@@ -26,10 +26,13 @@ namespace Compiler.CodeGeneration
 
         private Function? CurrentFunction => functionStack.Count == 0 ? null : functionStack.Peek();
 
+        private Module CurrentContext => contextStack.Peek();
+
         private Module CurrentModule { get; set; }
 
         private readonly Module rootModule;
         private readonly Stack<Function> functionStack;
+        private readonly Stack<Module> contextStack; // TODO IScopedContext or something (Struct, Module, Tuple, etc.)
         private readonly MessageCollection messages;
         
         public Compiler(MessageCollection messages)
@@ -40,9 +43,11 @@ namespace Compiler.CodeGeneration
             Modules = new List<Module>();
             Globals = new List<CobVariable>();
             functionStack = new Stack<Function>();
+            contextStack = new Stack<Module>();
 
             CurrentModule = rootModule = new Module();
             Modules.Add(rootModule);
+            contextStack.Push(rootModule);
 
             this.messages = messages ?? throw new ArgumentNullException(nameof(messages));
         }
@@ -72,12 +77,14 @@ namespace Compiler.CodeGeneration
             }
 
             CurrentModule = module;
+            contextStack.Push(module);
 
             if (expression.Block != null)
             {
                 var storage = expression.Block.Accept(this);
                 storage?.Free();
 
+                contextStack.Pop();
                 CurrentModule = rootModule;
             }
 
@@ -272,6 +279,12 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(FunctionExpression expression)
         {
+            if (expression.Body == null)
+            {
+                messages.Add(Message.MissingFunctionBody, expression);
+                return null;
+            }
+
             var function = new Function(
                 expression.Name,
                 CurrentModule,
@@ -280,27 +293,42 @@ namespace Compiler.CodeGeneration
                 expression.ReturnType
             );
 
+            var type = new CobType(eCobType.Function, -1, function: function);
+            if (!expression.IsAnonymous)
+                AllocateGlobal(new CobVariable(expression.Name, type, false));
+            
+            CurrentModule.Functions.Add(function);
+
             functionStack.Push(function);
             
-            expression.Body?.Accept(this);
+            expression.Body.Accept(this);
             function.Body.Emit(Opcode.Return); // TODO Error if not all paths return
 
             function.ReturnLabel.Mark();
             
             functionStack.Pop();
-            CurrentModule.Functions.Add(function);
 
             function.Body.HACK_Optmize();
 
             return new Storage(
                 CurrentFunction,
                 null, // TODO ???
-                new CobType(eCobType.Function, -1, function: function)
+                type
             );
         }
 
         public Storage? Visit(BinaryOperatorExpression expression)
         {
+            if (expression.Operator == TokenType.Dot)
+            {
+                var lhs = expression.Left.Accept(this);
+                contextStack.Push(Modules[(int)lhs.Operand.Value]); // TODO Validate type, support  structs, etc.
+                var rhs = expression.Right.Accept(this);
+                contextStack.Pop();
+                lhs.Free();
+                return rhs;
+            }
+
             var a = expression.Left.Accept(this);
             var b = expression.Right.Accept(this);
             var cType = a.Type; // TODO Verify types
@@ -435,7 +463,7 @@ namespace Compiler.CodeGeneration
             var function = functionStorage?.Type.Function;
             if (function == null)
             {
-                messages.Add(Message.CannotCallType, expression, functionStorage?.Type);
+                messages.Add(Message.CannotCallType, expression, functionStorage?.Type.ToString() ?? "(null)");
                 return null;
             }
             
@@ -456,8 +484,13 @@ namespace Compiler.CodeGeneration
                     var argStorage = arguments[i].Accept(this);
 
                     if (paramType != null && paramType.IsSpread) paramType = null;
-                    if (paramType != null && !CobType.IsCastable(argStorage.Type, paramType.Type))
-                        messages.Add(Message.ParameterTypeMismatch, arguments[i], paramType.Type, argStorage);
+                    if (argStorage == null
+                    ||  (paramType != null && !CobType.IsCastable(argStorage.Type, paramType.Type)))
+                    {
+                        aOperandArguments[i] = Operand.None;
+                        messages.Add(Message.ParameterTypeMismatch, arguments[i], paramType?.Type, argStorage);
+                        continue;
+                    }
                     
                     if (paramType != null && argStorage.Type != paramType.Type)
                         argStorage = EmitCast(argStorage, paramType.Type);
@@ -539,41 +572,45 @@ namespace Compiler.CodeGeneration
             int idx;
 
             // TODO AllocateStorage(Type, Value, Origin)..?
-            
-            // ARGUMENTS
-            if ((idx = CurrentFunction.FindParameter(expression.Value)) != -1)
-            {
-                var type = CurrentFunction.Parameters[idx];
-                return new Storage(
-                    CurrentFunction,
-                    new Operand
-                    {
-                        Type = OperandType.Argument,
-                        Value = idx,
-                        Size = type.Type.Size
-                    },
-                    type.Type
-                );
-            }
 
-            // LOCALS
-            if ((idx = CurrentFunction.FindLocal(expression.Value)) != -1)
+            if (CurrentFunction != null)
             {
-                var type = CurrentFunction.Locals[idx];
-                return new Storage(
-                    CurrentFunction,
-                    new Operand
-                    {
-                        Type = OperandType.Local,
-                        Value = idx,
-                        Size = type.Type.Size
-                    },
-                    type.Type
-                );
+                // ARGUMENTS
+                if ((idx = CurrentFunction.FindParameter(expression.Value)) != -1)
+                {
+                    var type = CurrentFunction.Parameters[idx];
+                    return new Storage(
+                        CurrentFunction,
+                        new Operand
+                        {
+                            Type = OperandType.Argument,
+                            Value = idx,
+                            Size = type.Type.Size
+                        },
+                        type.Type
+                    );
+                }
+
+                // LOCALS
+                if ((idx = CurrentFunction.FindLocal(expression.Value)) != -1)
+                {
+                    var type = CurrentFunction.Locals[idx];
+                    return new Storage(
+                        CurrentFunction,
+                        new Operand
+                        {
+                            Type = OperandType.Local,
+                            Value = idx,
+                            Size = type.Type.Size
+                        },
+                        type.Type
+                    );
+                }
             }
 
             // GLOBALS
-            if ((idx = FindGlobal(expression.Value)) != -1)
+            if (CurrentContext.Variables.TryGetValue(expression.Value, out var global)
+            &&  (idx = FindGlobal(global)) != -1)
             {
                 var type = Globals[idx];
                 return new Storage(
@@ -585,6 +622,21 @@ namespace Compiler.CodeGeneration
                         Size = type.Type.Size
                     },
                     type.Type
+                );
+            }
+
+            // MODULES
+            if ((idx = Modules.FindIndex(x => x.Name == expression.Value)) != -1)
+            {
+                return new Storage(
+                    CurrentFunction,
+                    new Operand
+                    {
+                        Type = OperandType.None, // TODO Module Type?
+                        Value = idx,
+                        Size = 0
+                    },
+                    CobType.None
                 );
             }
 
@@ -638,20 +690,28 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
+        [Obsolete]
         public int FindGlobal(string name)
         {
             return Globals.FindIndex(x => x.Name == name);
+        }
+
+        public int FindGlobal(CobVariable variable)
+        {
+            return Globals.FindIndex(x => x == variable);
         }
         
         public int AllocateGlobal(CobVariable variable)
         {
             if (variable == null) throw new ArgumentNullException(nameof(variable));
 
-            if (FindGlobal(variable.Name) != -1)
+            if (FindGlobal(variable) != -1)
                 return -1;
 
             var idx = Globals.Count;
             Globals.Add(variable);
+
+            CurrentModule.Variables[variable.Name] = variable;
 
             return idx;
         }
@@ -682,5 +742,7 @@ namespace Compiler.CodeGeneration
         public string? Name { get; init; }
 
         public List<Function> Functions { get; } = new ();
+
+        public Dictionary<string, CobVariable> Variables { get; } = new ();
     }
 }

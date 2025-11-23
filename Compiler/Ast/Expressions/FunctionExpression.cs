@@ -7,7 +7,9 @@ namespace Compiler.Ast.Expressions
 {
     internal sealed class FunctionExpression : Expression
     {
-        public string Name => $"fn_{Token.Line + 1}_{Token.Column + 1}";
+        public string Name { get; }
+
+        public bool IsAnonymous { get; }
         
         public CobType ReturnType { get; }
 
@@ -19,6 +21,7 @@ namespace Compiler.Ast.Expressions
 
         public FunctionExpression(
             Token token,
+            string? name,
             IReadOnlyList<Function.Parameter> parameters,
             Expression? body,
             CobType returnType,
@@ -26,6 +29,8 @@ namespace Compiler.Ast.Expressions
         )
             : base(token)
         {
+            Name = name ?? $"fn_{Path.GetFileNameWithoutExtension(Token.Filename)}_{Token.Line + 1}_{Token.Column + 1}";
+            IsAnonymous = name == null;
             Parameters = parameters;
             Body = body;
             ReturnType = returnType;

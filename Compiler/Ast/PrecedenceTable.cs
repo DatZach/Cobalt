@@ -3,7 +3,8 @@
     internal static class PrecedenceTable
     {
         public const int FunctionCall = 14;
-        
+        public const int Dereference = 14;
+
         public const int Multiplication = 13;
         public const int Division = 13;
         public const int Modulo = 13;

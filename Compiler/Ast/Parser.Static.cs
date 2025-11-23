@@ -36,6 +36,7 @@ namespace Compiler.Ast
             Register(TokenType.BitAnd, new BinaryOperatorParselet(PrecedenceTable.BitAnd));
             Register(TokenType.BitOr, new BinaryOperatorParselet(PrecedenceTable.BitOr));
             Register(TokenType.BitXor, new BinaryOperatorParselet(PrecedenceTable.BitXor));
+            Register(TokenType.Dot, new BinaryOperatorParselet(PrecedenceTable.Dereference));
 
             Register(TokenType.Equals, new BinaryOperatorParselet(PrecedenceTable.ConditionalExpression));
             Register(TokenType.NotEquals, new BinaryOperatorParselet(PrecedenceTable.ConditionalExpression));
