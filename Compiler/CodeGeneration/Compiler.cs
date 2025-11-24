@@ -76,6 +76,7 @@ namespace Compiler.CodeGeneration
                 return null;
             }
 
+            var prevModule = CurrentModule;
             CurrentModule = module;
             contextStack.Push(module);
 
@@ -85,8 +86,15 @@ namespace Compiler.CodeGeneration
                 storage?.Free();
 
                 contextStack.Pop();
-                CurrentModule = rootModule;
+                CurrentModule = prevModule;
             }
+
+            return null;
+        }
+
+        public Storage? Visit(TupleDefinitionExpression expression)
+        {
+            CurrentModule.TupleTypes.Add(expression);
 
             return null;
         }
@@ -464,6 +472,12 @@ namespace Compiler.CodeGeneration
 
             // FUNCTION IDENTIFIER
             var functionStorage = expression.FunctionExpression.Accept(this);
+            
+            // TUPLE ALLOCATION OPERATOR
+            var tuple = VisitTupleAllocation(expression, functionStorage);
+            if (tuple != null)
+                return tuple;
+
             var function = functionStorage?.Type.Function;
             if (function == null)
             {
@@ -571,6 +585,30 @@ namespace Compiler.CodeGeneration
                 throw new NotImplementedException();
         }
 
+        private Storage? VisitTupleAllocation(CallExpression expression, Storage? functionStorage)
+        {
+            if (functionStorage == null || functionStorage.Type != eCobType.Tuple)
+                return null;
+
+            functionStorage.Free();
+
+            var local = CurrentFunction.AllocateLocal(new CobVariable("$tuple$", functionStorage.Type, false));
+            for (var i = 0; i < expression.Arguments.Count; i++)
+            {
+                var argStorage = expression.Arguments[i].Accept(this);
+                //CurrentFunction.Body.EmitOO(
+                //    Opcode.Move,
+                //    new Operand
+                //    {
+                //        Type = OperandType.Local, Value = local, Offset = i * 4, Size = argStorage.Type.Size
+                //    },
+                //    argStorage.Operand
+                //); // TODO EmitLO
+            }
+
+            return CurrentFunction.AllocateStorage(functionStorage.Type, local);
+        }
+
         public Storage? Visit(IdentifierExpression expression)
         {
             int idx;
@@ -647,6 +685,21 @@ namespace Compiler.CodeGeneration
                         Size = 0
                     },
                     CobType.None
+                );
+            }
+
+            // TUPLE TYPES
+            if ((idx = CurrentContext.TupleTypes.FindIndex(x => x.Name == expression.Value)) != -1)
+            {
+                return new Storage(
+                    CurrentFunction,
+                    new Operand
+                    {
+                        Type = OperandType.None,
+                        Value = idx,
+                        Size = 0
+                    },
+                    new CobType(eCobType.Tuple, 8) // TODO Link TupleType & calculate size correctly
                 );
             }
 
@@ -762,5 +815,7 @@ namespace Compiler.CodeGeneration
         public List<Function> Functions { get; } = new ();
 
         public Dictionary<string, CobVariable> Variables { get; } = new ();
+
+        public List<TupleDefinitionExpression> TupleTypes { get; } = new ();
     }
 }

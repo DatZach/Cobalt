@@ -57,6 +57,7 @@
                 eCobType.Signed => OperandType.ImmediateSigned,
                 eCobType.Unsigned => OperandType.ImmediateUnsigned,
                 eCobType.Float => OperandType.ImmediateFloat,
+                eCobType.Tuple => OperandType.Local, // ????
                 _ => throw new NotSupportedException()
             };
 

@@ -1,6 +1,7 @@
 ﻿using System.Runtime.CompilerServices;
 using Compiler.Lexer;
 using Compiler.Ast.Expressions;
+using Compiler.CodeGeneration;
 
 namespace Compiler.Ast
 {
@@ -84,6 +85,22 @@ namespace Compiler.Ast
                 expressions.Add(ParseBlock());
 
             return new ScriptExpression(Take(), expressions);
+        }
+
+        // TODO Not sure if this is actually the best place for this...
+        //      Imports CodeGeneration namespace
+        public CobType ParseTypeName()
+        {
+            string typeName;
+            var type = Take(TokenType.Identifier);
+            var typeLs = MatchAndTakeToken(TokenType.LeftSquare);
+            var typeRs = MatchAndTakeToken(TokenType.RightSquare);
+            if (typeLs != null && typeRs != null)
+                typeName = type.Value + "[]";
+            else
+                typeName = type.Value;
+
+            return CobType.FromString(typeName);
         }
 
         public Token? MatchAndTakeToken(TokenType type)

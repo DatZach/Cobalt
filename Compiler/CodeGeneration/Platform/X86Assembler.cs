@@ -111,7 +111,7 @@ namespace Compiler.CodeGeneration.Platform
 
                     callReserve *= 8;
 
-                    localReserve = f.Locals.Count * 8;
+                    localReserve = f.Locals.Count * 8; // TODO Not every local is 8 bytes large (tuples, structs, etc.)
 
                     nvrReserve = 0;
                     for (int j = 0; j < MaxRegisters; ++j)
