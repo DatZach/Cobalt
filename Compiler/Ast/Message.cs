@@ -235,19 +235,23 @@ namespace Compiler.Ast
 
         public static Def UndeclaredIdentifier { get; } = new(MessageType.Error, "Undeclared identifier '{0}'");
 
-        public static Def ParameterTypeMismatch { get; } = new(MessageType.Error, "Expected type '{0}' but recieved '{1}' instead");
+        public static Def TypeMismatch { get; } = new(MessageType.Error, "Expected type '{0}' but recieved uncastable '{1}' instead");
 
         public static Def IllegalAssignment { get; } = new(MessageType.Error, "Illegal l-value for assignment");
 
         public static Def IllegalAssignmentImmutable { get; } = new(MessageType.Error, "Cannot assign to a 'const' identifier.");
 
-        public static Def CannotNestModules { get; } = new(MessageType.Error, "Modules may not be nested");
+        public static Def CannotNestModules { get; } = new(MessageType.Error, "Modules may not be nested"); // TODO Not true!
 
         public static Def CannotRedeclareEntryPoint { get; } = new(MessageType.Error, "Multiple Entry Points may not be declared");
 
         public static Def MissingFunctionBody { get; } = new(MessageType.Error, "Missing function body");
 
         public static Def CannotAccessPrivateSymbol { get; } = new(MessageType.Error, "Cannot access private symbol '{0}' from module '{1}'");
+
+        public static Def SymbolConflictsWithOther { get; } = new(MessageType.Error, "The Symbol '{0}' conflicts with a previous defined symbol of the same name");
+
+        public static Def MalformedVarDeclaration { get; } = new(MessageType.Error, "Variable declarations must specify a type, or an inline assignment, or both");
 
         public sealed record Def(
             MessageType Type,

@@ -4,13 +4,13 @@ using Compiler.Lexer;
 
 namespace Compiler.Ast.Expressions.Statements
 {
-    internal sealed class ReturnStatement : Expression
+    internal sealed class ReturnExpression : Expression
     {
         public Expression? Expression { get; }
 
         public override Token EndToken => Expression?.EndToken ?? Token;
 
-        public ReturnStatement(Token token, Expression? expression)
+        public ReturnExpression(Token token, Expression? expression)
             : base(token)
         {
             Expression = expression;

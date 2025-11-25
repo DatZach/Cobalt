@@ -13,12 +13,13 @@ namespace Compiler.Ast.Parselets.Statements
             do
             {
                 var identifier = parser.Take(TokenType.Identifier);
+                var type = parser.MatchAndTakeToken(TokenType.Colon) != null ? parser.ParseTypeName() : null;
                 
                 Expression? initializer = null;
                 if (parser.MatchAndTakeToken(TokenType.Assign) != null)
                     initializer = parser.ParseExpression(isConditional: true);
 
-                declarations.Add(new VarExpression.Declaration(identifier, initializer));
+                declarations.Add(new VarExpression.Declaration(identifier, type, initializer));
             } while(parser.Match(TokenType.Comma));
 
             return new VarExpression(token, declarations);

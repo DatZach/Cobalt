@@ -14,7 +14,7 @@ namespace Compiler.Ast.Parselets.Statements
             else
                 expression = null;
 
-            return new ReturnStatement(token, expression);
+            return new ReturnExpression(token, expression);
         }
     }
 }

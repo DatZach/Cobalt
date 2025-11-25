@@ -92,6 +92,12 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
+        public Storage? Visit(TypeExpression expression)
+        {
+            // NOTE Type Alias added by the Lexer/Parselet
+            return null;
+        }
+
         public Storage? Visit(TupleDefinitionExpression expression)
         {
             CurrentModule.TupleTypes.Add(expression);
@@ -104,38 +110,65 @@ namespace Compiler.CodeGeneration
             for (var i = 0; i < expression.Declarations.Count; ++i)
             {
                 var decl = expression.Declarations[i];
-
-                // TODO x = Module
-                // TODO var a; illegal
-                // TODO var a: u16;
-                // TODO Throw error when initializer returns something unassignable
-                var rhs = decl.Initializer?.Accept(this);
-                if (rhs == null)
-                    continue;
-
                 var mutable = expression.Type == TokenType.Var;
-                var variable = new CobVariable(decl.Name, rhs.Type, mutable);
+                var type = decl.Type;
+
+                Storage? rhs;
+                if (decl.Initializer != null)
+                {
+                    rhs = decl.Initializer.Accept(this);
+                    if (rhs == null)
+                        messages.Add(Message.TypeMismatch, expression, "any", "none");
+                    else if (type != null && !CobType.IsCastable(rhs.Type, type))
+                        messages.Add(Message.TypeMismatch, expression, type, rhs.Type);
+                    else
+                        type = rhs.Type;
+                }
+                else
+                    rhs = null;
+
+                if ((decl.Type == null && decl.Initializer == null)
+                ||  type == null)
+                {
+                    messages.Add(Message.MalformedVarDeclaration, expression);
+                    continue;
+                }
+                
+                var variable = new CobVariable(decl.Name, type, mutable);
+
+                // TODO Starting with initializer function
 
                 if (CurrentFunction != null) // Local Decl
                 {
                     var local = CurrentFunction.AllocateLocal(variable);
-                    CurrentFunction.Body.EmitOO(
-                        Opcode.Move,
-                        new Operand { Type = OperandType.Local, Value = local, Size = rhs.Type.Size },
-                        rhs.Operand
-                    ); // TODO EmitLO
+                    if (rhs != null)
+                    {
+                        CurrentFunction.Body.EmitOO(
+                            Opcode.Move,
+                            new Operand { Type = OperandType.Local, Value = local, Size = type.Size },
+                            rhs.Operand
+                        ); // TODO EmitLO
+                    }
                 }
                 else if (CurrentFunction == null) // Global Decl
                 {
-                    AllocateGlobal(variable);
+                    var global = AllocateGlobal(variable);
+                    if (rhs != null)
+                    {
+                        CurrentFunction.Body.EmitOO( // TODO Not right
+                            Opcode.Move,
+                            new Operand { Type = OperandType.Local, Value = global, Size = type.Size },
+                            rhs.Operand
+                        ); // TODO EmitLO
+                    }
 
                     // TODO Throw exception if export declared outside root level
                     // TODO Throw exception if export declared on non-function?
                     if (expression.Type == TokenType.Export)
-                        Exports.Add(decl.Name, rhs.Type.Function.Name);
+                        Exports.Add(decl.Name, type.Function.Name);
                 }
 
-                rhs.Free();
+                rhs?.Free();
             }
 
             return null;
@@ -219,7 +252,7 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
-        public Storage? Visit(ReturnStatement expression)
+        public Storage? Visit(ReturnExpression expression)
         {
             if (expression.Expression == null)
                 CurrentFunction.Body.Emit(Opcode.Return);
@@ -506,7 +539,7 @@ namespace Compiler.CodeGeneration
                     ||  (paramType != null && !CobType.IsCastable(argStorage.Type, paramType.Type)))
                     {
                         aOperandArguments[i] = Operand.None;
-                        messages.Add(Message.ParameterTypeMismatch, arguments[i], paramType?.Type, argStorage);
+                        messages.Add(Message.TypeMismatch, arguments[i], paramType?.Type, argStorage);
                         continue;
                     }
                     

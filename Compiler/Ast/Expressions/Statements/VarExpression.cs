@@ -1,6 +1,7 @@
 ﻿using Compiler.Lexer;
 using Compiler.Ast.Visitors;
 using System.Diagnostics;
+using Compiler.CodeGeneration;
 
 namespace Compiler.Ast.Expressions.Statements
 {
@@ -28,13 +29,16 @@ namespace Compiler.Ast.Expressions.Statements
         {
             public Token Token { get; }
 
+            public CobType? Type { get; }
+
             public Expression? Initializer { get; }
 
             public string Name => Token.Value!;
 
-            public Declaration(Token token, Expression? initializer)
+            public Declaration(Token token, CobType? type, Expression? initializer)
             {
                 Token = token;
+                Type = type;
                 Initializer = initializer;
             }
         }

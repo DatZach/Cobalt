@@ -49,7 +49,7 @@ namespace Compiler.Ast.Parselets
             if (parser.MatchAndTakeToken(TokenType.CCall) != null)
                 callingConvention = CallingConvention.CCall;
             else if (parser.MatchAndTakeToken(TokenType.StdCall) != null)
-                callingConvention = CallingConvention.Stdcall;
+                callingConvention = CallingConvention.StdCall;
             //else if (parser.MatchAndTakeToken(TokenType.Naked) != null)
             //    callingConvention = CallingConvention.Naked;
             else
@@ -61,7 +61,7 @@ namespace Compiler.Ast.Parselets
                 body = parser.ParseBlock(true);
             else if ((fatArrowToken = parser.MatchAndTakeToken(TokenType.FatArrow)) != null)
             {
-                body = new ReturnStatement(
+                body = new ReturnExpression(
                     fatArrowToken,
                     parser.ParseStatement(false)
                 );

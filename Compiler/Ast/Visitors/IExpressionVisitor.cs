@@ -7,11 +7,12 @@ namespace Compiler.Ast.Visitors
     {
         T Visit(ScriptExpression expression);
         T Visit(ModuleExpression expression);
+        T Visit(TypeExpression expression);
         T Visit(TupleDefinitionExpression expression);
         T Visit(VarExpression expression);
         T Visit(ImportExpression expression);
         T Visit(ArtifactExpression expression);
-        T Visit(ReturnStatement expression);
+        T Visit(ReturnExpression expression);
         T Visit(IfStatement expression);
         T Visit(AheadOfTimeExpression expression);
         T Visit(FatArrowExpression expression);

@@ -200,7 +200,7 @@
     {
         None,
         CCall,
-        Stdcall
+        StdCall
     }
 
     internal sealed record Storage(Function Parent, Operand Operand, CobType Type)
