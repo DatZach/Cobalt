@@ -46,8 +46,10 @@ namespace Compiler.CodeGeneration
             contextStack = new Stack<Module>();
 
             CurrentModule = rootModule = new Module();
+            AllocateGlobal(new CobVariable(CurrentModule.InitializerFunction.FullyQualifiedName, new CobType(eCobType.Function, 0, function: CurrentModule.InitializerFunction), false)); // HACK Awful. Global should be scoped to a Module
             Modules.Add(rootModule);
             contextStack.Push(rootModule);
+            functionStack.Push(CurrentModule.InitializerFunction);
 
             this.messages = messages ?? throw new ArgumentNullException(nameof(messages));
         }
@@ -58,6 +60,9 @@ namespace Compiler.CodeGeneration
             for (int i = 0; i < expressions.Count; ++i)
                 expressions[i].Accept(this);
 
+            // HACK? Not sure this is the best place to put this
+            rootModule.InitializerFunction.Body.Emit(Opcode.Return);
+
             return null;
         }
 
@@ -67,9 +72,14 @@ namespace Compiler.CodeGeneration
             if (module == null)
             {
                 module = new Module { Name = expression.Name };
+                AllocateGlobal(new CobVariable(
+                    module.InitializerFunction.FullyQualifiedName,
+                    new CobType(eCobType.Function, 0, function: module.InitializerFunction),
+                    false)); // HACK Awful. Global should be scoped to a Module
                 Modules.Add(module);
             }
 
+            // TODO Remove this rule and implement AllocateModule
             if (CurrentModule != rootModule && module != rootModule)
             {
                 messages.Add(Message.CannotNestModules, expression);
@@ -82,11 +92,17 @@ namespace Compiler.CodeGeneration
 
             if (expression.Block != null)
             {
+                functionStack.Push(module.InitializerFunction);
+
                 var storage = expression.Block.Accept(this);
                 storage?.Free();
 
                 contextStack.Pop();
                 CurrentModule = prevModule;
+
+                functionStack.Pop();
+
+                module.InitializerFunction.Body.Emit(Opcode.Return);
             }
 
             return null;
@@ -136,37 +152,40 @@ namespace Compiler.CodeGeneration
                 
                 var variable = new CobVariable(decl.Name, type, mutable);
 
-                // TODO Starting with initializer function
-
-                if (CurrentFunction != null) // Local Decl
+                if (CurrentFunction != null)
                 {
-                    var local = CurrentFunction.AllocateLocal(variable);
-                    if (rhs != null)
+                    if (CurrentFunction == CurrentModule.InitializerFunction) // Global Decl
                     {
-                        CurrentFunction.Body.EmitOO(
-                            Opcode.Move,
-                            new Operand { Type = OperandType.Local, Value = local, Size = type.Size },
-                            rhs.Operand
-                        ); // TODO EmitLO
+                        var global = AllocateGlobal(variable);
+                        if (rhs != null)
+                        {
+                            CurrentFunction.Body.EmitOO( // TODO Not right
+                                Opcode.Move,
+                                new Operand { Type = OperandType.Global, Value = global, Size = type.Size },
+                                rhs.Operand
+                            ); // TODO EmitLO
+                        }
+
+                        // TODO Throw exception if export declared outside root level
+                        // TODO Throw exception if export declared on non-function?
+                        if (expression.Type == TokenType.Export)
+                            Exports.Add(decl.Name, type.Function.Name);
+                    }
+                    else
+                    {
+                        var local = CurrentFunction.AllocateLocal(variable);
+                        if (rhs != null)
+                        {
+                            CurrentFunction.Body.EmitOO(
+                                Opcode.Move,
+                                new Operand { Type = OperandType.Local, Value = local, Size = type.Size },
+                                rhs.Operand
+                            ); // TODO EmitLO
+                        }
                     }
                 }
-                else if (CurrentFunction == null) // Global Decl
-                {
-                    var global = AllocateGlobal(variable);
-                    if (rhs != null)
-                    {
-                        CurrentFunction.Body.EmitOO( // TODO Not right
-                            Opcode.Move,
-                            new Operand { Type = OperandType.Local, Value = global, Size = type.Size },
-                            rhs.Operand
-                        ); // TODO EmitLO
-                    }
-
-                    // TODO Throw exception if export declared outside root level
-                    // TODO Throw exception if export declared on non-function?
-                    if (expression.Type == TokenType.Export)
-                        Exports.Add(decl.Name, type.Function.Name);
-                }
+                else
+                    throw new NotImplementedException(); // TODO Normal compile error? What does this mean??
 
                 rhs?.Free();
             }
@@ -191,7 +210,7 @@ namespace Compiler.CodeGeneration
                         CurrentModule,
                         expression.FunctionSignture.CallingConvention,
                         expression.FunctionSignture.Parameters,
-                        new CobType(eCobType.None, 0)
+                        expression.FunctionSignture.ReturnType
                     );
                 }
                 else
@@ -316,7 +335,26 @@ namespace Compiler.CodeGeneration
                 if (EntryFunction != null)
                     messages.Add(Message.CannotRedeclareEntryPoint, expression);
                 else
+                {
                     EntryFunction = value.Type.Function;
+                    foreach (var module in Modules)
+                    {
+                        foreach (var label in EntryFunction.Body.Labels)
+                            label.Location++; // HACK DO NOT MODIFY LABEL LOCATIONS
+
+                        // HACK DO NOT INJECT MODULE INITIALIZER CALLS LIKE THIS
+                        EntryFunction.Body.Instructions.Insert(0, new Instruction
+                        {
+                            Opcode = Opcode.Call,
+                            A = new Operand
+                            {
+                                Type = OperandType.Global, Value = FindGlobal(module.InitializerFunction.FullyQualifiedName),
+                                Size = 0
+                            },
+                            C = Array.Empty<Operand>()
+                        });
+                    }
+                }
             }
 
             return value;
@@ -330,9 +368,8 @@ namespace Compiler.CodeGeneration
                 return null;
             }
 
-            var function = new Function(
+            var function = CurrentModule.AllocateFunction(
                 expression.Name,
-                CurrentModule,
                 expression.CallingConvention,
                 expression.Parameters,
                 expression.ReturnType
@@ -342,8 +379,6 @@ namespace Compiler.CodeGeneration
             if (!expression.IsAnonymous)
                 AllocateGlobal(new CobVariable(expression.Name, type, false));
             
-            CurrentModule.Functions.Add(function);
-
             functionStack.Push(function);
             
             expression.Body.Accept(this);
@@ -357,7 +392,7 @@ namespace Compiler.CodeGeneration
 
             return new Storage(
                 CurrentFunction,
-                null, // TODO ???
+                new Operand(), //null, // TODO ???
                 type
             );
         }
@@ -841,7 +876,7 @@ namespace Compiler.CodeGeneration
         public Function? Function { get; init; }
     }
 
-    internal sealed record Module
+    internal sealed class Module
     {
         public string? Name { get; init; }
 
@@ -850,5 +885,29 @@ namespace Compiler.CodeGeneration
         public Dictionary<string, CobVariable> Variables { get; } = new ();
 
         public List<TupleDefinitionExpression> TupleTypes { get; } = new ();
+
+        public Function InitializerFunction { get; }
+
+        public Module()
+        {
+            InitializerFunction = AllocateFunction(
+                "$Initializer",
+                CallingConvention.CCall,
+                Array.Empty<Function.Parameter>(),
+                CobType.None
+            );
+        }
+
+        public Function AllocateFunction(
+            string name,
+            CallingConvention callingConvention,
+            IReadOnlyList<Function.Parameter> parameters,
+            CobType returnType
+        ) {
+            var function = new Function(name, this, callingConvention, parameters, returnType);
+            Functions.Add(function);
+
+            return function;
+        }
     }
 }

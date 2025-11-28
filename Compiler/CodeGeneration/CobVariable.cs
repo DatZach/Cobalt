@@ -29,7 +29,7 @@
 
         public override string ToString()
         {
-            return $"{Name,-20}{Type} = {Data}";
+            return $"{Name,-25}{Type} = {Data}";
         }
     }
 

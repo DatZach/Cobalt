@@ -176,8 +176,10 @@ namespace Compiler.CodeGeneration.Platform
                 }
             }
 
+            // HACK TODO Reimplement as true .rdata
             // Readonly Data
-            buffer.EmitLine("section '.rdata' data readable");
+            //buffer.EmitLine("section '.rdata' data readable");
+            buffer.EmitLine("section '.data' data readable writeable");
             for (var i = 0; i < compiler.Globals.Count; i++)
             {
                 var global = compiler.Globals[i];
@@ -332,7 +334,8 @@ namespace Compiler.CodeGeneration.Platform
                     {
                         if (inst.C != null)
                         {
-                            for (int j = 0; j < inst.C.Count; ++j)
+                            //for (int j = 0; j < inst.C.Count; ++j)
+                            for (int j = inst.C.Count - 1; j >= 0; --j)
                             {
                                 var operand = inst.C[j];
                                 EmitMove(
@@ -543,9 +546,9 @@ namespace Compiler.CodeGeneration.Platform
             var bSize = b.Size == -1 ? BusWidth : b.Size;
 
             var aIsMemory = (a.Type is OperandType.Local or OperandType.Global or OperandType.ImmediateFloat)
-                         || (a.Type == OperandType.Argument && a.Value > parameterRegisters.Length);
+                         || (a.Type == OperandType.Argument && a.Value >= parameterRegisters.Length);
             var bIsMemory = (b.Type is OperandType.Local or OperandType.Global or OperandType.ImmediateFloat)
-                         || (b.Type == OperandType.Argument && b.Value > parameterRegisters.Length)
+                         || (b.Type == OperandType.Argument && b.Value >= parameterRegisters.Length)
                          || (b.Type is OperandType.ImmediateSigned or OperandType.ImmediateUnsigned && b.Value > uint.MaxValue);
             
             var aOperandString = GetOperandString(a);
@@ -821,7 +824,7 @@ namespace Compiler.CodeGeneration.Platform
                             return GetIntegerRegisterName(parameterRegisters[(int)operand.Value], operand.Size);
                     }
 
-                    return $"{GetWidthName(operand.Size)} [rsp + {stackSpace + operand.Value * 8 + 8}]";
+                    return $"{GetWidthName(operand.Size)} [rsp + {stackSpace + operand.Value * 8}]"; // + 8 ?
                 }
                 case OperandType.Local:
                     return $"{GetWidthName(operand.Size)} [rsp + {callReserve + operand.Value * 8}]";
@@ -834,8 +837,9 @@ namespace Compiler.CodeGeneration.Platform
                             return "[" + global.Type.Function.Name + "]";
                         return global.Type.Function.FullyQualifiedName;
                     }
-
-                    return $"rdata_{operand.Value} + 8"; // TODO HACK SHould not + 8 this
+                    if (global.Type == eCobType.Array)
+                        return $"rdata_{operand.Value} + 8"; // TODO HACK SHould not + 8 this
+                    return $"[rdata_{operand.Value}]";
                 }
                 case OperandType.Label:
                 {

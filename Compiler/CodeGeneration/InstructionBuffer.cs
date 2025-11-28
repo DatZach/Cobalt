@@ -87,7 +87,7 @@ namespace Compiler.CodeGeneration
     {
         public int Index { get; } // TODO Better names
 
-        public int Location { get; private set; }
+        public int Location { get; /* private */ set; } // HACK TODO Need to be private
 
         private readonly InstructionBuffer buffer;
 

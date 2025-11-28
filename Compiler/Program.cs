@@ -98,8 +98,12 @@ namespace Compiler
             Console.WriteLine();
 
             Console.WriteLine("Globals");
-            foreach (var global in compiler.Globals)
-                Console.WriteLine($"\t{global}");
+            for (var i = 0; i < compiler.Globals.Count; i++)
+            {
+                var global = compiler.Globals[i];
+                Console.WriteLine($"\t{i}\t{global}");
+            }
+
             Console.WriteLine();
 
             Console.WriteLine("Modules");
@@ -109,17 +113,25 @@ namespace Compiler
                 Console.WriteLine("\tFunctions");
                 foreach (var function in module.Functions)
                 {
-                    Console.WriteLine($"\t\t{function.Name} -> {function.ReturnType}");
-                    Console.WriteLine($"\t\t\t.locals = {function.Locals.Count}");
-                    Console.WriteLine($"\t\t\t.cconv = {function.CallingConvention}");
+                    Console.WriteLine($"\t\t{function.Name} -> {function.ReturnType}; .locals = {function.Locals.Count}; .cconv = {function.CallingConvention}");
+                    //Console.WriteLine($"\t\t\t");
+                    //Console.WriteLine($"\t\t\t.cconv = {function.CallingConvention}");
                     if (function.Body == null)
                     {
                         Console.WriteLine("\t\tBodyless");
                         continue;
                     }
 
-                    foreach (var inst in function.Body.Instructions)
-                        Console.WriteLine($"\t\t{inst}");
+                    for (var i = 0; i < function.Body.Instructions.Count; ++i)
+                    {
+                        var inst = function.Body.Instructions[i];
+                        // TODO Optimize to Dictionary before?
+                        var label = function.Body.Labels.FirstOrDefault(x => x.Location == i);
+                        if (label != null)
+                            Console.WriteLine($"\t\t.{function.FullyQualifiedName}_{label.Index}:");
+
+                        Console.WriteLine($"\t\t\t{inst}");
+                    }
                 }
             }
 
