@@ -1,1 +1,5 @@
-import msvcrt printf fn (format: string, ...args: trait) s32 ccall;
+module System;
+
+func Add(a: int, b: int) int => a + b;
+
+func GetString() string => "From System!";

@@ -12,6 +12,8 @@ namespace Compiler.Interpreter
         private Function currentFunction => functionStack.Peek(); // TODO Optimize
         private IReadOnlyList<CobVariable>? currentParameters => parameterStack.Peek(); // TODO Optimize
 
+        private bool cmpResult;
+
         private readonly Stack<Function> functionStack;
         private readonly Stack<IReadOnlyList<CobVariable>?> parameterStack;
         private readonly Stack<long> localStack;
@@ -175,6 +177,24 @@ namespace Compiler.Interpreter
                         var a = ReadOperand(inst.A!);
                         a %= ReadOperand(inst.B!);
                         WriteOperand(inst.A!, a);
+                        break;
+                    }
+                    case Opcode.Compare:
+                    {
+                        var a = ReadOperand(inst.A!);
+                        var b = ReadOperand(inst.B!);
+                        cmpResult = a == b;
+                        break;
+                    }
+                    case Opcode.JumpIfFalse:
+                    {
+                        if (!cmpResult)
+                            i = currentFunction.Body.Labels[(int)inst.A!.Value].Location - 1;
+                        break;
+                    }
+                    case Opcode.Jump:
+                    {
+                        i = currentFunction.Body.Labels[(int)inst.A!.Value].Location - 1;
                         break;
                     }
                     default:

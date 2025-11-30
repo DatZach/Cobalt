@@ -14,7 +14,7 @@ namespace Compiler.CodeGeneration
             var asm = typeof(ArtifactFactory).Assembly;
 
             var types = asm.GetTypes().Where(myType =>
-                myType.IsClass && !myType.IsAbstract && myType.IsSubclassOf(typeof(ArtifactAssembler)));
+               myType.IsClass && !myType.IsAbstract && myType.IsSubclassOf(typeof(ArtifactAssembler)));
             foreach (var type in types)
             {
                 var assembler = (ArtifactAssembler)Activator.CreateInstance(type);
@@ -33,14 +33,9 @@ namespace Compiler.CodeGeneration
                     if (!platforms.TryGetValue(artifact.Platform, out var platform))
                         throw new Exception($"Unsupported artifact platform '{artifact.Platform}'");
 
-                    string outputFilename;
-                    if (artifact.Filename != null)
-                    {
-                        var sourceRoot = Path.GetDirectoryName(Program.Config.EntrySourceFile);
-                        outputFilename = Path.Combine(sourceRoot, artifact.Filename);
-                    }
-                    else
-                        outputFilename = Path.ChangeExtension(Program.Config.EntrySourceFile, platform.DefaultExtension);
+                    var outputFilename = artifact.Filename != null
+                                       ? Path.Combine(Program.SourceDirectory, artifact.Filename)
+                                       : Path.ChangeExtension(Program.Config.EntrySourceFilePath, platform.DefaultExtension);
 
                     platform.Assemble(compiler, artifact, outputFilename);
                 }

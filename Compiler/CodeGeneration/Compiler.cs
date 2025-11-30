@@ -203,11 +203,11 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(ImportExpression expression)
         {
-            //   import *
+            // X import *
             // X import CobaltSourceFile
-            //   import Directory.CobaltSourceFile
-            //   import Directory.*
-            //   import StandardLibraryCobaltFile
+            // X import Directory.CobaltSourceFile
+            // X import Directory.*
+            // X import StandardLibraryCobaltFile
             
             //   import CobaltAssembly *
             //   import CobaltAssembly SpecificIdentifier
@@ -219,14 +219,38 @@ namespace Compiler.CodeGeneration
             var isNativeImport = expression.SymbolName != null && expression.SymbolTypeSignature != null;
             if (!isNativeImport)
             {
-                // TODO Library import
-                var sourceRoot = Path.GetDirectoryName(Program.Config.EntrySourceFile);
-                var sourceFile = expression.SourceFile.Replace('.', '\\');
-                sourceFile = Path.Combine(sourceRoot, sourceFile + ".cob");
-                var source = FileSystem.ReadAllText(sourceFile);
-                var tokens = Tokenizer.Tokenize(source, sourceFile, messages);
-                var ast = Parser.Parse(tokens, messages);
-                ast.Accept(this);
+                var paths = new List<string>(4);
+
+                var srcDirectory = Path.GetDirectoryName(expression.Token.Filename);
+                var libDirectory = Program.LibraryDirectory;
+
+                var sourcePatternName = expression.SourceFile.Replace('.', Path.DirectorySeparatorChar);
+                
+                var srcSourcePath = Path.Combine(srcDirectory, sourcePatternName + ".cob");
+                if (FileSystem.FileExists(srcSourcePath)) paths.Add(srcSourcePath); 
+                
+                var libSourcePath = Path.Combine(libDirectory, sourcePatternName + ".cob");
+                if (FileSystem.FileExists(libSourcePath)) paths.Add(libSourcePath);
+
+                if (sourcePatternName.Contains('*'))
+                {
+                    var sourceDirectory = Path.GetDirectoryName(srcSourcePath);
+                    paths.AddRange(Directory.EnumerateFiles(sourceDirectory, "*.cob", SearchOption.AllDirectories));
+                }
+
+                if (paths.Count == 0)
+                    messages.Add(Message.CannotFindImport, expression, expression.SourceFile);
+                else foreach (var path in paths)
+                {
+                    // HACK Caching the FileSystem level does not mean the compiler has already seen this file per se
+                    if (FileSystem.IsCached(path))
+                        continue;
+
+                    var source = FileSystem.ReadAllText(path);
+                    var tokens = Tokenizer.Tokenize(source, path, messages);
+                    var ast = Parser.Parse(tokens, messages);
+                    ast.Accept(this);
+                }
             }
             else
             {

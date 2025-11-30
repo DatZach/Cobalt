@@ -253,6 +253,8 @@ namespace Compiler.Ast
 
         public static Def MalformedVarDeclaration { get; } = new(MessageType.Error, "Variable declarations must specify a type, or an inline assignment, or both");
 
+        public static Def CannotFindImport { get; } = new(MessageType.Error, "Unable to find any module which matches '{0}'");
+
         public sealed record Def(
             MessageType Type,
             string Content,

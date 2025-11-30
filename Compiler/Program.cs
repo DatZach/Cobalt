@@ -10,6 +10,12 @@ namespace Compiler
     {
         internal static RuntimeConfig Config { get; private set; }
 
+        internal static string SourceDirectory { get; private set; }
+
+        internal static string LibraryDirectory { get; private set; }
+
+        internal static string PreambleSource { get; private set; }
+
         private static Stopwatch stopwatch;
 
         public static void Main(string[] args)
@@ -21,11 +27,13 @@ namespace Compiler
                 return;
             }
 
+            EstablishEnvironment();
+
             stopwatch = Stopwatch.StartNew();
 
             var messages = new MessageCollection();
-            var source = FileSystem.ReadAllText(Config.EntrySourceFile);
-            var tokens = Tokenizer.Tokenize(source, Config.EntrySourceFile, messages);
+            var source = PreambleSource + FileSystem.ReadAllText(Config.EntrySourceFilePath);
+            var tokens = Tokenizer.Tokenize(source, Config.EntrySourceFilePath, messages);
             var ast = Parser.Parse(tokens, messages);
             var compiler = CodeGeneration.Compiler.Compile(ast, messages);
 
@@ -55,6 +63,15 @@ namespace Compiler
 
                 vm.ExecuteFunction(compiler.EntryFunction);
             }
+        }
+
+        private static void EstablishEnvironment()
+        {
+            var asm = typeof(Program).Assembly;
+            SourceDirectory = Path.GetDirectoryName(Config.EntrySourceFilePath);
+            LibraryDirectory = Config.LibraryDirectory ?? Path.Combine(Path.GetDirectoryName(asm.Location), "Library");
+
+            PreambleSource = $"import Library;{Environment.NewLine}{Environment.NewLine}";
         }
 
         private static void PrintCompilerState(CodeGeneration.Compiler compiler)
@@ -139,7 +156,9 @@ namespace Compiler
 
     internal sealed class RuntimeConfig
     {
-        public string EntrySourceFile { get; init; }
+        public string EntrySourceFilePath { get; init; }
+
+        public string? LibraryDirectory { get; init; }
 
         public string? FasmPath { get; init; }
 
@@ -163,7 +182,8 @@ namespace Compiler
 
             return new RuntimeConfig
             {
-                EntrySourceFile = args[0],
+                EntrySourceFilePath = args[0],
+                LibraryDirectory = OptionalArgument<string>("--library-directory"),
                 FasmPath = OptionalArgument<string>("--fasm"),
                 FasmVerboseOutput = OptionalArgument("--fasm-verbose", false),
                 AstVerboseOutput = OptionalArgument("--ast-verbose", false),

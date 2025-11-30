@@ -87,6 +87,27 @@ namespace Compiler
             }
         }
 
+        public static bool FileExists(string path)
+        {
+            if (Cache.TryGetValue(path, out _))
+                return true;
+
+            try
+            {
+                stopwatch.Start();
+                return File.Exists(path);
+            }
+            finally
+            {
+                stopwatch.Stop();
+            }
+        }
+
+        public static bool IsCached(string path)
+        {
+            return Cache.ContainsKey(path);
+        }
+
         public static long TotalMilliseconds => stopwatch.ElapsedMilliseconds;
         private static readonly Stopwatch stopwatch = new ();
     }
