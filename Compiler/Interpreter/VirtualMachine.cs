@@ -1,51 +1,38 @@
-﻿using System;
+﻿using Compiler.CodeGeneration;
+using System.Reflection;
+using System.Reflection.Emit;
 using System.Runtime.InteropServices;
 using System.Text;
-using Compiler.CodeGeneration;
+using OperandType = Compiler.CodeGeneration.OperandType;
 
 namespace Compiler.Interpreter
 {
     internal sealed class VirtualMachine : IDisposable
     {
+        // TODO Remove function and parameter stacks, poor engineering
         private Function currentFunction => functionStack.Peek(); // TODO Optimize
-        private IReadOnlyList<long>? currentParameters => parameterStack.Peek(); // TODO Optimize
+        private IReadOnlyList<CobVariable>? currentParameters => parameterStack.Peek(); // TODO Optimize
 
-        private readonly Dictionary<string, LoadedNativeLibrary> nativeLibraries;
         private readonly Stack<Function> functionStack;
-        private readonly Stack<IReadOnlyList<long>?> parameterStack;
+        private readonly Stack<IReadOnlyList<CobVariable>?> parameterStack;
         private readonly Stack<long> localStack;
         private readonly long[] registers;
 
+        private readonly NativeLibrariesProxy nativeLibrariesProxy;
         private readonly CodeGeneration.Compiler compiler;
-
-        private delegate int PrintfDelegate(string format, int a);
 
         public VirtualMachine(CodeGeneration.Compiler compiler)
         {
             this.compiler = compiler ?? throw new ArgumentNullException(nameof(compiler));
             functionStack = new Stack<Function>(4);
-            parameterStack = new Stack<IReadOnlyList<long>>(4);
+            parameterStack = new Stack<IReadOnlyList<CobVariable>>(4);
             localStack = new Stack<long>(4);
             registers = new long[64];
             
-            nativeLibraries = new Dictionary<string, LoadedNativeLibrary>();
-
-            // TODO Doing too much in the ctor
-            var libraries = compiler.Imports.Where(x => x.SymbolName != null)
-                .Select(x => x.Library)
-                .Distinct()
-                .ToList();
-            foreach (var library in libraries)
-            {
-                var functionNames = compiler.Imports.Where(x => x.Library == library)
-                                                    .Select(x => x.SymbolName)
-                                                    .ToList();
-                var nativeLibrary = new LoadedNativeLibrary(library, functionNames);
-                nativeLibraries.Add(library, nativeLibrary);
-            }
+            nativeLibrariesProxy = NativeLibrariesProxy.FromCompiler(compiler);
         }
         
-        public long ExecuteFunction(Function function, IReadOnlyList<long>? parameters = null)
+        public CobVariable? ExecuteFunction(Function function, IReadOnlyList<CobVariable>? parameters = null)
         {
             functionStack.Push(function);
             parameterStack.Push(parameters);
@@ -60,49 +47,33 @@ namespace Compiler.Interpreter
                         break;
                     case Opcode.Call:
                     {
-                        var callee = ReadFunctionOperand(inst.A!);
+                        var callee = ReadOperandAsFunction(inst.A!);
+                        IReadOnlyList<CobVariable>? calleeParameters;
+                        if (callee.Parameters.Count > 0)
+                        {
+                            var aCalleeParameters = new CobVariable[callee.Parameters.Count];
+                            for (int j = 0; j < aCalleeParameters.Length; ++j)
+                                aCalleeParameters[j] = ReadOperandAsVariable(inst.C[j]);
+
+                            calleeParameters = aCalleeParameters;
+                        }
+                        else
+                            calleeParameters = null;
+
                         var native = callee.NativeImport;
                         if (native != null)
                         {
-                            // TODO Get rid of the prototype hardcoded hacks
-                            var format = localStack.Pop();
-                            var formatVar = compiler.Globals[(int)format].Data;
-                            var formatString = Encoding.UTF8.GetString(formatVar);
-                            var a = localStack.Pop();
-                            
-                            var sub = nativeLibraries[native.Library].Functions[native.SymbolName!];
-                            sub(formatString, (int)a);
+                            var result =  nativeLibrariesProxy.Invoke(native, calleeParameters);
+                            WriteOperand(Operand.R0, result);
                         }
                         else
-                        {
-                            IReadOnlyList<long>? calleeParameters;
-                            if (callee.Parameters.Count > 0)
-                            {
-                                var aCalleeParameters = new long[callee.Parameters.Count];
-                                for (int j = 0; j < aCalleeParameters.Length; ++j)
-                                    aCalleeParameters[j] = localStack.Pop();
-
-                                calleeParameters = aCalleeParameters;
-                            }
-                            else
-                                calleeParameters = null;
-
                             ExecuteFunction(callee, calleeParameters);
-
-                            // HACK UnrestoreStack
-                            for (int j = 0; j < callee.Parameters.Count; ++j)
-                                localStack.Push(0);
-                        }
                         break;
                     }
                     case Opcode.Return:
                     {
-                        long value;
-                        if (inst.A != null)
-                            value = ReadOperand(inst.A);
-                        else
-                            value = -1;
-
+                        var value = inst.A != null ? ReadOperandAsVariable(inst.A) : null;
+                        parameterStack.Pop();
                         functionStack.Pop();
                         return value;
                     }
@@ -214,7 +185,8 @@ namespace Compiler.Interpreter
                     currentFunction.Locals[(int)operand.Value].Value = value;
                     break;
                 case OperandType.Global:
-                    throw new InvalidOperationException();
+                    compiler.Globals[(int)operand.Value].Value = value;
+                    break;
                 default:
                     throw new ArgumentOutOfRangeException();
             }
@@ -231,20 +203,18 @@ namespace Compiler.Interpreter
                 case OperandType.Register:
                     return registers[operand.Value];
                 case OperandType.Argument:
-                    return currentParameters[(int)operand.Value];
+                    return currentParameters[(int)operand.Value].Value; // ??? Not always right
                 case OperandType.Local:
                     return currentFunction.Locals[(int)operand.Value].Value;
                 case OperandType.Global:
-                    // TODO Probably a garbage implementation
-                    return operand.Value;
-                    //throw new NotImplementedException();
+                    return compiler.Globals[(int)operand.Value].Value;
                 default:
                     throw new ArgumentOutOfRangeException();
             }
         }
 
         // TODO This really should be unified somehow, but this is the fastest approach rn
-        private Function ReadFunctionOperand(Operand operand)
+        private Function ReadOperandAsFunction(Operand operand)
         {
             switch (operand.Type)
             {
@@ -271,38 +241,135 @@ namespace Compiler.Interpreter
                     throw new InvalidOperationException($"VM Expected function operand but received {operand.Type} instead");
             }
         }
+
+        // TODO This really should be unified somehow, but this is the fastest approach rn
+        private CobVariable ReadOperandAsVariable(Operand operand)
+        {
+            switch (operand.Type)
+            {
+                case OperandType.ImmediateSigned:
+                    return new CobVariable("$imm", CobType.Int, false, operand.Value);
+                case OperandType.ImmediateUnsigned:
+                    return new CobVariable("$imm", CobType.UInt, false, operand.Value);
+                case OperandType.ImmediateFloat:
+                    return new CobVariable("$imm", CobType.Float, false, operand.Value);
+                case OperandType.Register:
+                    return new CobVariable("$reg", CobType.Int, false, registers[operand.Value]); // ??? Maybe?
+                case OperandType.Argument:
+                    return currentParameters[(int)operand.Value];
+                case OperandType.Local:
+                    return currentFunction.Locals[(int)operand.Value];
+                case OperandType.Global:
+                    return compiler.Globals[(int)operand.Value];
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+        }
         
         public void Dispose()
         {
-            foreach (var library in nativeLibraries.Values)
-                library.Dispose();
-            nativeLibraries.Clear();
+            nativeLibrariesProxy.Dispose();
         }
 
-        private sealed record LoadedNativeLibrary : IDisposable
+        public sealed class NativeLibrariesProxy : IDisposable
         {
-            public IntPtr Library { get; }
+            public delegate int NativeWrapperDelegate(CobVariable[]? variables);
 
-            public Dictionary<string, PrintfDelegate> Functions { get; }
+            private readonly Dictionary<string, NativeLibraryProxy> proxies;
 
-            public LoadedNativeLibrary(string path, IReadOnlyList<string> functionNames)
+            private NativeLibrariesProxy(Dictionary<string, NativeLibraryProxy> proxies)
             {
-                Library = NativeLibrary.Load(path);
-                Functions = new Dictionary<string, PrintfDelegate>();
-                foreach (var functionName in functionNames)
+                this.proxies = proxies;
+            }
+
+            public long Invoke(Import native, IReadOnlyList<CobVariable>? parameters)
+            {
+                if (native.Function == null)
+                    return 0;
+
+                var proxy = proxies[native.Library];
+                var methodDelegate = proxy.Functions[native.SymbolName!];
+                var result = methodDelegate(parameters?.ToArray());
+                return result;
+            }
+
+            public static NativeLibrariesProxy FromCompiler(CodeGeneration.Compiler compiler)
+            {
+                var proxies = new Dictionary<string, NativeLibraryProxy>();
+
+                foreach (var import in compiler.Imports)
                 {
-                    // TODO Generic delegates
-                    var address = NativeLibrary.GetExport(Library, functionName);
-                    var function = Marshal.GetDelegateForFunctionPointer<PrintfDelegate>(address);
-                    Functions.Add(functionName, function);
+                    if (!proxies.TryGetValue(import.Library, out var proxy))
+                    {
+                        var nativeLibrary = NativeLibrary.Load(import.Library);
+                        proxy = new NativeLibraryProxy(nativeLibrary);
+                        proxies.Add(import.Library, proxy);
+                    }
+
+                    var address = NativeLibrary.GetExport(proxy.Library, import.SymbolName!);
+
+                    var method = new DynamicMethod(
+                        $"dynm_{import.SymbolName}",
+                        typeof(int),
+                        new [] { typeof(CobVariable[]) },
+                        typeof(NativeLibrariesProxy).Module
+                    );
+
+                    method.DefineParameter(0, ParameterAttributes.In, "variables");
+
+                    var il = method.GetILGenerator();
+                    for (int i = 0; i < import.Function!.Parameters.Count; ++i)
+                    {
+                        il.Emit(OpCodes.Ldarg_0);
+                        il.Emit(OpCodes.Ldc_I4, i);
+                        il.Emit(OpCodes.Ldelem_Ref);
+                        if (import.Function.Parameters[i].Type == CobType.String)
+                        {
+                            il.Emit(OpCodes.Callvirt, typeof(CobVariable).GetProperty("Data")!.GetGetMethod()!);
+                            il.Emit(OpCodes.Call, typeof(NativeLibrariesProxy).GetMethod("GetString")!);
+                        }
+                        else
+                            il.Emit(OpCodes.Callvirt, typeof(CobVariable).GetProperty("Value")!.GetGetMethod()!);
+                    }
+
+                    il.Emit(OpCodes.Ldc_I8, address.ToInt64());
+                    il.EmitCalli(
+                        OpCodes.Calli, System.Runtime.InteropServices.CallingConvention.Cdecl,
+                        import.Function.ReturnType.ToManagedType(),
+                        import.Function.Parameters.Select(x => x.Type.ToManagedType()).ToArray()
+                    );
+
+                    il.Emit(OpCodes.Ret);
+
+                    var methodDelegate = method.CreateDelegate<NativeWrapperDelegate>();
+                    proxy.Functions.Add(import.SymbolName!, methodDelegate);
                 }
+
+                return new NativeLibrariesProxy(proxies);
             }
 
             public void Dispose()
             {
-                Functions.Clear();
-                NativeLibrary.Free(Library);
+                foreach (var proxy in proxies.Values)
+                    NativeLibrary.Free(proxy.Library);
+
+                proxies.Clear();
             }
+
+            private sealed class NativeLibraryProxy
+            {
+                public IntPtr Library { get; }
+
+                public Dictionary<string, NativeWrapperDelegate> Functions { get; }
+
+                public NativeLibraryProxy(IntPtr library)
+                {
+                    Library = library;
+                    Functions = new Dictionary<string, NativeWrapperDelegate>();
+                }
+            }
+
+            public static string GetString(byte[] data) => Encoding.UTF8.GetString(data);
         }
     }
 }

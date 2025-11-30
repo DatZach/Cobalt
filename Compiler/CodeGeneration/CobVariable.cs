@@ -39,7 +39,10 @@
         public readonly static CobType Any = eCobType.Any;
         public readonly static CobType Int = new (eCobType.Signed, -1);
         public readonly static CobType UInt = new (eCobType.Unsigned, -1);
+        public readonly static CobType Float = new (eCobType.Float, -1);
         public readonly static CobType U8 = new (eCobType.Unsigned, 8);
+        public readonly static CobType U32 = new(eCobType.Unsigned, 32);
+        public readonly static CobType U64 = new(eCobType.Unsigned, 64);
         public readonly static CobType Char = new (eCobType.Unsigned, 8) { AliasName = "char" };
         public readonly static CobType String = new (eCobType.Array, Char) { AliasName = "string" };
 
@@ -151,6 +154,40 @@
                 result = null!;
                 return false;
             }
+        }
+
+        public Type ToManagedType()
+        {
+            return Type switch
+            {
+                eCobType.Any => typeof(object),
+                eCobType.Signed => Size switch
+                {
+                    8 => typeof(sbyte),
+                    16 => typeof(short),
+                    32 => typeof(int),
+                    64 => typeof(long)
+                },
+                eCobType.Unsigned => Size switch
+                {
+                    8 => typeof(byte),
+                    16 => typeof(ushort),
+                    32 => typeof(uint),
+                    64 => typeof(ulong)
+                },
+                eCobType.Float => Size switch
+                {
+                    32 => typeof(float),
+                    64 => typeof(double),
+                    128 => typeof(decimal)
+                },
+                eCobType.Array => this == String ? typeof(string) : ElementType.ToManagedType().MakeArrayType(),
+                eCobType.Struct => throw new NotImplementedException(), // ???
+                eCobType.Tuple => throw new NotImplementedException(), // ???
+                eCobType.Lens => throw new NotImplementedException(), // ???
+                eCobType.Function => throw new NotImplementedException(), // ???
+                _ => throw new ArgumentOutOfRangeException()
+            };
         }
 
         public override string ToString()

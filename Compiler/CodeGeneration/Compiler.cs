@@ -321,7 +321,7 @@ namespace Compiler.CodeGeneration
             CurrentFunction.Body.EmitOO(
                 Opcode.Move,
                 reg.Operand,
-                new Operand { Type = OperandType.ImmediateUnsigned, Size = -1, Value = result } // TODO Not right
+                new Operand { Type = OperandType.ImmediateUnsigned, Size = -1, Value = result.Value } // TODO Not right
             );
             
             return evalStorage;

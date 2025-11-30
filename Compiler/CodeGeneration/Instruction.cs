@@ -23,6 +23,8 @@ namespace Compiler.CodeGeneration
     {
         public static readonly Operand None = new() { Type = OperandType.None, Size = 0, Value = 0 };
 
+        public static readonly Operand R0 = new() { Type = OperandType.Register, Size = 64, Value = 0 };
+
         public OperandType Type { get; init; }
 
         public int Size { get; init; }
