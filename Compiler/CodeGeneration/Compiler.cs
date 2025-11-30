@@ -1,10 +1,11 @@
-﻿using System.Text;
-using Compiler.Ast;
+﻿using Compiler.Ast;
 using Compiler.Ast.Expressions;
 using Compiler.Ast.Expressions.Statements;
 using Compiler.Ast.Visitors;
 using Compiler.Interpreter;
 using Compiler.Lexer;
+using System.Diagnostics;
+using System.Text;
 
 namespace Compiler.CodeGeneration
 {
@@ -35,7 +36,7 @@ namespace Compiler.CodeGeneration
         private readonly Stack<Module> contextStack; // TODO IScopedContext or something (Struct, Module, Tuple, etc.)
         private readonly MessageCollection messages;
         
-        public Compiler(MessageCollection messages)
+        private Compiler(MessageCollection messages)
         {
             Artifacts = new List<ArtifactExpression>();
             Imports = new List<Import>();
@@ -48,20 +49,26 @@ namespace Compiler.CodeGeneration
             CurrentModule = rootModule = new Module();
             AllocateGlobal(new CobVariable(CurrentModule.InitializerFunction.FullyQualifiedName, new CobType(eCobType.Function, 0, function: CurrentModule.InitializerFunction), false)); // HACK Awful. Global should be scoped to a Module
             Modules.Add(rootModule);
-            contextStack.Push(rootModule);
-            functionStack.Push(CurrentModule.InitializerFunction);
 
             this.messages = messages ?? throw new ArgumentNullException(nameof(messages));
         }
 
         public Storage? Visit(ScriptExpression expression)
         {
+            contextStack.Push(rootModule);
+            functionStack.Push(CurrentModule.InitializerFunction);
+
             var expressions = expression.Expressions;
             for (int i = 0; i < expressions.Count; ++i)
                 expressions[i].Accept(this);
 
-            // HACK? Not sure this is the best place to put this
-            rootModule.InitializerFunction.Body.Emit(Opcode.Return);
+            CurrentModule.InitializerFunction.Body.Emit(Opcode.Return);
+
+            // TODO Needs to be unified with the copy-pasted code in ModuleExpression
+            contextStack.Pop();
+            CurrentModule = contextStack.Count == 0 ? rootModule : contextStack.Peek();
+
+            functionStack.Pop();
 
             return null;
         }
@@ -90,13 +97,14 @@ namespace Compiler.CodeGeneration
             CurrentModule = module;
             contextStack.Push(module);
 
+            functionStack.Push(module.InitializerFunction);
+
             if (expression.Block != null)
             {
-                functionStack.Push(module.InitializerFunction);
-
                 var storage = expression.Block.Accept(this);
                 storage?.Free();
 
+                // TODO Needs to be unified with the copy-pasted code in ScriptExpression
                 contextStack.Pop();
                 CurrentModule = prevModule;
 
@@ -195,22 +203,43 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(ImportExpression expression)
         {
-            if (expression.SymbolName == null)
+            //   import *
+            // X import CobaltSourceFile
+            //   import Directory.CobaltSourceFile
+            //   import Directory.*
+            //   import StandardLibraryCobaltFile
+            
+            //   import CobaltAssembly *
+            //   import CobaltAssembly SpecificIdentifier
+
+            // X import NativeLibrary SpecificIdentifier Type
+
+            // TODO Invoke initializer
+
+            var isNativeImport = expression.SymbolName != null && expression.SymbolTypeSignature != null;
+            if (!isNativeImport)
             {
                 // TODO Library import
+                var sourceRoot = Path.GetDirectoryName(Program.Config.EntrySourceFile);
+                var sourceFile = expression.SourceFile.Replace('.', '\\');
+                sourceFile = Path.Combine(sourceRoot, sourceFile + ".cob");
+                var source = FileSystem.ReadAllText(sourceFile);
+                var tokens = Tokenizer.Tokenize(source, sourceFile, messages);
+                var ast = Parser.Parse(tokens, messages);
+                ast.Accept(this);
             }
             else
             {
                 // Symbol import
                 Function? function;
-                if (expression.FunctionSignture != null)
+                if (expression.SymbolTypeSignature != null)
                 {
                     function = new Function(
                         expression.SymbolName,
                         CurrentModule,
-                        expression.FunctionSignture.CallingConvention,
-                        expression.FunctionSignture.Parameters,
-                        expression.FunctionSignture.ReturnType
+                        expression.SymbolTypeSignature.CallingConvention,
+                        expression.SymbolTypeSignature.Parameters,
+                        expression.SymbolTypeSignature.ReturnType
                     );
                 }
                 else
@@ -218,7 +247,7 @@ namespace Compiler.CodeGeneration
 
                 var import = new Import
                 {
-                    Library = expression.Library,
+                    Library = expression.SourceFile,
                     SymbolName = expression.SymbolName,
                     Function = function
                 };
@@ -884,6 +913,24 @@ namespace Compiler.CodeGeneration
 
             return variable.Name.Length > 0 && char.IsUpper(variable.Name[0]);
         }
+
+        public static Compiler Compile(ScriptExpression ast, MessageCollection messages)
+        {
+            try
+            {
+                stopwatch.Start();
+                var compiler = new Compiler(messages);
+                ast.Accept(compiler);
+                return compiler;
+            }
+            finally
+            {
+                stopwatch.Stop();
+            }
+        }
+
+        public static long TotalMilliseconds => stopwatch.ElapsedMilliseconds;
+        private static readonly Stopwatch stopwatch = new ();
     }
 
     internal sealed record Import

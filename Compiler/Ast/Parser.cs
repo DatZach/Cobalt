@@ -1,7 +1,8 @@
-﻿using System.Runtime.CompilerServices;
-using Compiler.Lexer;
-using Compiler.Ast.Expressions;
+﻿using Compiler.Ast.Expressions;
 using Compiler.CodeGeneration;
+using Compiler.Lexer;
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
 
 namespace Compiler.Ast
 {
@@ -158,8 +159,19 @@ namespace Compiler.Ast
 
         public static ScriptExpression Parse(IReadOnlyList<Token> tokens, MessageCollection messages)
         {
-            var parser = new Parser(tokens, messages);
-            return parser.ParseScript();
+            try
+            {
+                stopwatch.Start();
+                var parser = new Parser(tokens, messages);
+                return parser.ParseScript();
+            }
+            finally
+            {
+                stopwatch.Stop();
+            }
         }
+
+        public static long TotalMilliseconds => stopwatch.ElapsedMilliseconds;
+        private static readonly Stopwatch stopwatch = new ();
     }
 }

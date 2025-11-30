@@ -1,24 +1,33 @@
 ﻿using Compiler.Lexer;
 using Compiler.Ast.Visitors;
 using System.Diagnostics;
+using Compiler.CodeGeneration;
 
 namespace Compiler.Ast.Expressions.Statements
 {
     internal sealed class ImportExpression : Expression
     {
-        public string Library { get; }
+        public string SourceFile { get; }
 
         public string? SymbolName { get; }
 
-        public FunctionExpression? FunctionSignture { get; }
+        public CobType? SymbolType { get; }
 
+        public FunctionExpression? SymbolTypeSignature { get; }
 
-        public ImportExpression(Token token, string library, string? symbolName, FunctionExpression? functionSignature)
+        public ImportExpression(
+            Token token,
+            string sourceFile,
+            string? symbolName,
+            CobType? symbolType,
+            FunctionExpression? functionSignature
+        )
             : base(token)
         {
-            Library = library;
+            SourceFile = sourceFile;
             SymbolName = symbolName;
-            FunctionSignture = functionSignature;
+            SymbolType = symbolType;
+            SymbolTypeSignature = functionSignature;
         }
 
         [DebuggerStepThrough]

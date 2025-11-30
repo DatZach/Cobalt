@@ -4,10 +4,7 @@ namespace Compiler
 {
     internal static class FileSystem
     {
-        private readonly static Dictionary<string, string> Cache = new (StringComparer.OrdinalIgnoreCase);
-        private readonly static Stopwatch Stopwatch = new ();
-
-        public static long TotalIOMilliseconds => Stopwatch.ElapsedMilliseconds;
+        private static readonly Dictionary<string, string> Cache = new (StringComparer.OrdinalIgnoreCase);
 
         public static void WriteAllText(string path, string contents)
         {
@@ -16,12 +13,12 @@ namespace Compiler
 
             try
             {
-                Stopwatch.Start();
+                stopwatch.Start();
                 File.WriteAllText(path, contents);
             }
             finally
             {
-                Stopwatch.Stop();
+                stopwatch.Stop();
             }
         }
 
@@ -32,7 +29,7 @@ namespace Compiler
 
             try
             {
-                Stopwatch.Start();
+                stopwatch.Start();
                 contents = File.ReadAllText(path);
                 Cache.Add(path, contents);
 
@@ -40,7 +37,7 @@ namespace Compiler
             }
             finally
             {
-                Stopwatch.Stop();
+                stopwatch.Stop();
             }
         }
 
@@ -68,12 +65,12 @@ namespace Compiler
         {
             try
             {
-                Stopwatch.Start();
+                stopwatch.Start();
                 File.Copy(source, destination, overwrite);
             }
             finally
             {
-                Stopwatch.Stop();
+                stopwatch.Stop();
             }
         }
 
@@ -81,13 +78,16 @@ namespace Compiler
         {
             try
             {
-                Stopwatch.Start();
+                stopwatch.Start();
                 File.Delete(path);
             }
             finally
             {
-                Stopwatch.Stop();
+                stopwatch.Stop();
             }
         }
+
+        public static long TotalMilliseconds => stopwatch.ElapsedMilliseconds;
+        private static readonly Stopwatch stopwatch = new ();
     }
 }

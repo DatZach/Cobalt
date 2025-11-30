@@ -1,6 +1,8 @@
-﻿using Compiler.Lexer;
+﻿using System.Text;
+using Compiler.Lexer;
 using Compiler.Ast.Expressions;
 using Compiler.Ast.Expressions.Statements;
+using Compiler.CodeGeneration;
 
 namespace Compiler.Ast.Parselets.Statements
 {
@@ -8,15 +10,52 @@ namespace Compiler.Ast.Parselets.Statements
     {
         public Expression Parse(Parser parser, Token token)
         {
-            var libraryExpr = parser.Take(TokenType.Identifier);
+            var sourceFile = new StringBuilder(128);
+            while (true)
+            {
+                Token? identToken;
+                if ((identToken = parser.MatchAndTakeToken(TokenType.Identifier)) != null)
+                    sourceFile.Append(identToken.Value);
+                else if ((identToken = parser.MatchAndTakeToken(TokenType.Multiply)) != null)
+                    sourceFile.Append(identToken.Value);
+                else
+                    parser.Messages.Add(Message.UnexpectedToken2, token, "identifier or *", token);
+
+                if ((identToken = parser.MatchAndTakeToken(TokenType.Dot)) != null)
+                    sourceFile.Append(identToken.Value);
+                else
+                    break;
+            }
+
             var symbolName = parser.MatchAndTakeToken(TokenType.Identifier);
-            var functionSignature = symbolName != null ? parser.ParseExpression() : null;
+
+            CobType? symbolType;
+            FunctionExpression? functionSignature;
+            if (symbolName != null)
+            {
+                if (parser.Match(TokenType.Function))
+                {
+                    symbolType = CobType.Func;
+                    functionSignature = parser.ParseExpression() as FunctionExpression;
+                }
+                else
+                {
+                    symbolType = parser.ParseTypeName();
+                    functionSignature = null;
+                }
+            }
+            else
+            {
+                symbolType = null;
+                functionSignature = null;
+            }
 
             return new ImportExpression(
                 token,
-                libraryExpr.Value,
+                sourceFile.ToString(),
                 symbolName?.Value,
-                functionSignature as FunctionExpression
+                symbolType,
+                functionSignature
             );
         }
     }

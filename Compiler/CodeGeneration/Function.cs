@@ -1,5 +1,8 @@
-﻿namespace Compiler.CodeGeneration
+﻿using System.Diagnostics;
+
+namespace Compiler.CodeGeneration
 {
+    [DebuggerDisplay("Function '{FullyQualifiedName}'")]
     internal sealed class Function
     {
         public string Name { get; }
@@ -79,6 +82,7 @@
                 eCobType.Signed => AllocateRegister(),
                 eCobType.Unsigned => AllocateRegister(),
                 eCobType.Float => AllocateRegister(),
+                eCobType.Array => AllocateRegister(), // ????????
                 _ => throw new NotSupportedException()
             };
 

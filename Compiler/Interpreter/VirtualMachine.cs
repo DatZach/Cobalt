@@ -1,5 +1,4 @@
-﻿using System.Diagnostics.Tracing;
-using Compiler.CodeGeneration;
+﻿using Compiler.CodeGeneration;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -16,7 +15,7 @@ namespace Compiler.Interpreter
         private readonly Stack<Function> functionStack;
         private readonly Stack<IReadOnlyList<CobVariable>?> parameterStack;
         private readonly Stack<long> localStack;
-        private readonly long[] registers;
+        private readonly CobVariable[] registers;
 
         private readonly NativeLibrariesProxy nativeLibrariesProxy;
         private readonly CodeGeneration.Compiler compiler;
@@ -27,7 +26,7 @@ namespace Compiler.Interpreter
             functionStack = new Stack<Function>(4);
             parameterStack = new Stack<IReadOnlyList<CobVariable>?>(4);
             localStack = new Stack<long>(4);
-            registers = new long[64];
+            registers = new CobVariable[64];
             
             nativeLibrariesProxy = NativeLibrariesProxy.FromCompiler(compiler);
         }
@@ -67,7 +66,11 @@ namespace Compiler.Interpreter
                             WriteOperand(Operand.R0, result);
                         }
                         else
-                            ExecuteFunction(callee, calleeParameters);
+                        {
+                            var result = ExecuteFunction(callee, calleeParameters);
+                            if (result != null)
+                                WriteOperand(Operand.R0, result);
+                        }
                         break;
                     }
                     case Opcode.Return:
@@ -182,6 +185,7 @@ namespace Compiler.Interpreter
             throw new InvalidOperationException("End of buffer without a ret instruction");
         }
 
+        // TODO Deprecate?
         private void WriteOperand(Operand operand, long value)
         {
             switch (operand.Type)
@@ -191,7 +195,7 @@ namespace Compiler.Interpreter
                 case OperandType.ImmediateFloat:
                     throw new InvalidOperationException();
                 case OperandType.Register:
-                    registers[operand.Value] = value;
+                    registers[operand.Value] = new CobVariable("$reg", CobType.U64, false, value);
                     break;
                 case OperandType.Local:
                     currentFunction.Locals[(int)operand.Value].Value = value;
@@ -204,6 +208,29 @@ namespace Compiler.Interpreter
             }
         }
 
+        private void WriteOperand(Operand operand, CobVariable value)
+        {
+            switch (operand.Type)
+            {
+                case OperandType.ImmediateSigned:
+                case OperandType.ImmediateUnsigned:
+                case OperandType.ImmediateFloat:
+                    throw new InvalidOperationException();
+                case OperandType.Register:
+                    registers[operand.Value] = value;
+                    break;
+                case OperandType.Local:
+                    currentFunction.Locals[(int)operand.Value] = value;
+                    break;
+                case OperandType.Global:
+                    compiler.Globals[(int)operand.Value] = value;
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+        }
+
+        // TODO Deprecate?
         private long ReadOperand(Operand operand)
         {
             switch (operand.Type)
@@ -213,7 +240,7 @@ namespace Compiler.Interpreter
                 case OperandType.ImmediateFloat:
                     return operand.Value;
                 case OperandType.Register:
-                    return registers[operand.Value];
+                    return registers[operand.Value].Value;
                 case OperandType.Argument:
                     return currentParameters[(int)operand.Value].Value; // ??? Not always right
                 case OperandType.Local:
@@ -225,6 +252,7 @@ namespace Compiler.Interpreter
             }
         }
 
+        // TODO Deprecate?
         // TODO This really should be unified somehow, but this is the fastest approach rn
         private Function ReadOperandAsFunction(Operand operand)
         {
@@ -233,7 +261,7 @@ namespace Compiler.Interpreter
                 // TODO AAAA???? This is just as hacky! We don't know if we have a global or a function index or what
                 case OperandType.Register:
                 {
-                    var global = compiler.Globals[(int)registers[operand.Value]];
+                    var global = compiler.Globals[(int)registers[operand.Value].Value];
                     if (global.Type == eCobType.Function)
                         return global.Type.Function;
 
@@ -254,6 +282,7 @@ namespace Compiler.Interpreter
             }
         }
 
+        // TODO Deprecate?
         // TODO This really should be unified somehow, but this is the fastest approach rn
         private CobVariable ReadOperandAsVariable(Operand operand)
         {
@@ -266,7 +295,7 @@ namespace Compiler.Interpreter
                 case OperandType.ImmediateFloat:
                     return new CobVariable("$imm", CobType.Float, false, operand.Value);
                 case OperandType.Register:
-                    return new CobVariable("$reg", CobType.Int, false, registers[operand.Value]); // ??? Maybe?
+                    return registers[operand.Value];
                 case OperandType.Argument:
                     return currentParameters[(int)operand.Value];
                 case OperandType.Local:

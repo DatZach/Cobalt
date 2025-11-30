@@ -1,6 +1,7 @@
-﻿using System.Runtime.CompilerServices;
+﻿using Compiler.Ast;
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Text;
-using Compiler.Ast;
 
 namespace Compiler.Lexer
 {
@@ -312,8 +313,19 @@ namespace Compiler.Lexer
 
         public static IReadOnlyList<Token> Tokenize(string source, string filename, MessageCollection messages)
         {
-            var tokenizer = new Tokenizer(source, filename, messages);
-            return tokenizer.Tokenize();
+            try
+            {
+                stopwatch.Start();
+                var tokenizer = new Tokenizer(source, filename, messages);
+                return tokenizer.Tokenize();
+            }
+            finally
+            {
+                stopwatch.Stop();
+            }
         }
+
+        public static long TotalMilliseconds => stopwatch.ElapsedMilliseconds;
+        private static readonly Stopwatch stopwatch = new ();
     }
 }

@@ -9,7 +9,9 @@ namespace Compiler
     public static class Program
     {
         internal static RuntimeConfig Config { get; private set; }
-        
+
+        private static Stopwatch stopwatch;
+
         public static void Main(string[] args)
         {
             Config = RuntimeConfig.FromCommandLine(args);
@@ -19,24 +21,13 @@ namespace Compiler
                 return;
             }
 
-            var t1 = Stopwatch.StartNew();
+            stopwatch = Stopwatch.StartNew();
 
             var messages = new MessageCollection();
-
             var source = FileSystem.ReadAllText(Config.EntrySourceFile);
-            
-            var t3 = Stopwatch.StartNew();
             var tokens = Tokenizer.Tokenize(source, Config.EntrySourceFile, messages);
-            t3.Stop();
-
-            var t4 = Stopwatch.StartNew();
             var ast = Parser.Parse(tokens, messages);
-            t4.Stop();
-
-            var t5 = Stopwatch.StartNew();
-            var compiler = new CodeGeneration.Compiler(messages);
-            ast.Accept(compiler);
-            t5.Stop();
+            var compiler = CodeGeneration.Compiler.Compile(ast, messages);
 
             if (messages.Count > 0)
             {
@@ -46,31 +37,14 @@ namespace Compiler
                     return;
             }
 
-            if (Config.AssemblyVerboseOutput)
-                PrintCompilerState(compiler);
+            ArtifactFactory.Assemble(compiler);
 
-            if (compiler.Artifacts.Count > 0)
-            {
-                var t6 = Stopwatch.StartNew();
-                ArtifactFactory.Assemble(compiler);
-                t6.Stop();
+            stopwatch.Stop();
 
-                t1.Stop();
-
-                if (Config.StatisticsVerboseOutputLevel > 0)
-                {
-                    Console.WriteLine($"Compiled in {t1.ElapsedMilliseconds}ms");
-                    if (Config.StatisticsVerboseOutputLevel > 1)
-                    {
-                        Console.WriteLine($"\tFile IO    {FileSystem.TotalIOMilliseconds}ms");
-                        Console.WriteLine($"\tTokenize   {t3.ElapsedMilliseconds}ms");
-                        Console.WriteLine($"\tAST        {t4.ElapsedMilliseconds}ms");
-                        Console.WriteLine($"\tIM Compile {t5.ElapsedMilliseconds}ms");
-                        Console.WriteLine($"\tAssemble   {t6.ElapsedMilliseconds}ms");
-                    }
-                }
-            }
-            else
+            PrintCompilerState(compiler);
+            PrintCompilerStatistics();
+            
+            if (compiler.Artifacts.Count == 0)
             {
                 using var vm = new VirtualMachine(compiler);
                 if (compiler.EntryFunction == null)
@@ -85,8 +59,14 @@ namespace Compiler
 
         private static void PrintCompilerState(CodeGeneration.Compiler compiler)
         {
-            Console.WriteLine(string.Join("\r\n", compiler.Artifacts));
-            
+            if (!Config.AssemblyVerboseOutput)
+                return;
+
+            Console.WriteLine("Artifacts");
+            foreach (var artifact in compiler.Artifacts)
+                Console.WriteLine($"\t{artifact}");
+            Console.WriteLine();
+
             Console.WriteLine("Imports");
             foreach (var import in compiler.Imports)
                 Console.WriteLine($"\t{import.Library} {import.SymbolName}");
@@ -133,6 +113,24 @@ namespace Compiler
                         Console.WriteLine($"\t\t\t{inst}");
                     }
                 }
+            }
+
+            Console.WriteLine();
+        }
+
+        private static void PrintCompilerStatistics()
+        {
+            if (Config.StatisticsVerboseOutputLevel <= 0)
+                return;
+
+            Console.WriteLine($"Compiled in {stopwatch.ElapsedMilliseconds}ms");
+            if (Config.StatisticsVerboseOutputLevel > 1)
+            {
+                Console.WriteLine($"\tFile IO    {FileSystem.TotalMilliseconds}ms");
+                Console.WriteLine($"\tTokenize   {Tokenizer.TotalMilliseconds}ms");
+                Console.WriteLine($"\tAST        {Parser.TotalMilliseconds}ms");
+                Console.WriteLine($"\tIM Compile {CodeGeneration.Compiler.TotalMilliseconds}ms");
+                Console.WriteLine($"\tAssemble   {ArtifactFactory.TotalMilliseconds}ms");
             }
 
             Console.WriteLine();
