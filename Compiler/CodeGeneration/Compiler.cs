@@ -402,6 +402,25 @@ namespace Compiler.CodeGeneration
             if (expression.Operator == TokenType.Dot)
             {
                 var lhs = expression.Left.Accept(this);
+                // DUMB HACK
+                if (lhs != null && lhs.Type == CobType.String && expression.Right is IdentifierExpression { Value: "Length" })
+                {
+                    var locLen = CurrentFunction.AllocateLocal(new CobVariable("$len", CobType.U64, true));
+                    CurrentFunction.Body.EmitOA(
+                        Opcode.LoadField,
+                        new Operand { Type = OperandType.Local, Size = 64, Value = locLen },
+                        new []
+                        {
+                            lhs.Operand,
+                            new Operand { Type = OperandType.ImmediateUnsigned, Size = -1, Value = 0 }
+                        }
+                    );
+                    return new Storage(
+                        CurrentFunction,
+                        new Operand { Type = OperandType.Local, Size = 64, Value = locLen },
+                        CobType.U64
+                    );
+                }
                 contextStack.Push(Modules[(int)lhs.Operand.Value]); // TODO Validate type, support  structs, etc.
                 var rhs = expression.Right.Accept(this);
                 contextStack.Pop();

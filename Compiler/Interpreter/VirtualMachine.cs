@@ -1,6 +1,6 @@
-﻿using Compiler.CodeGeneration;
+﻿using System.Diagnostics.Tracing;
+using Compiler.CodeGeneration;
 using System.Reflection;
-using System.Reflection.Emit;
 using System.Runtime.InteropServices;
 using System.Text;
 using OperandType = Compiler.CodeGeneration.OperandType;
@@ -25,7 +25,7 @@ namespace Compiler.Interpreter
         {
             this.compiler = compiler ?? throw new ArgumentNullException(nameof(compiler));
             functionStack = new Stack<Function>(4);
-            parameterStack = new Stack<IReadOnlyList<CobVariable>>(4);
+            parameterStack = new Stack<IReadOnlyList<CobVariable>?>(4);
             localStack = new Stack<long>(4);
             registers = new long[64];
             
@@ -53,7 +53,7 @@ namespace Compiler.Interpreter
                         {
                             var aCalleeParameters = new CobVariable[callee.Parameters.Count];
                             for (int j = 0; j < aCalleeParameters.Length; ++j)
-                                aCalleeParameters[j] = ReadOperandAsVariable(inst.C[j]);
+                                aCalleeParameters[j] = ReadOperandAsVariable(inst.C![j]);
 
                             calleeParameters = aCalleeParameters;
                         }
@@ -80,6 +80,18 @@ namespace Compiler.Interpreter
                     case Opcode.Move:
                     {
                         WriteOperand(inst.A!, ReadOperand(inst.B!));
+                        break;
+                    }
+                    case Opcode.LoadField:
+                    {
+                        long fieldValue;
+                        var obj = ReadOperandAsVariable(inst.C![0]);
+                        var fieldIdx = ReadOperand(inst.C![1]);
+                        if (fieldIdx == 0)
+                            fieldValue = obj.Data.Length;
+                        else
+                            throw new NotImplementedException();
+                        WriteOperand(inst.A!, fieldValue);
                         break;
                     }
                     case Opcode.Push:
@@ -308,7 +320,7 @@ namespace Compiler.Interpreter
 
                     var address = NativeLibrary.GetExport(proxy.Library, import.SymbolName!);
 
-                    var method = new DynamicMethod(
+                    var method = new System.Reflection.Emit.DynamicMethod(
                         $"dynm_{import.SymbolName}",
                         typeof(int),
                         new [] { typeof(CobVariable[]) },
@@ -320,26 +332,26 @@ namespace Compiler.Interpreter
                     var il = method.GetILGenerator();
                     for (int i = 0; i < import.Function!.Parameters.Count; ++i)
                     {
-                        il.Emit(OpCodes.Ldarg_0);
-                        il.Emit(OpCodes.Ldc_I4, i);
-                        il.Emit(OpCodes.Ldelem_Ref);
+                        il.Emit(System.Reflection.Emit.OpCodes.Ldarg_0);
+                        il.Emit(System.Reflection.Emit.OpCodes.Ldc_I4, i);
+                        il.Emit(System.Reflection.Emit.OpCodes.Ldelem_Ref);
                         if (import.Function.Parameters[i].Type == CobType.String)
                         {
-                            il.Emit(OpCodes.Callvirt, typeof(CobVariable).GetProperty("Data")!.GetGetMethod()!);
-                            il.Emit(OpCodes.Call, typeof(NativeLibrariesProxy).GetMethod("GetString")!);
+                            il.Emit(System.Reflection.Emit.OpCodes.Callvirt, typeof(CobVariable).GetProperty("Data")!.GetGetMethod()!);
+                            il.Emit(System.Reflection.Emit.OpCodes.Call, typeof(NativeLibrariesProxy).GetMethod("GetString")!);
                         }
                         else
-                            il.Emit(OpCodes.Callvirt, typeof(CobVariable).GetProperty("Value")!.GetGetMethod()!);
+                            il.Emit(System.Reflection.Emit.OpCodes.Callvirt, typeof(CobVariable).GetProperty("Value")!.GetGetMethod()!);
                     }
 
-                    il.Emit(OpCodes.Ldc_I8, address.ToInt64());
+                    il.Emit(System.Reflection.Emit.OpCodes.Ldc_I8, address.ToInt64());
                     il.EmitCalli(
-                        OpCodes.Calli, System.Runtime.InteropServices.CallingConvention.Cdecl,
+                        System.Reflection.Emit.OpCodes.Calli, System.Runtime.InteropServices.CallingConvention.Cdecl,
                         import.Function.ReturnType.ToManagedType(),
                         import.Function.Parameters.Select(x => x.Type.ToManagedType()).ToArray()
                     );
 
-                    il.Emit(OpCodes.Ret);
+                    il.Emit(System.Reflection.Emit.OpCodes.Ret);
 
                     var methodDelegate = method.CreateDelegate<NativeWrapperDelegate>();
                     proxy.Functions.Add(import.SymbolName!, methodDelegate);
