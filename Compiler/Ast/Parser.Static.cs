@@ -56,8 +56,8 @@ namespace Compiler.Ast
             Register(TokenType.Tuple, new TupleDefinitionParselet());
             Register(TokenType.Const, new VarParselet());
             Register(TokenType.Var, new VarParselet());
-            Register(TokenType.Export, new VarParselet());
             Register(TokenType.Import, new ImportParselet());
+            Register(TokenType.Export, new ExportParselet());
             Register(TokenType.Return, new ReturnParselet());
             Register(TokenType.AheadOfTime, new AheadOfTimeParselet());
             Register(TokenType.If, new IfParselet());

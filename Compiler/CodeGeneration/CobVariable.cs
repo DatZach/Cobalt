@@ -8,9 +8,27 @@
 
         public bool Mutable { get; }
 
-        public byte[]? Data { get; set; } // TODO HACK AAAAAA???
+        public object? Value { get; set; }
 
-        public long Value { get; set; }
+        public CobVariable[] StructValue
+        {
+            get => Value as CobVariable[] ?? throw new InvalidDataException();
+            set => Value = value;
+        }
+
+        public byte[] BufferValue
+        {
+            get => Value as byte[] ?? throw new InvalidDataException();
+            set => Value = value;
+        }
+
+        public long IntValue
+        {
+            get => (long)Value;
+            set => Value = value;
+        }
+
+        // TODO Should assume variables are mutable by default
 
         public CobVariable(string name, CobType type, bool mutable)
         {
@@ -19,17 +37,17 @@
             Mutable = mutable;
         }
 
-        public CobVariable(string name, CobType type, bool mutable, long value)
+        public CobVariable(string name, CobType type, bool mutable, long intValue)
         {
             Name = name;
             Type = type;
             Mutable = mutable;
-            Value = value;
+            IntValue = intValue;
         }
 
         public override string ToString()
         {
-            return $"{Name,-25}{Type} = {Data}";
+            return $"{Name,-25}{Type} = {Value}";
         }
     }
 

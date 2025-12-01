@@ -15,13 +15,11 @@ namespace Compiler.CodeGeneration
 
         public List<Import> Imports { get; }
 
+        public List<Export> Exports { get; }
+
         public List<Module> Modules { get; }
 
-        public Dictionary<string, string> Exports { get; } // (ExternalName, InternalName)
-
-        // TODO Optimization
-        //public Dictionary<string, CobVariable> Globals { get; }
-        public List<CobVariable> Globals { get; }
+        public List<CobVariable> Globals { get; } // TODO Remove
 
         public Function? EntryFunction { get; private set; }
 
@@ -40,7 +38,7 @@ namespace Compiler.CodeGeneration
         {
             Artifacts = new List<ArtifactExpression>();
             Imports = new List<Import>();
-            Exports = new Dictionary<string, string>();
+            Exports = new List<Export>();
             Modules = new List<Module>();
             Globals = new List<CobVariable>();
             functionStack = new Stack<Function>();
@@ -173,11 +171,6 @@ namespace Compiler.CodeGeneration
                                 rhs.Operand
                             ); // TODO EmitLO
                         }
-
-                        // TODO Throw exception if export declared outside root level
-                        // TODO Throw exception if export declared on non-function?
-                        if (expression.Type == TokenType.Export)
-                            Exports.Add(decl.Name, type.Function.Name);
                     }
                     else
                     {
@@ -292,6 +285,14 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
+        public Storage? Visit(ExportExpression expression)
+        {
+            var function = expression.FunctionExpression.Accept(this);
+            var export = new Export { Function = function.Type.Function };
+            Exports.Add(export);
+            return null;
+        }
+
         public Storage? Visit(ArtifactExpression expression)
         {
             Artifacts.Add(expression);
@@ -374,7 +375,7 @@ namespace Compiler.CodeGeneration
             CurrentFunction.Body.EmitOO(
                 Opcode.Move,
                 reg.Operand,
-                new Operand { Type = OperandType.ImmediateUnsigned, Size = -1, Value = result.Value } // TODO Not right
+                new Operand { Type = OperandType.ImmediateUnsigned, Size = -1, Value = result.IntValue } // TODO Not right
             );
             
             return evalStorage;
@@ -460,12 +461,50 @@ namespace Compiler.CodeGeneration
                 {
                     var locLen = CurrentFunction.AllocateLocal(new CobVariable("$len", CobType.U64, true));
                     CurrentFunction.Body.EmitOA(
-                        Opcode.LoadField,
+                        Opcode.GetField,
                         new Operand { Type = OperandType.Local, Size = 64, Value = locLen },
                         new []
                         {
                             lhs.Operand,
                             new Operand { Type = OperandType.ImmediateUnsigned, Size = -1, Value = 0 }
+                        }
+                    );
+                    return new Storage(
+                        CurrentFunction,
+                        new Operand { Type = OperandType.Local, Size = 64, Value = locLen },
+                        CobType.U64
+                    );
+                }
+                // ANOTHER DUMB HACK
+                if (lhs != null && lhs.Type == eCobType.Tuple && expression.Right is IdentifierExpression { Value: "Start" })
+                {
+                    var locLen = CurrentFunction.AllocateLocal(new CobVariable("$start", CobType.U64, true));
+                    CurrentFunction.Body.EmitOA(
+                        Opcode.GetField,
+                        new Operand { Type = OperandType.Local, Size = 64, Value = locLen },
+                        new []
+                        {
+                            lhs.Operand,
+                            new Operand { Type = OperandType.ImmediateUnsigned, Size = -1, Value = 0 }
+                        }
+                    );
+                    return new Storage(
+                        CurrentFunction,
+                        new Operand { Type = OperandType.Local, Size = 64, Value = locLen },
+                        CobType.U64
+                    );
+                }
+                // ANOTHER ANOTHER DUMB HACK
+                if (lhs != null && lhs.Type == eCobType.Tuple && expression.Right is IdentifierExpression { Value: "End" })
+                {
+                    var locLen = CurrentFunction.AllocateLocal(new CobVariable("$end", CobType.U64, true));
+                    CurrentFunction.Body.EmitOA(
+                        Opcode.GetField,
+                        new Operand { Type = OperandType.Local, Size = 64, Value = locLen },
+                        new []
+                        {
+                            lhs.Operand,
+                            new Operand { Type = OperandType.ImmediateUnsigned, Size = -1, Value = 1 }
                         }
                     );
                     return new Storage(
@@ -693,7 +732,7 @@ namespace Compiler.CodeGeneration
             if (expression.FunctionExpression is not IdentifierExpression ie)
                 return null;
             
-            if (!CobType.TryParse(ie.Value, out var castType))
+            if (!CobType.TryParse(ie.Value, out var castType) || castType.Type == eCobType.Tuple)
                 return null;
 
             var arguments = expression.Arguments;
@@ -732,18 +771,27 @@ namespace Compiler.CodeGeneration
 
             functionStorage.Free();
 
-            var local = CurrentFunction.AllocateLocal(new CobVariable("$tuple$", functionStorage.Type, false));
+            var local = CurrentFunction.AllocateLocal(new CobVariable("$tuple$", functionStorage.Type, false)
+            {
+                StructValue = new []
+                {
+                    new CobVariable("Start", CobType.U64, true, 0),
+                    new CobVariable("End", CobType.U64, true, 0)
+                }
+            });
+
             for (var i = 0; i < expression.Arguments.Count; i++)
             {
                 var argStorage = expression.Arguments[i].Accept(this);
-                //CurrentFunction.Body.EmitOO(
-                //    Opcode.Move,
-                //    new Operand
-                //    {
-                //        Type = OperandType.Local, Value = local, Offset = i * 4, Size = argStorage.Type.Size
-                //    },
-                //    argStorage.Operand
-                //); // TODO EmitLO
+                CurrentFunction.Body.EmitOA(
+                    Opcode.SetField,
+                    new Operand { Type = OperandType.Local, Value = local },
+                    new []
+                    {
+                        new Operand { Type = OperandType.ImmediateUnsigned, Value = i },
+                        argStorage.Operand
+                    }
+                );
             }
 
             return CurrentFunction.AllocateStorage(functionStorage.Type, local);
@@ -873,7 +921,7 @@ namespace Compiler.CodeGeneration
                 $"string{Globals.Count}",
                 CobType.String,
                 false
-            ) { Data = data });
+            ) { BufferValue = data });
             
             // TODO AllocateStorage on Global "function"??
             return new Storage(
@@ -966,6 +1014,11 @@ namespace Compiler.CodeGeneration
         public Function? Function { get; init; }
     }
 
+    internal sealed record Export
+    {
+        public Function Function { get; init; }
+    }
+
     internal sealed class Module
     {
         public string? Name { get; init; }
@@ -999,5 +1052,12 @@ namespace Compiler.CodeGeneration
 
             return function;
         }
+    }
+
+    internal interface IContext
+    {
+        List<Function> Functions { get; }
+
+        List<CobVariable> Globals { get; }
     }
 }

@@ -183,7 +183,7 @@ namespace Compiler.Ast
                     Console.ForegroundColor = color;
                     var tokenLength = startToken.Value.Length;
                     if (startToken.Type == TokenType.String) tokenLength += 2;
-                    Console.WriteLine(new string('^', Math.Min(tokenLength, line.Length - startToken.Column)));
+                    Console.WriteLine(new string('^', Math.Max(1, Math.Min(tokenLength, line.Length - startToken.Column))));
                     Console.WriteLine();
                 }
             }

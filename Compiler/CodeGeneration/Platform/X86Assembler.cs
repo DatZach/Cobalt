@@ -196,7 +196,7 @@ namespace Compiler.CodeGeneration.Platform
                             8 => "db",
                             _ => throw new DataException($"Cannot encode {global.Type.Size} bits of data")
                         };
-                        buffer.EmitLine($"rdata_{i} {describe} {global.Value}");
+                        buffer.EmitLine($"rdata_{i} {describe} {global.IntValue}");
                         break;
                     }
                     case eCobType.Float:
@@ -207,7 +207,7 @@ namespace Compiler.CodeGeneration.Platform
                             32 => "dd",
                             _ => throw new DataException($"Cannot encode {global.Type.Size} bits of data")
                         };
-                        buffer.EmitLine($"rdata_{i} {describe} {BitConverter.Int64BitsToDouble(global.Value)}");
+                        buffer.EmitLine($"rdata_{i} {describe} {BitConverter.Int64BitsToDouble(global.IntValue)}");
                         break;
                     }
                     case eCobType.Function:
@@ -215,7 +215,7 @@ namespace Compiler.CodeGeneration.Platform
                         break;
                     case eCobType.Array: // T[] -> Struct { Length: uint, Data: ... }
                     {
-                        var data = global.Data;
+                        var data = global.BufferValue;
                         if (data == null)
                             throw new DataException("Data expected for string or array type");
 
@@ -297,7 +297,7 @@ namespace Compiler.CodeGeneration.Platform
                 int i = 0;
                 foreach (var export in compiler.Exports)
                 {
-                    buffer.Emit($"    {export.Value}, '{export.Key}'");
+                    buffer.Emit($"    {export.Function.Name}, '{export.Function.FullyQualifiedName}'");
                     if (i++ != compiler.Exports.Count - 1)
                         buffer.EmitLine(", \\");
                 }

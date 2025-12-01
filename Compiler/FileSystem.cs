@@ -45,6 +45,10 @@ namespace Compiler
         {
             var content = ReadAllText(path);
 
+            // HACK
+            if (path == Program.Config.EntrySourceFilePath)
+                lineIndex -= 2;
+
             int idx = 0;
             int i = 0;
             while (i < content.Length)

@@ -64,7 +64,8 @@ namespace Compiler.CodeGeneration
         Stash,
         Unstash,
         Move,
-        LoadField,
+        GetField,
+        SetField,
 
         Call,
         Return,

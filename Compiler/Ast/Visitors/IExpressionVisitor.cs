@@ -11,6 +11,7 @@ namespace Compiler.Ast.Visitors
         T Visit(TupleDefinitionExpression expression);
         T Visit(VarExpression expression);
         T Visit(ImportExpression expression);
+        T Visit(ExportExpression expression);
         T Visit(ArtifactExpression expression);
         T Visit(ReturnExpression expression);
         T Visit(IfStatement expression);

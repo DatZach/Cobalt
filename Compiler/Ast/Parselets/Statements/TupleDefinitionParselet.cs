@@ -2,11 +2,6 @@
 using Compiler.Ast.Expressions.Statements;
 using Compiler.CodeGeneration;
 using Compiler.Lexer;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Compiler.Ast.Parselets.Statements
 {
@@ -17,6 +12,9 @@ namespace Compiler.Ast.Parselets.Statements
             var name = parser.Take(TokenType.Identifier);
             var fields = new List<FieldDefinition>();
             var functions = new List<Expression>();
+
+            if (!CobType.TryAddAlias(name.Value, new CobType(eCobType.Tuple, 8)))
+                parser.Messages.Add(Message.SymbolConflictsWithOther, token, name.Value);
 
             parser.Take(TokenType.LeftParen);
             while (parser.MatchAndTakeToken(TokenType.RightParen) == null)
