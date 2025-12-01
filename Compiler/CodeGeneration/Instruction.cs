@@ -35,6 +35,7 @@ namespace Compiler.CodeGeneration
         {
             switch (Type)
             {
+                case OperandType.None: return "<none>";
                 case OperandType.ImmediateSigned:
                     return Value.ToString("D");
                 case OperandType.ImmediateUnsigned:

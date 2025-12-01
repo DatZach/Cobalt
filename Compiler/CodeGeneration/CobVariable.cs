@@ -64,8 +64,9 @@
         public readonly static CobType U64 = new(eCobType.Unsigned, 64);
         public readonly static CobType Char = new (eCobType.Unsigned, 8) { AliasName = "char" };
         public readonly static CobType String = new (eCobType.Array, Char) { AliasName = "string" };
+        public readonly static CobType Module = eCobType.Module;
 
-        public string? AliasName { get; init; }
+        public string? AliasName { get; init; } // TODO Remove?
 
         public eCobType Type { get; }
 
@@ -73,14 +74,16 @@
 
         public CobType? ElementType { get; }
 
-        public Function? Function { get; }
+        public object? Tag { get; }
 
-        public CobType(eCobType type, int size, CobType? elementType = null, Function? function = null)
+        public Function? Function => Tag as Function;
+
+        public CobType(eCobType type, int size = -1, CobType? elementType = null, object? tag = null)
         {
             Type = type;
             Size = size;
             ElementType = elementType;
-            Function = function;
+            Tag = tag;
         }
 
         public CobType(eCobType type, CobType elementType)
@@ -270,6 +273,7 @@
         Struct,
         Tuple,
         Lens,
-        Function
+        Function,
+        Module
     }
 }

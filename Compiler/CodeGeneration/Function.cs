@@ -1,9 +1,10 @@
-﻿using System.Diagnostics;
+﻿using Compiler.Ast.Expressions;
+using System.Diagnostics;
 
 namespace Compiler.CodeGeneration
 {
     [DebuggerDisplay("Function '{FullyQualifiedName}'")]
-    internal sealed class Function
+    internal sealed class Function : IContext
     {
         public string Name { get; }
 
@@ -183,6 +184,49 @@ namespace Compiler.CodeGeneration
             return -1;
         }
         
+        public Storage? ResolveIdentifier(Compiler compiler, IdentifierExpression expression)
+        {
+            var value = expression.Value;
+            int idx;
+
+            // TODO AllocateStorage(Type, Value, Origin)..?
+
+            // ARGUMENTS
+            if ((idx = FindParameter(value)) != -1)
+            {
+                var type = Parameters[idx];
+                return new Storage(
+                    this,
+                    new Operand
+                    {
+                        Type = OperandType.Argument,
+                        Value = idx,
+                        Size = type.Type.Size
+                    },
+                    type.Type
+                );
+            }
+
+            // LOCALS
+            if ((idx = FindLocal(value)) != -1)
+            {
+                var type = Locals[idx];
+                return new Storage(
+                    this,
+                    new Operand
+                    {
+                        Type = OperandType.Local,
+                        Value = idx,
+                        Size = type.Type.Size
+                    },
+                    type.Type
+                );
+            }
+
+            // Find in parent scope
+            return Module.ResolveIdentifier(compiler, expression);
+        }
+
         public sealed class Parameter
         {
             public string Name { get; }

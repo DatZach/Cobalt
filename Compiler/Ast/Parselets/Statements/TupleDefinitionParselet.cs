@@ -13,9 +13,6 @@ namespace Compiler.Ast.Parselets.Statements
             var fields = new List<FieldDefinition>();
             var functions = new List<Expression>();
 
-            if (!CobType.TryAddAlias(name.Value, new CobType(eCobType.Tuple, 8)))
-                parser.Messages.Add(Message.SymbolConflictsWithOther, token, name.Value);
-
             parser.Take(TokenType.LeftParen);
             while (parser.MatchAndTakeToken(TokenType.RightParen) == null)
             {
@@ -70,7 +67,13 @@ namespace Compiler.Ast.Parselets.Statements
                 parser.MatchAndTakeToken(TokenType.Semicolon);
             }
 
-            return new TupleDefinitionExpression(token, name.Value, fields, functions);
+            var result = new TupleDefinitionExpression(token, name.Value, fields, functions);
+
+            // TODO HACK Should be done in a Compiler FirstPass, not here
+            if (!CobType.TryAddAlias(name.Value, new CobType(eCobType.Tuple, tag: result)))
+                parser.Messages.Add(Message.SymbolConflictsWithOther, token, name.Value);
+
+            return result;
         }
     }
 }
