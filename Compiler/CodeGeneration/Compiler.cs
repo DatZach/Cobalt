@@ -26,6 +26,8 @@ namespace Compiler.CodeGeneration
         // TODO Possible to collapse contextStack and functionStack into 1?
         public Function? CurrentFunction => functionStack.Count == 0 ? null : functionStack.Peek();
 
+        public IContext ParentContext => contextStack.Skip(1).FirstOrDefault();
+
         private IContext CurrentContext => contextStack.Peek();
 
         public Module CurrentModule { get; private set; } // TODO Make this private again
@@ -125,6 +127,11 @@ namespace Compiler.CodeGeneration
         public Storage? Visit(TupleDefinitionExpression expression)
         {
             CurrentModule.TupleTypes.Add(expression);
+
+            contextStack.Push(expression);
+            foreach (var functionExpression in expression.Functions)
+                functionExpression.Accept(this);
+            contextStack.Pop();
 
             return null;
         }
@@ -424,10 +431,25 @@ namespace Compiler.CodeGeneration
                 return null;
             }
 
+            CallingConvention callingConvention;
+            IReadOnlyList<Function.Parameter> parameters;
+            if (CurrentContext is TupleDefinitionExpression)
+            {
+                callingConvention = CallingConvention.ThisCall;
+                var lParameters = new List<Function.Parameter>(expression.Parameters);
+                lParameters.Insert(0, new Function.Parameter("this", new CobType(eCobType.Tuple, tag: CurrentContext), false));
+                parameters = lParameters;
+            }
+            else
+            {
+                callingConvention = expression.CallingConvention;
+                parameters = expression.Parameters;
+            }
+
             var function = CurrentModule.AllocateFunction(
-                expression.Name,
-                expression.CallingConvention,
-                expression.Parameters,
+               expression.Name,
+                callingConvention,
+                parameters,
                 expression.ReturnType
             );
 
@@ -567,9 +589,9 @@ namespace Compiler.CodeGeneration
             }
             else if (artOpcode != Opcode.None)
             {
-                // HACK The mov instructions are because the x86 CG does not support certain mem, mem operands
-                CurrentFunction.Body.EmitOO(Opcode.Move, c.Operand, a.Operand);
-                CurrentFunction.Body.EmitOO(artOpcode, c.Operand, b.Operand);
+                CurrentFunction.Body.EmitOO(artOpcode, a.Operand, b.Operand);
+                c.Free();
+                c = a;
             }
             else if (asnOpcode != Opcode.None)
             {
@@ -640,6 +662,12 @@ namespace Compiler.CodeGeneration
             // ARGUMENTS
             var parameters = function.Parameters;
             var arguments = expression.Arguments;
+            if (function.CallingConvention == CallingConvention.ThisCall)
+            {
+                var lArguments = new List<Expression>(arguments);
+                lArguments.Insert(0, new IdentifierExpression(new Token(TokenType.Identifier, "range", "", 0, 0)));
+                arguments = lArguments;
+            }
             var hasSpreadParameter = parameters.Count > 0 && parameters[^1].IsSpread;
             if (arguments.Count != parameters.Count && !hasSpreadParameter)
                 Messages.Add(Message.FunctionParameterCountMismatch, expression, parameters.Count, arguments.Count);

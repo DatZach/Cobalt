@@ -11,13 +11,13 @@ namespace Compiler.Ast.Expressions.Statements
 
         public IReadOnlyList<FieldDefinition> Fields { get; }
 
-        public IReadOnlyList<Expression> Functions { get; }
+        public IReadOnlyList<FunctionExpression> Functions { get; }
 
         public TupleDefinitionExpression(
             Token token,
             string name,
             IReadOnlyList<FieldDefinition> fields,
-            IReadOnlyList<Expression> functions
+            IReadOnlyList<FunctionExpression> functions
         )
             : base(token)
         {
@@ -34,23 +34,55 @@ namespace Compiler.Ast.Expressions.Statements
 
         public Storage? ResolveIdentifier(CodeGeneration.Compiler compiler, IdentifierExpression expression)
         {
+            // FIELD
             int idx; // TODO THIS IS SO BAD
             if ((idx = Fields.ToList().FindIndex(x => x.Name == expression.Value)) != -1)
             {
-                var fieldType = Fields[idx].Type;
-                var storage = compiler.CurrentFunction.AllocateStorage(fieldType);
+                var field = Fields[idx];
+                var fieldType = field.Type;
+                
 
-                compiler.CurrentFunction.Body.EmitOA(
-                    Opcode.GetField,
-                    storage.Operand,
-                    new[]
+                if (field.GetterExpression != null)
+                {
+                    return field.GetterExpression.Accept(compiler);
+                }
+                else
+                {
+                    var storage = compiler.CurrentFunction.AllocateStorage(fieldType);
+                    compiler.CurrentFunction.Body.EmitOA(
+                        Opcode.GetField,
+                        storage.Operand,
+                        new[]
+                        {
+                            compiler.BinOpLHS.Operand,
+                            new Operand { Type = OperandType.ImmediateUnsigned, Value = idx }
+                        }
+                    );
+                    return storage;
+                }
+            }
+
+            // FUNCTION
+            if (Functions.FirstOrDefault(x => x.Name == expression.Value) != null
+            && (idx = compiler.FindGlobal(expression.Value)) != -1)
+            {
+                //if (!Compiler.IsSymbolVisible(global))
+                //{
+                //    Compiler.Messages.Add(Message.CannotAccessPrivateSymbol, expression, expression.Value, Compiler.CurrentModule.Name ?? "(root)");
+                //    return null;
+                //}
+
+                var type = compiler.Globals[idx];
+                return new Storage(
+                    null,
+                    new Operand
                     {
-                        compiler.BinOpLHS.Operand,
-                        new Operand { Type = OperandType.ImmediateUnsigned, Value = idx }
-                    }
+                        Type = OperandType.Global,
+                        Value = idx,
+                        Size = type.Type.Size
+                    },
+                    type.Type
                 );
-
-                return storage;
             }
 
             return null;

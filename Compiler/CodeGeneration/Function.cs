@@ -224,7 +224,7 @@ namespace Compiler.CodeGeneration
             }
 
             // Find in parent scope
-            return Module.ResolveIdentifier(compiler, expression);
+            return compiler.ParentContext.ResolveIdentifier(compiler, expression);
         }
 
         public sealed class Parameter
@@ -248,7 +248,8 @@ namespace Compiler.CodeGeneration
     {
         None,
         CCall,
-        StdCall
+        StdCall,
+        ThisCall
     }
 
     internal sealed record Storage(Function Parent, Operand Operand, CobType Type)

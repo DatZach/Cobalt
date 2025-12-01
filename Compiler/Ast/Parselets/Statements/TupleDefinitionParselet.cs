@@ -11,7 +11,7 @@ namespace Compiler.Ast.Parselets.Statements
         {
             var name = parser.Take(TokenType.Identifier);
             var fields = new List<FieldDefinition>();
-            var functions = new List<Expression>();
+            var functions = new List<FunctionExpression>();
 
             parser.Take(TokenType.LeftParen);
             while (parser.MatchAndTakeToken(TokenType.RightParen) == null)
@@ -19,7 +19,7 @@ namespace Compiler.Ast.Parselets.Statements
                 if (parser.Match(TokenType.Function))
                 {
                     // Function decl
-                    var expr = parser.ParseStatement();
+                    var expr = (FunctionExpression)parser.ParseStatement();
                     functions.Add(expr);
                 }
                 else
