@@ -28,12 +28,13 @@ namespace Compiler.CodeGeneration
 
         private IContext CurrentContext => contextStack.Peek();
 
-        private Module CurrentModule { get; set; }
+        public Module CurrentModule { get; private set; } // TODO Make this private again
+
+        public MessageCollection Messages { get; } // TODO Make this private again, somehow
 
         private readonly Module rootModule;
         private readonly Stack<Function> functionStack;
         private readonly Stack<IContext> contextStack; // TODO IScopedContext or something (Struct, Module, Tuple, etc.)
-        private readonly MessageCollection messages;
         
         private Compiler(MessageCollection messages)
         {
@@ -49,7 +50,7 @@ namespace Compiler.CodeGeneration
             AllocateGlobal(new CobVariable(CurrentModule.InitializerFunction.FullyQualifiedName, new CobType(eCobType.Function, 0, tag: CurrentModule.InitializerFunction), false)); // HACK Awful. Global should be scoped to a Module
             Modules.Add(rootModule);
 
-            this.messages = messages ?? throw new ArgumentNullException(nameof(messages));
+            this.Messages = messages ?? throw new ArgumentNullException(nameof(messages));
         }
 
         public Storage? Visit(ScriptExpression expression)
@@ -88,7 +89,7 @@ namespace Compiler.CodeGeneration
             // TODO Remove this rule and implement AllocateModule
             if (CurrentModule != rootModule && module != rootModule)
             {
-                messages.Add(Message.CannotNestModules, expression);
+                Messages.Add(Message.CannotNestModules, expression);
                 return null;
             }
 
@@ -141,9 +142,9 @@ namespace Compiler.CodeGeneration
                 {
                     rhs = decl.Initializer.Accept(this);
                     if (rhs == null)
-                        messages.Add(Message.TypeMismatch, expression, "any", "none");
+                        Messages.Add(Message.TypeMismatch, expression, "any", "none");
                     else if (type != null && !CobType.IsCastable(rhs.Type, type))
-                        messages.Add(Message.TypeMismatch, expression, type, rhs.Type);
+                        Messages.Add(Message.TypeMismatch, expression, type, rhs.Type);
                     else
                         type = rhs.Type;
                 }
@@ -153,7 +154,7 @@ namespace Compiler.CodeGeneration
                 if ((decl.Type == null && decl.Initializer == null)
                 ||  type == null)
                 {
-                    messages.Add(Message.MalformedVarDeclaration, expression);
+                    Messages.Add(Message.MalformedVarDeclaration, expression);
                     continue;
                 }
                 
@@ -233,7 +234,7 @@ namespace Compiler.CodeGeneration
                 }
 
                 if (paths.Count == 0)
-                    messages.Add(Message.CannotFindImport, expression, expression.SourceFile);
+                    Messages.Add(Message.CannotFindImport, expression, expression.SourceFile);
                 else foreach (var path in paths)
                 {
                     // HACK Caching the FileSystem level does not mean the compiler has already seen this file per se
@@ -241,8 +242,8 @@ namespace Compiler.CodeGeneration
                         continue;
 
                     var source = FileSystem.ReadAllText(path);
-                    var tokens = Tokenizer.Tokenize(source, path, messages);
-                    var ast = Parser.Parse(tokens, messages);
+                    var tokens = Tokenizer.Tokenize(source, path, Messages);
+                    var ast = Parser.Parse(tokens, Messages);
                     ast.Accept(this);
                 }
             }
@@ -336,7 +337,7 @@ namespace Compiler.CodeGeneration
                 if (CurrentFunction.ReturnType == eCobType.None)
                     CurrentFunction.ReturnType = rhs.Type;
                 else if (CurrentFunction.ReturnType != rhs.Type)
-                    messages.Add(Message.ReturnTypeMismatch, expression);
+                    Messages.Add(Message.ReturnTypeMismatch, expression);
                 
                 CurrentFunction.Body.EmitO(Opcode.Return, rhs.Operand);
                 rhs.Free();
@@ -358,7 +359,7 @@ namespace Compiler.CodeGeneration
             functionStack.Push(function);
             var evalStorage = expression.Expression.Accept(this);
             if (evalStorage == null || evalStorage.Type == eCobType.None)
-                messages.Add(Message.AotCannotUseVoid, expression);
+                Messages.Add(Message.AotCannotUseVoid, expression);
 
             function.ReturnType = evalStorage.Type;
             CurrentFunction.Body.EmitO(Opcode.Return, evalStorage.Operand);
@@ -388,7 +389,7 @@ namespace Compiler.CodeGeneration
             if (CurrentModule == rootModule && value != null && value.Type == eCobType.Function)
             {
                 if (EntryFunction != null)
-                    messages.Add(Message.CannotRedeclareEntryPoint, expression);
+                    Messages.Add(Message.CannotRedeclareEntryPoint, expression);
                 else
                 {
                     EntryFunction = value.Type.Function;
@@ -419,7 +420,7 @@ namespace Compiler.CodeGeneration
         {
             if (expression.Body == null)
             {
-                messages.Add(Message.MissingFunctionBody, expression);
+                Messages.Add(Message.MissingFunctionBody, expression);
                 return null;
             }
 
@@ -575,12 +576,12 @@ namespace Compiler.CodeGeneration
                 var cobVariable = ResolveVariableFromOperand(a.Operand);
                 if (cobVariable == null)
                 {
-                    messages.Add(Message.IllegalAssignment, expression);
+                    Messages.Add(Message.IllegalAssignment, expression);
                     return null;
                 }
                 else if (!cobVariable.Mutable)
                 {
-                    messages.Add(Message.IllegalAssignmentImmutable, expression);
+                    Messages.Add(Message.IllegalAssignmentImmutable, expression);
                     return null;
                 }
 
@@ -632,7 +633,7 @@ namespace Compiler.CodeGeneration
             var function = functionStorage?.Type.Function;
             if (function == null)
             {
-                messages.Add(Message.CannotCallType, expression, functionStorage?.Type.ToString() ?? "(null)");
+                Messages.Add(Message.CannotCallType, expression, functionStorage?.Type.ToString() ?? "(null)");
                 return null;
             }
             
@@ -641,7 +642,7 @@ namespace Compiler.CodeGeneration
             var arguments = expression.Arguments;
             var hasSpreadParameter = parameters.Count > 0 && parameters[^1].IsSpread;
             if (arguments.Count != parameters.Count && !hasSpreadParameter)
-                messages.Add(Message.FunctionParameterCountMismatch, expression, parameters.Count, arguments.Count);
+                Messages.Add(Message.FunctionParameterCountMismatch, expression, parameters.Count, arguments.Count);
             
             IReadOnlyList<Operand>? operandArguments;
             if (arguments.Count > 0)
@@ -657,7 +658,7 @@ namespace Compiler.CodeGeneration
                     ||  (paramType != null && !CobType.IsCastable(argStorage.Type, paramType.Type)))
                     {
                         aOperandArguments[i] = Operand.None;
-                        messages.Add(Message.TypeMismatch, arguments[i], paramType?.Type, argStorage);
+                        Messages.Add(Message.TypeMismatch, arguments[i], paramType?.Type, argStorage);
                         continue;
                     }
                     
@@ -710,7 +711,7 @@ namespace Compiler.CodeGeneration
             var arguments = expression.Arguments;
             if (arguments.Count != 1)
             {
-                messages.Add(Message.FunctionParameterCountMismatch, expression, 1, arguments.Count);
+                Messages.Add(Message.FunctionParameterCountMismatch, expression, 1, arguments.Count);
                 return null;
             }
 
@@ -773,7 +774,7 @@ namespace Compiler.CodeGeneration
         {
             var storage = CurrentContext.ResolveIdentifier(this, expression);
             if (storage == null)
-                messages.Add(Message.UndeclaredIdentifier, expression, expression.Value);
+                Messages.Add(Message.UndeclaredIdentifier, expression, expression.Value);
 
             return storage;
         }
@@ -943,7 +944,7 @@ namespace Compiler.CodeGeneration
             {
                 if (!Compiler.IsSymbolVisible(global))
                 {
-                    //Compiler.messages.Add(Message.CannotAccessPrivateSymbol, expression, expression.Value, CurrentModule.Name ?? "(root)");
+                    Compiler.Messages.Add(Message.CannotAccessPrivateSymbol, expression, expression.Value, Compiler.CurrentModule.Name ?? "(root)");
                     return null;
                 }
 
