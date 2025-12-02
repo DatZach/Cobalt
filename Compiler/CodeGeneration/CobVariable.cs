@@ -1,4 +1,7 @@
-﻿namespace Compiler.CodeGeneration
+﻿using System.Formats.Asn1;
+using Compiler.Ast.Expressions;
+
+namespace Compiler.CodeGeneration
 {
     internal sealed record CobVariable
     {
@@ -63,7 +66,7 @@
         public readonly static CobType U32 = new(eCobType.Unsigned, 32);
         public readonly static CobType U64 = new(eCobType.Unsigned, 64);
         public readonly static CobType Char = new (eCobType.Unsigned, 8) { AliasName = "char" };
-        public readonly static CobType String = new (eCobType.Array, Char) { AliasName = "string" };
+        public readonly static CobType String = new (eCobType.Array, elementType: Char, tag: StringContext.Instance) { AliasName = "string" };
         public readonly static CobType Module = eCobType.Module;
 
         public string? AliasName { get; init; } // TODO Remove?
@@ -275,5 +278,31 @@
         Lens,
         Function,
         Module
+    }
+
+    internal sealed class StringContext : IContext
+    {
+        public static readonly StringContext Instance = new ();
+
+        public Storage? GetIdentifier(Compiler compiler, IdentifierExpression expression)
+        {
+            if (expression.Value == "Length")
+            {
+                var storage = compiler.CurrentFunction.AllocateStorage(CobType.U64);
+                compiler.CurrentFunction.Body.EmitOA(
+                    Opcode.GetField,
+                    storage.Operand,
+                    new []
+                    {
+                        compiler.BinOpLHS.Operand,
+                        new Operand { Type = OperandType.ImmediateUnsigned, Value = 0 }
+                    }
+                );
+
+                return storage;
+            }
+
+            return null;
+        }
     }
 }

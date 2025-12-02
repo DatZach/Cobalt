@@ -32,7 +32,7 @@ namespace Compiler.Ast.Expressions.Statements
             return visitor.Visit(this);
         }
 
-        public Storage? ResolveIdentifier(CodeGeneration.Compiler compiler, IdentifierExpression expression)
+        public Storage? GetIdentifier(CodeGeneration.Compiler compiler, IdentifierExpression expression)
         {
             // FIELD
             int idx; // TODO THIS IS SO BAD
@@ -66,6 +66,7 @@ namespace Compiler.Ast.Expressions.Statements
             if (Functions.FirstOrDefault(x => x.Name == expression.Value) != null
             && (idx = compiler.FindGlobal(expression.Value)) != -1)
             {
+                // TODO Implement
                 //if (!Compiler.IsSymbolVisible(global))
                 //{
                 //    Compiler.Messages.Add(Message.CannotAccessPrivateSymbol, expression, expression.Value, Compiler.CurrentModule.Name ?? "(root)");

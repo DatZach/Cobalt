@@ -184,7 +184,7 @@ namespace Compiler.CodeGeneration
             return -1;
         }
         
-        public Storage? ResolveIdentifier(Compiler compiler, IdentifierExpression expression)
+        public Storage? GetIdentifier(Compiler compiler, IdentifierExpression expression)
         {
             var value = expression.Value;
             int idx;
@@ -224,7 +224,7 @@ namespace Compiler.CodeGeneration
             }
 
             // Find in parent scope
-            return compiler.ParentContext.ResolveIdentifier(compiler, expression);
+            return compiler.ParentContext.GetIdentifier(compiler, expression);
         }
 
         public sealed class Parameter

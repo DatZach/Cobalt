@@ -9,7 +9,7 @@ using System.Text;
 
 namespace Compiler.CodeGeneration
 {
-    internal sealed class Compiler : IExpressionVisitor<Storage?> // TODO Nullable?
+    internal sealed class Compiler : IExpressionVisitor<Storage?>
     {
         public List<ArtifactExpression> Artifacts { get; }
 
@@ -285,7 +285,7 @@ namespace Compiler.CodeGeneration
                     function.NativeImport = import;
                     AllocateGlobal(new CobVariable(
                         expression.SymbolName,
-                        new CobType(eCobType.Function, -1, tag: function),
+                        new CobType(eCobType.Function, tag: function),
                         false
                     ));
                 }
@@ -481,46 +481,6 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(BinaryOperatorExpression expression)
         {
-            if (expression.Operator == TokenType.Dot)
-            {
-                var lhs = expression.Left.Accept(this);
-                BinOpLHS = lhs;
-
-                // DUMB HACK
-                if (lhs != null && lhs.Type == CobType.String && expression.Right is IdentifierExpression { Value: "Length" })
-                {
-                    var locLen = CurrentFunction.AllocateLocal(new CobVariable("$len", CobType.U64, true));
-                    CurrentFunction.Body.EmitOA(
-                        Opcode.GetField,
-                        new Operand { Type = OperandType.Local, Size = 64, Value = locLen },
-                        new []
-                        {
-                            lhs.Operand,
-                            new Operand { Type = OperandType.ImmediateUnsigned, Size = -1, Value = 0 }
-                        }
-                    );
-                    return new Storage(
-                        CurrentFunction,
-                        new Operand { Type = OperandType.Local, Size = 64, Value = locLen },
-                        CobType.U64
-                    );
-                }
-
-                contextStack.Push((IContext)lhs.Type.Tag);
-                var rhs = expression.Right.Accept(this);
-                contextStack.Pop();
-                lhs.Free();
-
-                BinOpLHS = null;
-                return rhs;
-            }
-
-            var a = expression.Left.Accept(this);
-            var b = expression.Right.Accept(this);
-            var cType = a.Type; // TODO Verify types
-
-            var c = CurrentFunction.AllocateStorage(cType);
-
             // Assignment
             var asnOpcode = expression.Operator switch
             {
@@ -566,8 +526,27 @@ namespace Compiler.CodeGeneration
                 _ => Opcode.None //throw new ArgumentOutOfRangeException(nameof(expression))
             };
 
-            if (cmpOpcode != Opcode.None)
+            if (expression.Operator == TokenType.Dot) // Dereference a.b
             {
+                var lhs = expression.Left.Accept(this);
+                BinOpLHS = lhs;
+
+                contextStack.Push((IContext)lhs.Type.Tag);
+                var rhs = expression.Right.Accept(this);
+                contextStack.Pop();
+                lhs.Free();
+
+                BinOpLHS = null;
+                return rhs;
+            }
+            else if (cmpOpcode != Opcode.None) // Equality == != < > <= >=
+            {
+                var a = expression.Left.Accept(this);
+                var b = expression.Right.Accept(this);
+                var cType = a.Type; // TODO Verify types
+
+                var c = CurrentFunction.AllocateStorage(cType);
+
                 // TODO There needs to be a more concise opcode here
                 var labelElse = CurrentFunction.Body.AllocateLabel();
                 var labelEnd = CurrentFunction.Body.AllocateLabel();
@@ -586,15 +565,31 @@ namespace Compiler.CodeGeneration
                 CurrentFunction.Body.EmitOO(Opcode.Move, c.Operand, const1.Operand);
 
                 labelEnd.Mark();
+
+                a.Free();
+                b.Free();
+
+                return c;
             }
-            else if (artOpcode != Opcode.None)
+            else if (artOpcode != Opcode.None) // Arithmetic + - * /
             {
+                var a = expression.Left.Accept(this);
+                var b = expression.Right.Accept(this);
+
                 CurrentFunction.Body.EmitOO(artOpcode, a.Operand, b.Operand);
-                c.Free();
-                c = a;
+                
+                b.Free();
+
+                return a;
             }
-            else if (asnOpcode != Opcode.None)
+            else if (asnOpcode != Opcode.None) // Assignment = += -=
             {
+                var a = expression.Left.Accept(this);
+                var b = expression.Right.Accept(this);
+                var cType = a.Type; // TODO Verify types
+
+                var c = CurrentFunction.AllocateStorage(cType);
+
                 var cobVariable = ResolveVariableFromOperand(a.Operand);
                 if (cobVariable == null)
                 {
@@ -613,16 +608,14 @@ namespace Compiler.CodeGeneration
                 CurrentFunction.Body.EmitOO(Opcode.Move, a.Operand, c.Operand);
 
                 //CurrentFunction.Body.EmitOO(asnOpcode, a.Operand, b.Operand);
+
+                b.Free();
                 c.Free();
-                c = a;
+
+                return a;
             }
             else
                 throw new ArgumentOutOfRangeException(nameof(expression));
-
-            a.Free();
-            b.Free();
-
-            return c;
         }
 
         public Storage? Visit(BlockExpression expression)
@@ -800,7 +793,7 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(IdentifierExpression expression)
         {
-            var storage = CurrentContext.ResolveIdentifier(this, expression);
+            var storage = CurrentContext.GetIdentifier(this, expression);
             if (storage == null)
                 Messages.Add(Message.UndeclaredIdentifier, expression, expression.Value);
 
@@ -923,101 +916,8 @@ namespace Compiler.CodeGeneration
         public Function Function { get; init; }
     }
 
-    internal sealed class Module : IContext
-    {
-        public Compiler Compiler { get; }
-
-        public string? Name { get; init; }
-
-        public List<Function> Functions { get; } = new ();
-
-        public Dictionary<string, CobVariable> Variables { get; } = new ();
-
-        public List<TupleDefinitionExpression> TupleTypes { get; } = new ();
-
-        public Function InitializerFunction { get; }
-
-        public Module(Compiler compiler, string? name)
-        {
-            Compiler = compiler;
-            Name = name;
-
-            InitializerFunction = AllocateFunction(
-                "$Initializer",
-                CallingConvention.CCall,
-                Array.Empty<Function.Parameter>(),
-                CobType.None
-            );
-        }
-
-        public Function AllocateFunction(
-            string name,
-            CallingConvention callingConvention,
-            IReadOnlyList<Function.Parameter> parameters,
-            CobType returnType
-        ) {
-            var function = new Function(name, this, callingConvention, parameters, returnType);
-            Functions.Add(function);
-
-            return function;
-        }
-
-        public Storage? ResolveIdentifier(Compiler compiler, IdentifierExpression expression)
-        {
-            var value = expression.Value;
-
-            int idx;
-            if (Variables.TryGetValue(value, out var global)
-            && (idx = Compiler.FindGlobal(global)) != -1)
-            {
-                if (!Compiler.IsSymbolVisible(global))
-                {
-                    Compiler.Messages.Add(Message.CannotAccessPrivateSymbol, expression, expression.Value, Compiler.CurrentModule.Name ?? "(root)");
-                    return null;
-                }
-
-                var type = Compiler.Globals[idx];
-                return new Storage(
-                    null,
-                    new Operand
-                    {
-                        Type = OperandType.Global,
-                        Value = idx,
-                        Size = type.Type.Size
-                    },
-                    type.Type
-                );
-            }
-
-            // MODULES
-            // TODO Compiler.Modules should be nested here
-            Module? module;
-            if ((module = Compiler.Modules.FirstOrDefault(x => x.Name == value)) != null)
-            {
-                return new Storage(
-                    null,
-                    Operand.None,
-                    new CobType(eCobType.Module, tag: module)
-                );
-            }
-
-            // TUPLE TYPES
-            TupleDefinitionExpression? tupleType;
-            if ((tupleType = TupleTypes.FirstOrDefault(x => x.Name == value)) != null)
-            {
-                return new Storage(
-                    null,
-                    Operand.None,
-                    new CobType(eCobType.Tuple, tag: tupleType)
-                );
-            }
-
-            return null;
-        }
-    }
-
     internal interface IContext
     {
-        Storage? ResolveIdentifier(Compiler compiler, IdentifierExpression expression);
+        Storage? GetIdentifier(Compiler compiler, IdentifierExpression expression);
     }
 }
