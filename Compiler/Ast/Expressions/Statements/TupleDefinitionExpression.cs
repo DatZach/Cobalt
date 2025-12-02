@@ -98,9 +98,11 @@ namespace Compiler.Ast.Expressions.Statements
                 //var fieldType = field.Type;
 
                 //var storage = compiler.CurrentFunction.AllocateStorage(fieldType);
+                var @this = compiler.BinOpLHS == null ? Operand.This : compiler.BinOpLHS.Operand;
+                
                 compiler.CurrentFunction.Body.EmitOA(
                     Opcode.SetField,
-                    compiler.BinOpLHS.Operand,
+                    @this,
                     new[]
                     {
                         new Operand { Type = OperandType.ImmediateUnsigned, Value = idx },

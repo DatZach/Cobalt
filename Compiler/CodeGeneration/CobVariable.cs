@@ -52,6 +52,33 @@ namespace Compiler.CodeGeneration
         {
             return $"{Name,-25}{Type} = {Value}";
         }
+
+        public CobVariable DeepClone()
+        {
+            object? value;
+            if (Value is CobVariable[] srcStructValue)
+            {
+                var dstStructValue = new CobVariable[srcStructValue.Length];
+                for (int i = 0; i < srcStructValue.Length; ++i)
+                    dstStructValue[i] = srcStructValue[i].DeepClone();
+                value = dstStructValue;
+            }
+            else if (Value is byte[] srcBufferValue)
+            {
+                var dstBufferValue = new byte[srcBufferValue.Length];
+                srcBufferValue.CopyTo(dstBufferValue, 0);
+                value = dstBufferValue;
+            }
+            else if (Value is long srcLongValue)
+                value = srcLongValue;
+            else if (Value == null)
+                value = null;
+            else
+                throw new NotImplementedException();
+
+            // TODO Does Type need to be cloned?
+            return this with { Value = value };
+        }
     }
 
     internal sealed record CobType

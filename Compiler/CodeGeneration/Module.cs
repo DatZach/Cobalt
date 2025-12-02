@@ -98,7 +98,31 @@ namespace Compiler.CodeGeneration
 
         public void SetIdentifier(CodeGeneration.Compiler compiler, IdentifierExpression expression)
         {
+            var value = expression.Value;
 
+            int idx;
+            if (Variables.TryGetValue(value, out var global)
+            &&  (idx = Compiler.FindGlobal(global)) != -1)
+            {
+                if (!Compiler.IsSymbolVisible(global))
+                {
+                    Compiler.Messages.Add(Message.CannotAccessPrivateSymbol, expression, expression.Value, Compiler.CurrentModule.Name ?? "(root)");
+                    return;
+                }
+
+                var type = Compiler.Globals[idx];
+                compiler.CurrentFunction.Body.EmitOO(
+                    Opcode.Move,
+                    new Operand
+                    {
+                        Type = OperandType.Global,
+                        Value = idx,
+                        Size = type.Type.Size
+                    },
+                    compiler.AssignmentSource.Operand
+                );
+                return;
+            }
         }
     }
 }

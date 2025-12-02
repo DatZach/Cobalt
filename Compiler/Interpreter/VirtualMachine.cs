@@ -10,12 +10,12 @@ namespace Compiler.Interpreter
     {
         // TODO Remove function and parameter stacks, poor engineering
         private Function currentFunction => functionStack.Peek(); // TODO Optimize
-        private IReadOnlyList<CobVariable>? currentParameters => parameterStack.Peek(); // TODO Optimize
+        private IList<CobVariable>? currentParameters => parameterStack.Peek(); // TODO Optimize
 
         private bool cmpResult;
 
         private readonly Stack<Function> functionStack;
-        private readonly Stack<IReadOnlyList<CobVariable>?> parameterStack;
+        private readonly Stack<IList<CobVariable>?> parameterStack;
         private readonly Stack<CobVariable> localStack;
         private readonly CobVariable[] registers;
 
@@ -26,14 +26,14 @@ namespace Compiler.Interpreter
         {
             this.compiler = compiler ?? throw new ArgumentNullException(nameof(compiler));
             functionStack = new Stack<Function>(4);
-            parameterStack = new Stack<IReadOnlyList<CobVariable>?>(4);
+            parameterStack = new Stack<IList<CobVariable>?>(4);
             localStack = new Stack<CobVariable>(4);
             registers = new CobVariable[64];
             
             nativeLibrariesProxy = NativeLibrariesProxy.FromCompiler(compiler);
         }
         
-        public CobVariable? ExecuteFunction(Function function, IReadOnlyList<CobVariable>? parameters = null)
+        public CobVariable? ExecuteFunction(Function function, IList<CobVariable>? parameters = null)
         {
             functionStack.Push(function);
             parameterStack.Push(parameters);
@@ -49,12 +49,12 @@ namespace Compiler.Interpreter
                     case Opcode.Call:
                     {
                         var callee = ReadOperandAsFunction(inst.A!);
-                        IReadOnlyList<CobVariable>? calleeParameters;
+                        IList<CobVariable>? calleeParameters;
                         if (callee.Parameters.Count > 0)
                         {
                             var aCalleeParameters = new CobVariable[callee.Parameters.Count];
                             for (int j = 0; j < aCalleeParameters.Length; ++j)
-                                aCalleeParameters[j] = ReadOperand(inst.C![j]);
+                                aCalleeParameters[j] = ReadOperand(inst.C![j]).DeepClone();
 
                             calleeParameters = aCalleeParameters;
                         }
@@ -233,6 +233,9 @@ namespace Compiler.Interpreter
                 case OperandType.Global:
                     compiler.Globals[(int)operand.Value] = value;
                     break;
+                case OperandType.Argument:
+                    currentParameters[(int)operand.Value] = value;
+                    break;
                 default:
                     throw new ArgumentOutOfRangeException();
             }
@@ -307,7 +310,7 @@ namespace Compiler.Interpreter
                 this.proxies = proxies;
             }
 
-            public CobVariable? Invoke(Import native, IReadOnlyList<CobVariable>? parameters)
+            public CobVariable? Invoke(Import native, IList<CobVariable>? parameters)
             {
                 if (native.Function == null)
                     return null;

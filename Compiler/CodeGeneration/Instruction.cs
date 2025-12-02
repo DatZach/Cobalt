@@ -25,6 +25,8 @@ namespace Compiler.CodeGeneration
 
         public static readonly Operand R0 = new() { Type = OperandType.Register, Size = 64, Value = 0 };
 
+        public static readonly Operand This = new() { Type = OperandType.Argument, Value = 0 };
+
         public OperandType Type { get; init; }
 
         public int Size { get; init; }

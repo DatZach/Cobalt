@@ -232,6 +232,24 @@ namespace Compiler.CodeGeneration
             var value = expression.Value;
             int idx;
 
+            // ARGUMENTS
+            if ((idx = FindParameter(value)) != -1)
+            {
+                var type = Parameters[idx];
+                compiler.CurrentFunction.Body.EmitOO(
+                    Opcode.Move,
+                    new Operand
+                    {
+                        Type = OperandType.Argument,
+                        Value = idx,
+                        Size = type.Type.Size
+                    },
+                    compiler.AssignmentSource.Operand
+                );
+
+                return;
+            }
+
             // LOCALS
             if ((idx = FindLocal(value)) != -1)
             {
@@ -246,7 +264,12 @@ namespace Compiler.CodeGeneration
                     },
                     compiler.AssignmentSource.Operand
                 );
+
+                return;
             }
+
+            // Parent Scope
+            compiler.ParentContext.SetIdentifier(compiler, expression);
         }
 
         public sealed class Parameter
