@@ -304,5 +304,10 @@ namespace Compiler.CodeGeneration
 
             return null;
         }
+
+        public void SetIdentifier(CodeGeneration.Compiler compiler, IdentifierExpression expression)
+        {
+
+        }
     }
 }

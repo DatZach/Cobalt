@@ -227,6 +227,28 @@ namespace Compiler.CodeGeneration
             return compiler.ParentContext.GetIdentifier(compiler, expression);
         }
 
+        public void SetIdentifier(CodeGeneration.Compiler compiler, IdentifierExpression expression)
+        {
+            var value = expression.Value;
+            int idx;
+
+            // LOCALS
+            if ((idx = FindLocal(value)) != -1)
+            {
+                var type = Locals[idx];
+                compiler.CurrentFunction.Body.EmitOO(
+                    Opcode.Move,
+                    new Operand
+                    {
+                        Type = OperandType.Local,
+                        Value = idx,
+                        Size = type.Type.Size
+                    },
+                    compiler.AssignmentSource.Operand
+                );
+            }
+        }
+
         public sealed class Parameter
         {
             public string Name { get; }

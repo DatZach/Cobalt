@@ -88,6 +88,28 @@ namespace Compiler.Ast.Expressions.Statements
 
             return null;
         }
+
+        public void SetIdentifier(CodeGeneration.Compiler compiler, IdentifierExpression expression)
+        {
+            int idx;
+            if ((idx = Fields.ToList().FindIndex(x => x.Name == expression.Value)) != -1)
+            {
+                //var field = Fields[idx];
+                //var fieldType = field.Type;
+
+                //var storage = compiler.CurrentFunction.AllocateStorage(fieldType);
+                compiler.CurrentFunction.Body.EmitOA(
+                    Opcode.SetField,
+                    compiler.BinOpLHS.Operand,
+                    new[]
+                    {
+                        new Operand { Type = OperandType.ImmediateUnsigned, Value = idx },
+                        compiler.AssignmentSource.Operand
+                    }
+                );
+                //return storage;
+            }
+        }
     }
 
     internal sealed record FieldDefinition(

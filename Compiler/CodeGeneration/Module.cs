@@ -49,7 +49,7 @@ namespace Compiler.CodeGeneration
 
             int idx;
             if (Variables.TryGetValue(value, out var global)
-                && (idx = Compiler.FindGlobal(global)) != -1)
+            &&  (idx = Compiler.FindGlobal(global)) != -1)
             {
                 if (!Compiler.IsSymbolVisible(global))
                 {
@@ -94,6 +94,11 @@ namespace Compiler.CodeGeneration
             }
 
             return null;
+        }
+
+        public void SetIdentifier(CodeGeneration.Compiler compiler, IdentifierExpression expression)
+        {
+
         }
     }
 }

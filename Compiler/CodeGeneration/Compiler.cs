@@ -478,6 +478,7 @@ namespace Compiler.CodeGeneration
         }
 
         public Storage? BinOpLHS { get; set; } // TODO Probably a hack tbh
+        public Storage? AssignmentSource { get; set; }
 
         public Storage? Visit(BinaryOperatorExpression expression)
         {
@@ -528,7 +529,11 @@ namespace Compiler.CodeGeneration
 
             if (expression.Operator == TokenType.Dot) // Dereference a.b
             {
+                // TODO Clean this up
+                var prevAsnSrc = AssignmentSource;
+                AssignmentSource = null;
                 var lhs = expression.Left.Accept(this);
+                AssignmentSource = prevAsnSrc;
                 BinOpLHS = lhs;
 
                 contextStack.Push((IContext)lhs.Type.Tag);
@@ -566,8 +571,8 @@ namespace Compiler.CodeGeneration
 
                 labelEnd.Mark();
 
-                a.Free();
                 b.Free();
+                a.Free();
 
                 return c;
             }
@@ -584,35 +589,43 @@ namespace Compiler.CodeGeneration
             }
             else if (asnOpcode != Opcode.None) // Assignment = += -=
             {
-                var a = expression.Left.Accept(this);
+                Storage? c;
                 var b = expression.Right.Accept(this);
-                var cType = a.Type; // TODO Verify types
 
-                var c = CurrentFunction.AllocateStorage(cType);
-
-                var cobVariable = ResolveVariableFromOperand(a.Operand);
-                if (cobVariable == null)
+                if (asnOpcode != Opcode.Move)// || expression.Left is IdentifierExpression)
                 {
-                    Messages.Add(Message.IllegalAssignment, expression);
-                    return null;
+                    c = expression.Left.Accept(this);
+                    CurrentFunction.Body.EmitOO(asnOpcode, c.Operand, b.Operand);
+                    AssignmentSource = c;
                 }
-                else if (!cobVariable.Mutable)
+                else
                 {
-                    Messages.Add(Message.IllegalAssignmentImmutable, expression);
-                    return null;
+                    AssignmentSource = b;
+                    c = null;
                 }
 
-                // HACK The mov instructions are because the x86 CG does not support certain mem, mem operands
-                CurrentFunction.Body.EmitOO(Opcode.Move, c.Operand, a.Operand);
-                CurrentFunction.Body.EmitOO(asnOpcode, c.Operand, b.Operand);
-                CurrentFunction.Body.EmitOO(Opcode.Move, a.Operand, c.Operand);
+                var a = expression.Left.Accept(this);
 
-                //CurrentFunction.Body.EmitOO(asnOpcode, a.Operand, b.Operand);
+                a?.Free();
+                c?.Free();
+                b?.Free();
 
-                b.Free();
-                c.Free();
+                AssignmentSource = null;
 
-                return a;
+                return null;
+
+                //    // TODO Reimplement
+                //    var cobVariable = ResolveVariableFromOperand(a.Operand);
+                //    if (cobVariable == null)
+                //    {
+                //        Messages.Add(Message.IllegalAssignment, expression);
+                //        return null;
+                //    }
+                //    else if (!cobVariable.Mutable)
+                //    {
+                //        Messages.Add(Message.IllegalAssignmentImmutable, expression);
+                //        return null;
+                //    }
             }
             else
                 throw new ArgumentOutOfRangeException(nameof(expression));
@@ -765,6 +778,7 @@ namespace Compiler.CodeGeneration
 
             functionStorage.Free();
 
+            // TODO Allocate against the actual type
             var local = CurrentFunction.AllocateLocal(new CobVariable("$tuple$", functionStorage.Type, false)
             {
                 StructValue = new []
@@ -793,11 +807,21 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(IdentifierExpression expression)
         {
-            var storage = CurrentContext.GetIdentifier(this, expression);
-            if (storage == null)
-                Messages.Add(Message.UndeclaredIdentifier, expression, expression.Value);
+            if (AssignmentSource != null)
+            {
+                CurrentContext.SetIdentifier(this, expression);
 
-            return storage;
+                //Messages.Add(Message.UndeclaredIdentifier, expression, expression.Value);
+                return null;
+            }
+            else
+            {
+                var storage = CurrentContext.GetIdentifier(this, expression);
+                if (storage == null)
+                    Messages.Add(Message.UndeclaredIdentifier, expression, expression.Value);
+
+                return storage;
+            }
         }
 
         public Storage? Visit(NumberExpression expression)
@@ -864,17 +888,6 @@ namespace Compiler.CodeGeneration
             return idx;
         }
 
-        private CobVariable? ResolveVariableFromOperand(Operand operand)
-        {
-            return operand.Type switch
-            {
-                OperandType.Local => CurrentFunction?.Locals.ElementAtOrDefault((int)operand.Value),
-                OperandType.Global => Globals.ElementAtOrDefault((int)operand.Value),
-                OperandType.Argument => null, // TODO This should be possible
-                _ => null
-            };
-        }
-
         public bool IsSymbolVisible(CobVariable variable)
         {
             if (CurrentFunction != null && CurrentFunction.Module == CurrentModule)
@@ -919,5 +932,7 @@ namespace Compiler.CodeGeneration
     internal interface IContext
     {
         Storage? GetIdentifier(Compiler compiler, IdentifierExpression expression);
+
+        void SetIdentifier(Compiler compiler, IdentifierExpression expression);
     }
 }
