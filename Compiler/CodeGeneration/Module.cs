@@ -96,7 +96,7 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
-        public void SetIdentifier(CodeGeneration.Compiler compiler, IdentifierExpression expression)
+        public void SetIdentifier(Compiler compiler, IdentifierExpression expression)
         {
             var value = expression.Value;
 
@@ -104,22 +104,16 @@ namespace Compiler.CodeGeneration
             if (Variables.TryGetValue(value, out var global)
             &&  (idx = Compiler.FindGlobal(global)) != -1)
             {
-                if (!Compiler.IsSymbolVisible(global))
-                {
-                    Compiler.Messages.Add(Message.CannotAccessPrivateSymbol, expression, expression.Value, Compiler.CurrentModule.Name ?? "(root)");
-                    return;
-                }
-
-                var type = Compiler.Globals[idx];
+                compiler.ValidateVariableAccess(global, expression);
                 compiler.CurrentFunction.Body.EmitOO(
                     Opcode.Move,
                     new Operand
                     {
                         Type = OperandType.Global,
                         Value = idx,
-                        Size = type.Type.Size
+                        Size = global.Type.Size
                     },
-                    compiler.AssignmentSource.Operand
+                    compiler.AssignmentRHS.Operand
                 );
                 return;
             }

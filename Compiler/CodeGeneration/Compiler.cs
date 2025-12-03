@@ -478,7 +478,7 @@ namespace Compiler.CodeGeneration
         }
 
         public Storage? BinOpLHS { get; set; } // TODO Probably a hack tbh
-        public Storage? AssignmentSource { get; set; }
+        public Storage? AssignmentRHS { get; set; }
 
         public Storage? Visit(BinaryOperatorExpression expression)
         {
@@ -530,16 +530,16 @@ namespace Compiler.CodeGeneration
             if (expression.Operator == TokenType.Dot) // Dereference a.b
             {
                 // TODO Clean this up
-                var prevAsnSrc = AssignmentSource;
-                AssignmentSource = null;
+                var prevAsnSrc = AssignmentRHS;
+                AssignmentRHS = null;
                 var lhs = expression.Left.Accept(this);
-                AssignmentSource = prevAsnSrc;
+                AssignmentRHS = prevAsnSrc;
                 BinOpLHS = lhs;
 
-                contextStack.Push((IContext)lhs.Type.Tag);
+                if (lhs != null) contextStack.Push((IContext)lhs.Type.Tag);
                 var rhs = expression.Right.Accept(this);
-                contextStack.Pop();
-                lhs.Free();
+                if (lhs != null) contextStack.Pop();
+                lhs?.Free();
 
                 BinOpLHS = null;
                 return rhs;
@@ -592,15 +592,15 @@ namespace Compiler.CodeGeneration
                 Storage? c;
                 var b = expression.Right.Accept(this);
 
-                if (asnOpcode != Opcode.Move)// || expression.Left is IdentifierExpression)
+                if (asnOpcode != Opcode.Move)
                 {
                     c = expression.Left.Accept(this);
                     CurrentFunction.Body.EmitOO(asnOpcode, c.Operand, b.Operand);
-                    AssignmentSource = c;
+                    AssignmentRHS = c;
                 }
                 else
                 {
-                    AssignmentSource = b;
+                    AssignmentRHS = b;
                     c = null;
                 }
 
@@ -610,22 +610,9 @@ namespace Compiler.CodeGeneration
                 c?.Free();
                 b?.Free();
 
-                AssignmentSource = null;
+                AssignmentRHS = null;
 
                 return null;
-
-                //    // TODO Reimplement
-                //    var cobVariable = ResolveVariableFromOperand(a.Operand);
-                //    if (cobVariable == null)
-                //    {
-                //        Messages.Add(Message.IllegalAssignment, expression);
-                //        return null;
-                //    }
-                //    else if (!cobVariable.Mutable)
-                //    {
-                //        Messages.Add(Message.IllegalAssignmentImmutable, expression);
-                //        return null;
-                //    }
             }
             else
                 throw new ArgumentOutOfRangeException(nameof(expression));
@@ -773,19 +760,15 @@ namespace Compiler.CodeGeneration
 
         private Storage? VisitTupleAllocation(CallExpression expression, Storage? functionStorage)
         {
-            if (functionStorage == null || functionStorage.Type != eCobType.Tuple)
+            if (functionStorage == null || functionStorage.Type != eCobType.Tuple
+            ||  functionStorage.Type.Tag is not TupleDefinitionExpression tde)
                 return null;
 
             functionStorage.Free();
-
-            // TODO Allocate against the actual type
+            
             var local = CurrentFunction.AllocateLocal(new CobVariable("$tuple$", functionStorage.Type, false)
             {
-                StructValue = new []
-                {
-                    new CobVariable("Start", CobType.U64, true, 0),
-                    new CobVariable("End", CobType.U64, true, 0)
-                }
+                StructValue = tde.Fields.Select(x => new CobVariable(x.Name, x.Type, true)).ToArray()
             });
 
             for (var i = 0; i < expression.Arguments.Count; i++)
@@ -807,7 +790,7 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(IdentifierExpression expression)
         {
-            if (AssignmentSource != null)
+            if (AssignmentRHS != null)
             {
                 CurrentContext.SetIdentifier(this, expression);
 
@@ -894,6 +877,16 @@ namespace Compiler.CodeGeneration
                 return true;
 
             return variable.Name.Length > 0 && char.IsUpper(variable.Name[0]);
+        }
+
+        public void ValidateVariableAccess(CobVariable? variable, IdentifierExpression expression)
+        {
+            if (variable == null)
+                Messages.Add(Message.UndeclaredIdentifier, expression, expression.Value);
+            else if (!IsSymbolVisible(variable))
+                Messages.Add(Message.CannotAccessPrivateSymbol, expression, expression.Value, CurrentModule.Name ?? "(root)");
+            else if (!variable.Mutable)
+                Messages.Add(Message.IllegalAssignmentImmutable, expression);
         }
 
         public static Compiler Compile(ScriptExpression ast, MessageCollection messages)

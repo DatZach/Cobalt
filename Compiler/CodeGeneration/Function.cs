@@ -227,7 +227,7 @@ namespace Compiler.CodeGeneration
             return compiler.ParentContext.GetIdentifier(compiler, expression);
         }
 
-        public void SetIdentifier(CodeGeneration.Compiler compiler, IdentifierExpression expression)
+        public void SetIdentifier(Compiler compiler, IdentifierExpression expression)
         {
             var value = expression.Value;
             int idx;
@@ -235,36 +235,37 @@ namespace Compiler.CodeGeneration
             // ARGUMENTS
             if ((idx = FindParameter(value)) != -1)
             {
-                var type = Parameters[idx];
+                var parameter = Parameters[idx];
+
                 compiler.CurrentFunction.Body.EmitOO(
                     Opcode.Move,
                     new Operand
                     {
                         Type = OperandType.Argument,
                         Value = idx,
-                        Size = type.Type.Size
+                        Size = parameter.Type.Size
                     },
-                    compiler.AssignmentSource.Operand
+                    compiler.AssignmentRHS.Operand
                 );
-
                 return;
             }
 
             // LOCALS
             if ((idx = FindLocal(value)) != -1)
             {
-                var type = Locals[idx];
+                var local = Locals[idx];
+
+                compiler.ValidateVariableAccess(local, expression);
                 compiler.CurrentFunction.Body.EmitOO(
                     Opcode.Move,
                     new Operand
                     {
                         Type = OperandType.Local,
                         Value = idx,
-                        Size = type.Type.Size
+                        Size = local.Type.Size
                     },
-                    compiler.AssignmentSource.Operand
+                    compiler.AssignmentRHS.Operand
                 );
-
                 return;
             }
 

@@ -1,5 +1,4 @@
-﻿using System.Formats.Asn1;
-using Compiler.Ast.Expressions;
+﻿using Compiler.Ast.Expressions;
 
 namespace Compiler.CodeGeneration
 {
@@ -332,9 +331,9 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
-        public void SetIdentifier(CodeGeneration.Compiler compiler, IdentifierExpression expression)
+        public void SetIdentifier(Compiler compiler, IdentifierExpression expression)
         {
-
+            
         }
     }
 }

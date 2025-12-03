@@ -95,9 +95,8 @@ namespace Compiler.Ast.Expressions.Statements
             if ((idx = Fields.ToList().FindIndex(x => x.Name == expression.Value)) != -1)
             {
                 //var field = Fields[idx];
-                //var fieldType = field.Type;
-
-                //var storage = compiler.CurrentFunction.AllocateStorage(fieldType);
+                //compiler.ValidateVariableAccess(field, expression);
+                
                 var @this = compiler.BinOpLHS == null ? Operand.This : compiler.BinOpLHS.Operand;
                 
                 compiler.CurrentFunction.Body.EmitOA(
@@ -106,11 +105,13 @@ namespace Compiler.Ast.Expressions.Statements
                     new[]
                     {
                         new Operand { Type = OperandType.ImmediateUnsigned, Value = idx },
-                        compiler.AssignmentSource.Operand
+                        compiler.AssignmentRHS.Operand
                     }
                 );
-                //return storage;
+                return;
             }
+
+            compiler.ValidateVariableAccess(null, expression);
         }
     }
 
