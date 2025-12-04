@@ -3,6 +3,7 @@
     internal static class PrecedenceTable
     {
         public const int FunctionCall = 14;
+        public const int StructInitializer = 14;
         public const int Dereference = 14;
 
         public const int Multiplication = 13;

@@ -9,6 +9,7 @@ namespace Compiler.Ast.Visitors
         T Visit(ModuleExpression expression);
         T Visit(TypeExpression expression);
         T Visit(TupleDefinitionExpression expression);
+        T Visit(StructDefinitionExpression expression);
         T Visit(VarExpression expression);
         T Visit(ImportExpression expression);
         T Visit(ExportExpression expression);
@@ -22,6 +23,7 @@ namespace Compiler.Ast.Visitors
         T Visit(BinaryOperatorExpression expression);
         T Visit(BlockExpression expression);
         T Visit(CallExpression expression);
+        T Visit(StructInitializerExpression expression);
         T Visit(IdentifierExpression expression);
         T Visit(NumberExpression expression);
         T Visit(StringExpression expression);

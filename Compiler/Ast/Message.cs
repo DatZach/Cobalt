@@ -231,13 +231,13 @@ namespace Compiler.Ast
 
         public static Def CannotCallType { get; } = new(MessageType.Error, "Cannot call type '{0}'");
 
+        public static Def CannotInstantiateType { get; } = new(MessageType.Error, "Cannot instantiate type '{0}'");
+
         public static Def FunctionParameterCountMismatch { get; } = new(MessageType.Error, "Expected {0} parameters, but received {1} instead");
 
         public static Def UndeclaredIdentifier { get; } = new(MessageType.Error, "Undeclared identifier '{0}'");
 
         public static Def TypeMismatch { get; } = new(MessageType.Error, "Expected type '{0}' but recieved uncastable '{1}' instead");
-
-        public static Def IllegalAssignment { get; } = new(MessageType.Error, "Illegal l-value for assignment");
 
         public static Def IllegalAssignmentImmutable { get; } = new(MessageType.Error, "Cannot assign to a 'const' identifier.");
 

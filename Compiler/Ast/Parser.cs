@@ -101,7 +101,11 @@ namespace Compiler.Ast
             else
                 typeName = type.Value;
 
-            return CobType.FromString(typeName);
+            var result = CobType.FromString(typeName);
+            if (result == CobType.None)
+                Messages.Add(Message.IllegalTypeName, type, typeRs ?? typeLs ?? type, typeName);
+
+            return result;
         }
 
         public Token? MatchAndTakeToken(TokenType type)

@@ -136,6 +136,18 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
+        public Storage? Visit(StructDefinitionExpression expression)
+        {
+            CurrentModule.StructTypes.Add(expression);
+
+            contextStack.Push(expression);
+            foreach (var functionExpression in expression.Functions)
+                functionExpression.Accept(this);
+            contextStack.Pop();
+
+            return null;
+        }
+
         public Storage? Visit(VarExpression expression)
         {
             for (var i = 0; i < expression.Declarations.Count; ++i)
@@ -726,7 +738,10 @@ namespace Compiler.CodeGeneration
             if (expression.FunctionExpression is not IdentifierExpression ie)
                 return null;
             
-            if (!CobType.TryParse(ie.Value, out var castType) || castType.Type == eCobType.Tuple)
+            if (!CobType.TryParse(ie.Value, out var castType)
+            ||  castType.Type == eCobType.Tuple
+            ||  castType.Type == eCobType.Struct
+            ||  castType.Type == eCobType.None)
                 return null;
 
             var arguments = expression.Arguments;
@@ -766,12 +781,12 @@ namespace Compiler.CodeGeneration
 
             functionStorage.Free();
             
-            var local = CurrentFunction.AllocateLocal(new CobVariable("$tuple$", functionStorage.Type, false)
+            var local = CurrentFunction.AllocateLocal(new CobVariable("$tuple", functionStorage.Type, false)
             {
                 StructValue = tde.Fields.Select(x => new CobVariable(x.Name, x.Type, true)).ToArray()
             });
 
-            for (var i = 0; i < expression.Arguments.Count; i++)
+            for (var i = 0; i < expression.Arguments.Count; ++i)
             {
                 var argStorage = expression.Arguments[i].Accept(this);
                 CurrentFunction.Body.EmitOA(
@@ -788,6 +803,36 @@ namespace Compiler.CodeGeneration
             return CurrentFunction.AllocateStorage(functionStorage.Type, local);
         }
 
+        public Storage? Visit(StructInitializerExpression expression)
+        {
+            var structTypeStorage = expression.StructTypeExpression.Accept(this);
+            if (structTypeStorage == null || structTypeStorage.Type != eCobType.Struct
+            ||  structTypeStorage.Type.Tag is not StructDefinitionExpression sde)
+            {
+                Messages.Add(Message.CannotInstantiateType, expression.StructTypeExpression, structTypeStorage?.Type.ToString() ?? "(null)");
+                return null;
+            }
+            
+            var local = CurrentFunction.AllocateLocal(new CobVariable("$struct", structTypeStorage.Type, false)
+            {
+                StructValue = sde.Fields.Select(x => new CobVariable(x.Name, x.Type, true)).ToArray()
+            });
+
+            var storage = CurrentFunction.AllocateStorage(structTypeStorage.Type, local);
+
+            if (expression.Assignments != null)
+            {
+                BinOpLHS = storage;
+                contextStack.Push(sde);
+                for (var i = 0; i < expression.Assignments.Count; ++i)
+                    expression.Assignments[i].Accept(this);
+                contextStack.Pop();
+                BinOpLHS = null;
+            }
+
+            return storage;
+        }
+        
         public Storage? Visit(IdentifierExpression expression)
         {
             if (AssignmentRHS != null)

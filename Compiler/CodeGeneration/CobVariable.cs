@@ -54,8 +54,11 @@ namespace Compiler.CodeGeneration
 
         public CobVariable DeepClone()
         {
+            if (Type == eCobType.Struct) // Structs are reference types
+                return this;
+
             object? value;
-            if (Value is CobVariable[] srcStructValue)
+            if (Value is CobVariable[] srcStructValue) // Tuples are value types
             {
                 var dstStructValue = new CobVariable[srcStructValue.Length];
                 for (int i = 0; i < srcStructValue.Length; ++i)
@@ -177,8 +180,6 @@ namespace Compiler.CodeGeneration
                     return new CobType(eCobType.Unsigned, int.Parse(typeName[1..]));
                 if (typeName[0] == 'f' && char.IsDigit(typeName[1]))
                     return new CobType(eCobType.Float, int.Parse(typeName[1..]));
-                if (typeName[0] == 'f' && typeName[1] == 'n')
-                    return new CobType(eCobType.Function, -1);
                 if (typeName == "int")
                     return Int;
                 if (typeName == "uint")
@@ -189,7 +190,8 @@ namespace Compiler.CodeGeneration
                     return aliasType;
             }
 
-            throw new Exception($"Illegal type definition '{typeName}'");
+            return None;
+            //throw new Exception($"Illegal type definition '{typeName}'");
         }
 
         // TODO Wow, what a horrible implementation

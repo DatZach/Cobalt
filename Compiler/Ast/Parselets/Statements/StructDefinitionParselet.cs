@@ -5,7 +5,7 @@ using Compiler.Lexer;
 
 namespace Compiler.Ast.Parselets.Statements
 {
-    internal sealed class TupleDefinitionParselet : IPrefixStatementParselet
+    internal sealed class StructDefinitionParselet : IPrefixStatementParselet
     {
         public Expression Parse(Parser parser, Token token)
         {
@@ -13,8 +13,8 @@ namespace Compiler.Ast.Parselets.Statements
             var fields = new List<FieldDefinition>();
             var functions = new List<FunctionExpression>();
 
-            parser.Take(TokenType.LeftParen);
-            while (parser.MatchAndTakeToken(TokenType.RightParen) == null)
+            parser.Take(TokenType.LeftBrace);
+            while (parser.MatchAndTakeToken(TokenType.RightBrace) == null)
             {
                 if (parser.Match(TokenType.Function))
                 {
@@ -67,10 +67,10 @@ namespace Compiler.Ast.Parselets.Statements
                 parser.MatchAndTakeToken(TokenType.Semicolon);
             }
 
-            var result = new TupleDefinitionExpression(token, name.Value, fields, functions);
+            var result = new StructDefinitionExpression(token, name.Value, fields, functions);
 
             // TODO HACK Should be done in a Compiler FirstPass, not here
-            if (!CobType.TryAddAlias(name.Value, new CobType(eCobType.Tuple, tag: result)))
+            if (!CobType.TryAddAlias(name.Value, new CobType(eCobType.Struct, tag: result)))
                 parser.Messages.Add(Message.SymbolConflictsWithOther, token, name.Value);
 
             return result;

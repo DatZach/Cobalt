@@ -62,6 +62,7 @@ namespace Compiler.CodeGeneration
                 eCobType.Unsigned => OperandType.ImmediateUnsigned,
                 eCobType.Float => OperandType.ImmediateFloat,
                 eCobType.Tuple => OperandType.Local, // ????
+                eCobType.Struct => OperandType.Local, // ????
                 _ => throw new NotSupportedException()
             };
 

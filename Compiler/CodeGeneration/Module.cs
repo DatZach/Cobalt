@@ -16,6 +16,8 @@ namespace Compiler.CodeGeneration
 
         public List<TupleDefinitionExpression> TupleTypes { get; } = new ();
 
+        public List<StructDefinitionExpression> StructTypes { get; } = new ();
+
         public Function InitializerFunction { get; }
 
         public Module(Compiler compiler, string? name)
@@ -90,6 +92,17 @@ namespace Compiler.CodeGeneration
                     null,
                     Operand.None,
                     new CobType(eCobType.Tuple, tag: tupleType)
+                );
+            }
+
+            // TUPLE TYPES
+            StructDefinitionExpression? structType;
+            if ((structType = StructTypes.FirstOrDefault(x => x.Name == value)) != null)
+            {
+                return new Storage(
+                    null,
+                    Operand.None,
+                    new CobType(eCobType.Struct, tag: structType)
                 );
             }
 

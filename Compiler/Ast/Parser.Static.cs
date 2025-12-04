@@ -22,6 +22,7 @@ namespace Compiler.Ast
             Register(TokenType.Identifier, new IdentifierParselet());
             Register(TokenType.LeftParen, new GroupParselet());
             Register(TokenType.LeftParen, new CallParselet());
+            Register(TokenType.LeftBrace, new StructInitializerParselet());
             Register(TokenType.Function, new FunctionParselet());
             Register(TokenType.Semicolon, new EmptyParselet());
 
@@ -54,6 +55,7 @@ namespace Compiler.Ast
             Register(TokenType.Module, new ModuleParselet());
             Register(TokenType.Type, new TypeParselet());
             Register(TokenType.Tuple, new TupleDefinitionParselet());
+            Register(TokenType.Struct, new StructDefinitionParselet());
             Register(TokenType.Const, new VarParselet());
             Register(TokenType.Var, new VarParselet());
             Register(TokenType.Import, new ImportParselet());
