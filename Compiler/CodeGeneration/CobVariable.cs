@@ -81,6 +81,16 @@ namespace Compiler.CodeGeneration
             // TODO Does Type need to be cloned?
             return this with { Value = value };
         }
+
+        public CobVariable? ElementAt(long idx)
+        {
+            if (Value is byte[] bufferValue)
+                return new CobVariable("$elem", CobType.U8, false, bufferValue[idx]);
+            if (Value is string stringValue)
+                return new CobVariable("$elem", CobType.U8, false, stringValue[(int)idx]);
+
+            return null; // TODO Exception?
+        }
     }
 
     internal sealed record CobType

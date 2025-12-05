@@ -109,6 +109,31 @@ namespace Compiler.Interpreter
                         obj.StructValue[fieldIdx] = value;
                         break;
                     }
+                    case Opcode.GetElement:
+                    {
+                        CobVariable? elemValue;
+                        var arr = ReadOperand(inst.C![0]);
+                        var idx = ReadOperand(inst.C![1]);
+                        elemValue = arr.ElementAt(idx.IntValue);
+                        WriteOperand(inst.A!, elemValue);
+                        break;
+                    }
+                    case Opcode.Lens:
+                    {
+                        var src = ReadOperand(inst.B!);
+                        WriteOperand(
+                            inst.A!,
+                            new CobVariable(
+                                "$lens",
+                                new CobType(eCobType.Lens, elementType: CobType.U8), // TODO Get the correct value!
+                                true
+                            )
+                            {
+                                Value = src.Value
+                            }
+                        );
+                        break;
+                    }
                     case Opcode.Push:
                     {
                         localStack.Push(ReadOperand(inst.A!));

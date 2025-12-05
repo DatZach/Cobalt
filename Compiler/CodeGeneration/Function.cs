@@ -85,6 +85,7 @@ namespace Compiler.CodeGeneration
                 eCobType.Unsigned => AllocateRegister(),
                 eCobType.Float => AllocateRegister(),
                 eCobType.Array => AllocateRegister(), // ????????
+                eCobType.Lens => AllocateRegister(), // ??
                 _ => throw new NotSupportedException()
             };
 

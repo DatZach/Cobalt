@@ -556,6 +556,30 @@ namespace Compiler.CodeGeneration
                 BinOpLHS = null;
                 return rhs;
             }
+            else if (expression.Operator == TokenType.BitPack) // BitPack <<|
+            {
+                var a = expression.Left.Accept(this);
+                var b = expression.Right.Accept(this);
+
+                var aIsMutable = a.Operand.Type is OperandType.Global or OperandType.Local
+                                                or OperandType.Argument or OperandType.Register;
+                if (!aIsMutable)
+                {
+                    var c = CurrentFunction.AllocateStorage(a.Type);
+                    CurrentFunction.Body.EmitOO(Opcode.Move, c.Operand, a.Operand);
+                    a.Free();
+                    a = c;
+                }
+
+                int shlValue = b.Type.Size;
+
+                CurrentFunction.Body.EmitOO(Opcode.BitShl, a.Operand, new Operand { Type = OperandType.ImmediateUnsigned, Value = shlValue });
+                CurrentFunction.Body.EmitOO(Opcode.BitOr, a.Operand, b.Operand);
+                
+                b.Free();
+
+                return a;
+            }
             else if (cmpOpcode != Opcode.None) // Equality == != < > <= >=
             {
                 var a = expression.Left.Accept(this);
@@ -593,6 +617,16 @@ namespace Compiler.CodeGeneration
                 var a = expression.Left.Accept(this);
                 var b = expression.Right.Accept(this);
 
+                var aIsMutable = a.Operand.Type is OperandType.Global or OperandType.Local
+                                                or OperandType.Argument or OperandType.Register;
+                if (!aIsMutable)
+                {
+                    var c = CurrentFunction.AllocateStorage(a.Type);
+                    CurrentFunction.Body.EmitOO(Opcode.Move, c.Operand, a.Operand);
+                    a.Free();
+                    a = c;
+                }
+                
                 CurrentFunction.Body.EmitOO(artOpcode, a.Operand, b.Operand);
                 
                 b.Free();
@@ -850,6 +884,39 @@ namespace Compiler.CodeGeneration
 
                 return storage;
             }
+        }
+
+        public Storage? Visit(LensExpression expression)
+        {
+            var target = expression.Expression.Accept(this);
+
+            var storage = CurrentFunction.AllocateStorage(new CobType(eCobType.Lens, elementType: expression.ElementType));
+            CurrentFunction.Body.EmitOO(Opcode.Lens, storage.Operand, target.Operand);
+            target.Free();
+
+            return storage;
+        }
+
+        public Storage? Visit(ArrayExpression expression)
+        {
+            var source = expression.Left.Accept(this);
+            var index = expression.Index.Accept(this);
+
+            var storage = CurrentFunction.AllocateStorage(source.Type.ElementType);
+            CurrentFunction.Body.EmitOA(
+                Opcode.GetElement,
+                storage.Operand,
+                new []
+                {
+                    source.Operand,
+                    index.Operand
+                }
+            );
+
+            index.Free();
+            source.Free();
+
+            return storage;
         }
 
         public Storage? Visit(NumberExpression expression)

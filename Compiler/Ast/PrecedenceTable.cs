@@ -2,6 +2,8 @@
 {
     internal static class PrecedenceTable
     {
+        public const int ArrayIndexer = 15;
+
         public const int FunctionCall = 14;
         public const int StructInitializer = 14;
         public const int Dereference = 14;
@@ -15,6 +17,7 @@
 
         public const int BitLeftShift = 11;
         public const int BitRightShift = 11;
+        public const int BitPack = 11;
 
         public const int BitXor = 10;
         public const int BitAnd = 9;

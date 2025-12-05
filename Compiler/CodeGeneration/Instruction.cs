@@ -1,5 +1,4 @@
-﻿
-namespace Compiler.CodeGeneration
+﻿namespace Compiler.CodeGeneration
 {
     internal sealed record Instruction
     {
@@ -69,6 +68,9 @@ namespace Compiler.CodeGeneration
         Move,
         GetField,
         SetField,
+        GetElement,
+        SetElement,
+        Lens,
 
         Call,
         Return,

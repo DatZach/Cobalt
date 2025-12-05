@@ -23,6 +23,7 @@ namespace Compiler.Ast
             Register(TokenType.LeftParen, new GroupParselet());
             Register(TokenType.LeftParen, new CallParselet());
             Register(TokenType.LeftBrace, new StructInitializerParselet());
+            Register(TokenType.LeftSquare, new ArrayParselet());
             Register(TokenType.Function, new FunctionParselet());
             Register(TokenType.Semicolon, new EmptyParselet());
 
@@ -37,6 +38,7 @@ namespace Compiler.Ast
             Register(TokenType.BitAnd, new BinaryOperatorParselet(PrecedenceTable.BitAnd));
             Register(TokenType.BitOr, new BinaryOperatorParselet(PrecedenceTable.BitOr));
             Register(TokenType.BitXor, new BinaryOperatorParselet(PrecedenceTable.BitXor));
+            Register(TokenType.BitPack, new BinaryOperatorParselet(PrecedenceTable.BitPack));
             Register(TokenType.Dot, new BinaryOperatorParselet(PrecedenceTable.Dereference));
 
             Register(TokenType.Equals, new BinaryOperatorParselet(PrecedenceTable.ConditionalExpression));
@@ -62,6 +64,7 @@ namespace Compiler.Ast
             Register(TokenType.Export, new ExportParselet());
             Register(TokenType.Return, new ReturnParselet());
             Register(TokenType.AheadOfTime, new AheadOfTimeParselet());
+            Register(TokenType.Lens, new LensParselet());
             Register(TokenType.If, new IfParselet());
             Register(TokenType.FatArrow, new FatArrowParselet());
         }

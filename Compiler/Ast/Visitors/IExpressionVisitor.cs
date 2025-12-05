@@ -25,6 +25,8 @@ namespace Compiler.Ast.Visitors
         T Visit(CallExpression expression);
         T Visit(StructInitializerExpression expression);
         T Visit(IdentifierExpression expression);
+        T Visit(LensExpression expression);
+        T Visit(ArrayExpression expression);
         T Visit(NumberExpression expression);
         T Visit(StringExpression expression);
         T Visit(EmptyExpression expression);
