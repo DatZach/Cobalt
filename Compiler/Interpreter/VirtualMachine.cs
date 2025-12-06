@@ -1,5 +1,6 @@
 ﻿using Compiler.CodeGeneration;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using OperandType = Compiler.CodeGeneration.OperandType;
@@ -11,8 +12,6 @@ namespace Compiler.Interpreter
         // TODO Remove function and parameter stacks, poor engineering
         private Function currentFunction => functionStack.Peek(); // TODO Optimize
         private IList<CobVariable>? currentParameters => parameterStack.Peek(); // TODO Optimize
-
-        private bool cmpResult;
 
         private readonly Stack<Function> functionStack;
         private readonly Stack<IList<CobVariable>?> parameterStack;
@@ -54,7 +53,7 @@ namespace Compiler.Interpreter
                         {
                             var aCalleeParameters = new CobVariable[callee.Parameters.Count];
                             for (int j = 0; j < aCalleeParameters.Length; ++j)
-                                aCalleeParameters[j] = ReadOperand(inst.C![j]).DeepClone();
+                                aCalleeParameters[j] = ReadOperand(inst.D![j]).DeepClone();
 
                             calleeParameters = aCalleeParameters;
                         }
@@ -66,8 +65,8 @@ namespace Compiler.Interpreter
                             ? nativeLibrariesProxy.Invoke(native, calleeParameters)
                             : ExecuteFunction(callee, calleeParameters);
 
-                        if (result != null)
-                            WriteOperand(Operand.R0, result);
+                        if (callee.ReturnType != eCobType.None)
+                            WriteOperand(inst.B!, result);
                         break;
                     }
                     case Opcode.Return:
@@ -85,8 +84,8 @@ namespace Compiler.Interpreter
                     case Opcode.GetField:
                     {
                         CobVariable? fieldValue;
-                        var obj = ReadOperand(inst.C![0]);
-                        var fieldIdx = inst.C![1].Value;
+                        var obj = ReadOperand(inst.B!);
+                        var fieldIdx = inst.C!.Value;
                         if (fieldIdx == 0)
                         {
                             // TODO Strings are actually Structs, when implemented in the language this hack can be fixed
@@ -104,16 +103,16 @@ namespace Compiler.Interpreter
                     case Opcode.SetField:
                     {
                         var obj = ReadOperand(inst.A!);
-                        var fieldIdx = inst.C![0].Value;
-                        var value = ReadOperand(inst.C![1]);
+                        var fieldIdx = inst.B!.Value;
+                        var value = ReadOperand(inst.C!);
                         obj.StructValue[fieldIdx] = value;
                         break;
                     }
-                    case Opcode.GetElement:
+                    case Opcode.GetElem:
                     {
                         CobVariable? elemValue;
-                        var arr = ReadOperand(inst.C![0]);
-                        var idx = ReadOperand(inst.C![1]);
+                        var arr = ReadOperand(inst.B!);
+                        var idx = ReadOperand(inst.C!);
                         elemValue = arr.ElementAt(idx.IntValue);
                         WriteOperand(inst.A!, elemValue);
                         break;
@@ -217,15 +216,17 @@ namespace Compiler.Interpreter
                     case Opcode.Compare:
                     {
                         // TODO Proper implementation supporting all types
-                        var a = ReadOperand(inst.A!).IntValue;
-                        var b = ReadOperand(inst.B!).IntValue;
-                        cmpResult = a == b;
+                        var a = ReadOperand(inst.B!).IntValue;
+                        var b = ReadOperand(inst.C!).IntValue;
+                        var c = b - a;
+                        WriteOperand(inst.A!, c.ToCobVariable());
                         break;
                     }
-                    case Opcode.JumpIfFalse:
+                    case Opcode.JumpIfF:
                     {
-                        if (!cmpResult)
-                            i = currentFunction.Body.Labels[(int)inst.A!.Value].Location - 1;
+                        var cmp = ReadOperand(inst.A!).IntValue;
+                        if (cmp != 0)
+                            i = currentFunction.Body.Labels[(int)inst.B!.Value].Location - 1;
                         break;
                     }
                     case Opcode.Jump:

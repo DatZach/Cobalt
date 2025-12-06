@@ -93,17 +93,24 @@ namespace Compiler.Ast
         public CobType ParseTypeName()
         {
             string typeName;
+
+            Token endToken;
             var type = Take(TokenType.Identifier);
-            var typeLs = MatchAndTakeToken(TokenType.LeftSquare);
-            var typeRs = MatchAndTakeToken(TokenType.RightSquare);
-            if (typeLs != null && typeRs != null)
+            if (Match(TokenType.LeftSquare))
+            {
+                Take(TokenType.LeftSquare);
+                endToken = Take(TokenType.RightSquare);
                 typeName = type.Value + "[]";
+            }
             else
+            {
                 typeName = type.Value;
+                endToken = type;
+            }
 
             var result = CobType.FromString(typeName);
             if (result == CobType.None)
-                Messages.Add(Message.IllegalTypeName, type, typeRs ?? typeLs ?? type, typeName);
+                Messages.Add(Message.IllegalTypeName, type, endToken, typeName);
 
             return result;
         }

@@ -49,14 +49,11 @@ namespace Compiler.Ast.Expressions.Statements
                 else
                 {
                     var storage = compiler.CurrentFunction.AllocateStorage(fieldType);
-                    compiler.CurrentFunction.Body.EmitOA(
+                    compiler.CurrentFunction.Body.Emit(
                         Opcode.GetField,
                         storage.Operand,
-                        new[]
-                        {
-                            compiler.BinOpLHS.Operand,
-                            new Operand { Type = OperandType.ImmediateUnsigned, Value = idx }
-                        }
+                        compiler.BinOpLHS.Operand,
+                        new Operand { Type = OperandType.ImmediateUnsigned, Value = idx }
                     );
                     return storage;
                 }
@@ -99,14 +96,11 @@ namespace Compiler.Ast.Expressions.Statements
                 
                 var @this = compiler.BinOpLHS == null ? Operand.This : compiler.BinOpLHS.Operand;
                 
-                compiler.CurrentFunction.Body.EmitOA(
+                compiler.CurrentFunction.Body.Emit(
                     Opcode.SetField,
                     @this,
-                    new[]
-                    {
-                        new Operand { Type = OperandType.ImmediateUnsigned, Value = idx },
-                        compiler.AssignmentRHS.Operand
-                    }
+                    new Operand { Type = OperandType.ImmediateUnsigned, Value = idx },
+                    compiler.AssignmentRHS.Operand
                 );
                 return;
             }

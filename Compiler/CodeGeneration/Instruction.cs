@@ -8,13 +8,19 @@
 
         public Operand? B { get; init; }
 
-        public IReadOnlyList<Operand>? C { get; init; }
+        public Operand? C { get; init; }
+
+        public IReadOnlyList<Operand>? D { get; init; }
 
         public override string ToString()
         {
-            var cStr = C != null ? string.Join(", ", C) : null;
-
-            return $"{Opcode,-10}{A?.ToString() ?? ""} {B?.ToString() ?? ""} {cStr ?? ""}";
+            if (D != null && B != null) return $"{Opcode,-10}{A}, {B}, ({string.Join(", ", D)})";
+            if (D != null) return $"{Opcode,-10}{A}, ({string.Join(", ", D)})";
+            if (C != null) return $"{Opcode,-10}{A}, {B}, {C}";
+            if (B != null) return $"{Opcode,-10}{A}, {B}";
+            if (A != null) return $"{Opcode,-10}{A}";
+            
+            return Opcode.ToString();
         }
     }   
 
@@ -52,7 +58,7 @@
                            + "."
                            + Size.ToString("G");
                 case OperandType.Label:
-                    return $".label{Value}";
+                    return $".label_{Value}";
                 default:
                     throw new ArgumentOutOfRangeException();
             }
@@ -68,20 +74,20 @@
         Move,
         GetField,
         SetField,
-        GetElement,
-        SetElement,
+        GetElem,
+        SetElem,
         Lens,
 
         Call,
         Return,
 
         Compare,
-        JumpIfFalse,
-        JumpIfTrue,
-        JumpIfLessThan,
-        JumpIfLessThanOrEqual,
-        JumpIfMoreThan,
-        JumpIfMoreThanOrEqual,
+        JumpIfF,
+        JumpIfT,
+        JumpIfLT,
+        JumpIfLTE,
+        JumpIfGT,
+        JumpIfGTE,
         Jump,
         
         Push, // TODO Remove

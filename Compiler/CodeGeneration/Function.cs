@@ -239,7 +239,7 @@ namespace Compiler.CodeGeneration
             {
                 var parameter = Parameters[idx];
 
-                compiler.CurrentFunction.Body.EmitOO(
+                compiler.CurrentFunction.Body.Emit(
                     Opcode.Move,
                     new Operand
                     {
@@ -258,7 +258,7 @@ namespace Compiler.CodeGeneration
                 var local = Locals[idx];
 
                 compiler.ValidateVariableAccess(local, expression);
-                compiler.CurrentFunction.Body.EmitOO(
+                compiler.CurrentFunction.Body.Emit(
                     Opcode.Move,
                     new Operand
                     {

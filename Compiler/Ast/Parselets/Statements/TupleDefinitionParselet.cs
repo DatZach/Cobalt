@@ -29,37 +29,7 @@ namespace Compiler.Ast.Parselets.Statements
                     parser.Take(TokenType.Colon);
                     var fieldType = parser.ParseTypeName();
 
-                    Expression? getterExpression, setterExpression;
-                    if (parser.MatchAndTakeToken(TokenType.FatArrow) != null)
-                    {
-                        getterExpression = parser.ParseExpression();
-                        setterExpression = null;
-                    }
-                    else if (parser.MatchAndTakeToken(TokenType.LeftBrace) != null)
-                    {
-                        getterExpression = setterExpression = null;
-                        while (parser.MatchAndTakeToken(TokenType.RightBrace) != null)
-                        {
-                            var keyword = parser.Take(TokenType.Identifier);
-                            if (keyword.Value == "get")
-                            {
-                                parser.Take(TokenType.FatArrow);
-                                getterExpression = parser.ParseExpression();
-                            }
-                            else if (keyword.Value == "set")
-                            {
-                                parser.Take(TokenType.FatArrow);
-                                setterExpression = parser.ParseExpression();
-                            }
-                            else
-                                parser.Messages.Add(Message.UnexpectedToken2, keyword, "get or set", keyword.Value);
-                        }
-                    }
-                    else
-                    {
-                        getterExpression = null;
-                        setterExpression = null;
-                    }
+                    StructDefinitionParselet.ParseGetterSetters(parser, out var getterExpression, out var setterExpression);
 
                     fields.Add(new FieldDefinition(fieldName.Value, fieldType, getterExpression, setterExpression));
                 }

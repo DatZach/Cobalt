@@ -118,7 +118,7 @@ namespace Compiler.CodeGeneration
             &&  (idx = Compiler.FindGlobal(global)) != -1)
             {
                 compiler.ValidateVariableAccess(global, expression);
-                compiler.CurrentFunction.Body.EmitOO(
+                compiler.CurrentFunction.Body.Emit(
                     Opcode.Move,
                     new Operand
                     {

@@ -123,9 +123,8 @@ namespace Compiler
                     {
                         var inst = function.Body.Instructions[i];
                         // TODO Optimize to Dictionary before?
-                        var label = function.Body.Labels.FirstOrDefault(x => x.Location == i);
-                        if (label != null)
-                            Console.WriteLine($"\t\t.{function.FullyQualifiedName}_{label.Index}:");
+                        foreach (var label in function.Body.Labels.Where(x => x.Location == i))
+                            Console.WriteLine($"\t\t{label}:"); // {function.FullyQualifiedName}_
 
                         Console.WriteLine($"\t\t\t{inst}");
                     }

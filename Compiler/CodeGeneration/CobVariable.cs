@@ -327,14 +327,11 @@ namespace Compiler.CodeGeneration
             if (expression.Value == "Length")
             {
                 var storage = compiler.CurrentFunction.AllocateStorage(CobType.U64);
-                compiler.CurrentFunction.Body.EmitOA(
+                compiler.CurrentFunction.Body.Emit(
                     Opcode.GetField,
                     storage.Operand,
-                    new []
-                    {
-                        compiler.BinOpLHS.Operand,
-                        new Operand { Type = OperandType.ImmediateUnsigned, Value = 0 }
-                    }
+                    compiler.BinOpLHS.Operand,
+                    new Operand { Type = OperandType.ImmediateUnsigned, Value = 0 }
                 );
 
                 return storage;

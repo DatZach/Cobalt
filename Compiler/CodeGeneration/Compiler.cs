@@ -60,6 +60,31 @@ namespace Compiler.CodeGeneration
             contextStack.Push(rootModule);
             functionStack.Push(CurrentModule.InitializerFunction);
 
+            // HACK For now, let's just call a special function that invokes all our module initializers in the
+            //      program's entry point
+            //Function? hackInitializers;
+            //if (contextStack.Count == 1)
+            //{
+            //    hackInitializers = CurrentModule.AllocateFunction(
+            //        "$HACK_InvokeInitializers",
+            //        CallingConvention.CCall,
+            //        Array.Empty<Function.Parameter>(),
+            //        CobType.None
+            //    );
+            //    var varGlobHackInitializers = new CobVariable(hackInitializers.FullyQualifiedName,
+            //        new CobType(eCobType.Function, 0, tag: hackInitializers), false);
+            //    var globHackInitializers =
+            //        AllocateGlobal(varGlobHackInitializers); // HACK Awful. Global should be scoped to a Module
+
+            //    CurrentFunction.Body.Emit(
+            //        Opcode.Call,
+            //        new Operand { Type = OperandType.Global, Value = globHackInitializers },
+            //        Array.Empty<Operand>()
+            //    );
+            //}
+            //else
+            //    hackInitializers = null;
+
             var expressions = expression.Expressions;
             for (int i = 0; i < expressions.Count; ++i)
                 expressions[i].Accept(this);
@@ -71,6 +96,27 @@ namespace Compiler.CodeGeneration
             CurrentModule = contextStack.Count == 0 ? rootModule : contextStack.Peek() as Module ?? rootModule;
             
             functionStack.Pop();
+
+            // HACK Populate the initializers calling function from earlier now that we know what all our modules
+            //      are
+            //if (hackInitializers != null)
+            //{
+            //    foreach (var module in Modules)
+            //    {
+            //        hackInitializers.Body.Emit(
+            //            Opcode.Call,
+            //            new Operand
+            //            {
+            //                Type = OperandType.Global,
+            //                Value = FindGlobal(module.InitializerFunction.FullyQualifiedName),
+            //                Size = 0
+            //            },
+            //            Array.Empty<Operand>()
+            //        );
+            //    }
+
+            //    hackInitializers.Body.Emit(Opcode.Return);
+            //}
 
             return null;
         }
@@ -186,7 +232,7 @@ namespace Compiler.CodeGeneration
                         var global = AllocateGlobal(variable);
                         if (rhs != null)
                         {
-                            CurrentFunction.Body.EmitOO( // TODO Not right
+                            CurrentFunction.Body.Emit( // TODO Not right
                                 Opcode.Move,
                                 new Operand { Type = OperandType.Global, Value = global, Size = type.Size },
                                 rhs.Operand
@@ -198,7 +244,7 @@ namespace Compiler.CodeGeneration
                         var local = CurrentFunction.AllocateLocal(variable);
                         if (rhs != null)
                         {
-                            CurrentFunction.Body.EmitOO(
+                            CurrentFunction.Body.Emit(
                                 Opcode.Move,
                                 new Operand { Type = OperandType.Local, Value = local, Size = type.Size },
                                 rhs.Operand
@@ -264,6 +310,12 @@ namespace Compiler.CodeGeneration
                     var tokens = Tokenizer.Tokenize(source, path, Messages);
                     var ast = Parser.Parse(tokens, Messages);
                     ast.Accept(this);
+
+                    //if (initializerFunction != null)
+                    //{
+                    //    CurrentFunction.Body.Emit(Opcode.Call, initializerFunction.Operand, Array.Empty<Operand>());
+                    //    initializerFunction.Free();
+                    //}
                 }
             }
             else
@@ -326,20 +378,15 @@ namespace Compiler.CodeGeneration
             var endLabel = CurrentFunction.Body.AllocateLabel();
 
             var conditional = expression.Conditional.Accept(this);
-            CurrentFunction.Body.EmitOO(
-                Opcode.Compare,
-                conditional.Operand,
-                new Operand { Type = OperandType.ImmediateUnsigned, Size = 32, Value = 0 }
-            );
-            CurrentFunction.Body.EmitL(Opcode.JumpIfFalse, elseLabel);
-            conditional.Free();
+            CurrentFunction.Body.Emit(Opcode.JumpIfF, conditional.Operand, elseLabel);
+            conditional?.Free();
 
             expression.Then.Accept(this)?.Free();
-            CurrentFunction.Body.EmitL(Opcode.Jump, endLabel);
+            CurrentFunction.Body.Emit(Opcode.Jump, endLabel);
 
             elseLabel.Mark();
 
-            expression.Else?.Accept(this);
+            expression.Else?.Accept(this)?.Free();
 
             endLabel.Mark();
 
@@ -358,7 +405,7 @@ namespace Compiler.CodeGeneration
                 else if (CurrentFunction.ReturnType != rhs.Type)
                     Messages.Add(Message.ReturnTypeMismatch, expression);
                 
-                CurrentFunction.Body.EmitO(Opcode.Return, rhs.Operand);
+                CurrentFunction.Body.Emit(Opcode.Return, rhs.Operand);
                 rhs.Free();
             }
 
@@ -381,7 +428,7 @@ namespace Compiler.CodeGeneration
                 Messages.Add(Message.AotCannotUseVoid, expression);
 
             function.ReturnType = evalStorage.Type;
-            CurrentFunction.Body.EmitO(Opcode.Return, evalStorage.Operand);
+            CurrentFunction.Body.Emit(Opcode.Return, evalStorage.Operand);
             evalStorage.Free();
 
             function.ReturnLabel.Mark();
@@ -393,7 +440,7 @@ namespace Compiler.CodeGeneration
 
             var reg = CurrentFunction.AllocateStorage(function.ReturnType);
             // TODO EmitOI
-            CurrentFunction.Body.EmitOO(
+            CurrentFunction.Body.Emit(
                 Opcode.Move,
                 reg.Operand,
                 new Operand { Type = OperandType.ImmediateUnsigned, Size = -1, Value = result.IntValue } // TODO Not right
@@ -412,23 +459,6 @@ namespace Compiler.CodeGeneration
                 else
                 {
                     EntryFunction = value.Type.Function;
-                    foreach (var module in Modules)
-                    {
-                        foreach (var label in EntryFunction.Body.Labels)
-                            label.Location++; // HACK DO NOT MODIFY LABEL LOCATIONS
-
-                        // HACK DO NOT INJECT MODULE INITIALIZER CALLS LIKE THIS
-                        EntryFunction.Body.Instructions.Insert(0, new Instruction
-                        {
-                            Opcode = Opcode.Call,
-                            A = new Operand
-                            {
-                                Type = OperandType.Global, Value = FindGlobal(module.InitializerFunction.FullyQualifiedName),
-                                Size = 0
-                            },
-                            C = Array.Empty<Operand>()
-                        });
-                    }
                 }
             }
 
@@ -473,9 +503,9 @@ namespace Compiler.CodeGeneration
             contextStack.Push(function);
             
             expression.Body.Accept(this);
-            function.Body.Emit(Opcode.Return); // TODO Error if not all paths return
-
+            
             function.ReturnLabel.Mark();
+            function.Body.Emit(Opcode.Return); // TODO Error if not all paths return
 
             contextStack.Pop();
             functionStack.Pop();
@@ -514,12 +544,12 @@ namespace Compiler.CodeGeneration
             // Equality
             var cmpOpcode = expression.Operator switch
             {
-                TokenType.Equals => Opcode.JumpIfFalse,
-                TokenType.NotEquals => Opcode.JumpIfTrue,
-                TokenType.MoreThan => Opcode.JumpIfLessThanOrEqual,
-                TokenType.MoreThanOrEquals => Opcode.JumpIfLessThan,
-                TokenType.LessThan => Opcode.JumpIfMoreThanOrEqual,
-                TokenType.LessThanOrEquals => Opcode.JumpIfMoreThan,
+                TokenType.Equals => Opcode.JumpIfF,
+                TokenType.NotEquals => Opcode.JumpIfT,
+                TokenType.MoreThan => Opcode.JumpIfLTE,
+                TokenType.MoreThanOrEquals => Opcode.JumpIfLT,
+                TokenType.LessThan => Opcode.JumpIfGTE,
+                TokenType.LessThanOrEquals => Opcode.JumpIfGT,
                 _ => Opcode.None
             };
 
@@ -566,15 +596,15 @@ namespace Compiler.CodeGeneration
                 if (!aIsMutable)
                 {
                     var c = CurrentFunction.AllocateStorage(a.Type);
-                    CurrentFunction.Body.EmitOO(Opcode.Move, c.Operand, a.Operand);
+                    CurrentFunction.Body.Emit(Opcode.Move, c.Operand, a.Operand);
                     a.Free();
                     a = c;
                 }
 
                 int shlValue = b.Type.Size;
 
-                CurrentFunction.Body.EmitOO(Opcode.BitShl, a.Operand, new Operand { Type = OperandType.ImmediateUnsigned, Value = shlValue });
-                CurrentFunction.Body.EmitOO(Opcode.BitOr, a.Operand, b.Operand);
+                CurrentFunction.Body.Emit(Opcode.BitShl, a.Operand, new Operand { Type = OperandType.ImmediateUnsigned, Value = shlValue });
+                CurrentFunction.Body.Emit(Opcode.BitOr, a.Operand, b.Operand);
                 
                 b.Free();
 
@@ -584,28 +614,10 @@ namespace Compiler.CodeGeneration
             {
                 var a = expression.Left.Accept(this);
                 var b = expression.Right.Accept(this);
-                var cType = a.Type; // TODO Verify types
 
-                var c = CurrentFunction.AllocateStorage(cType);
+                var c = CurrentFunction.AllocateStorage(CobType.Int);
 
-                // TODO There needs to be a more concise opcode here
-                var labelElse = CurrentFunction.Body.AllocateLabel();
-                var labelEnd = CurrentFunction.Body.AllocateLabel();
-
-                CurrentFunction.Body.EmitOO(Opcode.Move, c.Operand, a.Operand);
-                CurrentFunction.Body.EmitOO(Opcode.Compare, c.Operand, b.Operand);
-                CurrentFunction.Body.EmitL(cmpOpcode, labelElse);
-
-                var const0 = CurrentFunction.AllocateStorage(CobType.Int, 0);
-                CurrentFunction.Body.EmitOO(Opcode.Move, c.Operand, const0.Operand);
-                CurrentFunction.Body.EmitL(Opcode.Jump, labelEnd);
-
-                labelElse.Mark();
-
-                var const1 = CurrentFunction.AllocateStorage(CobType.Int, 1);
-                CurrentFunction.Body.EmitOO(Opcode.Move, c.Operand, const1.Operand);
-
-                labelEnd.Mark();
+                CurrentFunction.Body.Emit(Opcode.Compare, c.Operand, a.Operand, b.Operand);
 
                 b.Free();
                 a.Free();
@@ -622,12 +634,12 @@ namespace Compiler.CodeGeneration
                 if (!aIsMutable)
                 {
                     var c = CurrentFunction.AllocateStorage(a.Type);
-                    CurrentFunction.Body.EmitOO(Opcode.Move, c.Operand, a.Operand);
+                    CurrentFunction.Body.Emit(Opcode.Move, c.Operand, a.Operand);
                     a.Free();
                     a = c;
                 }
                 
-                CurrentFunction.Body.EmitOO(artOpcode, a.Operand, b.Operand);
+                CurrentFunction.Body.Emit(artOpcode, a.Operand, b.Operand);
                 
                 b.Free();
 
@@ -641,7 +653,7 @@ namespace Compiler.CodeGeneration
                 if (asnOpcode != Opcode.Move)
                 {
                     c = expression.Left.Accept(this);
-                    CurrentFunction.Body.EmitOO(asnOpcode, c.Operand, b.Operand);
+                    CurrentFunction.Body.Emit(asnOpcode, c.Operand, b.Operand);
                     AssignmentRHS = c;
                 }
                 else
@@ -670,6 +682,9 @@ namespace Compiler.CodeGeneration
             {
                 var expr = expression.Expressions[i];
                 var retStorage = expr.Accept(this);
+                if (expr is FatArrowExpression)
+                    return retStorage;
+
                 retStorage?.Free();
             }
 
@@ -697,7 +712,11 @@ namespace Compiler.CodeGeneration
                 Messages.Add(Message.CannotCallType, expression, functionStorage?.Type.ToString() ?? "(null)");
                 return null;
             }
-            
+
+            var retStorage = function.ReturnType != eCobType.None
+                           ? CurrentFunction.AllocateStorage(function.ReturnType)
+                           : null;
+
             // ARGUMENTS
             var parameters = function.Parameters;
             var arguments = expression.Arguments;
@@ -741,7 +760,7 @@ namespace Compiler.CodeGeneration
                 operandArguments = null;
             
             // CALL
-            CurrentFunction.Body.EmitOA(Opcode.Call, functionStorage.Operand, operandArguments);
+            CurrentFunction.Body.Emit(Opcode.Call, functionStorage.Operand, retStorage?.Operand, operandArguments);
 
             // CLEANUP
             functionStorage.Free(); // function reg
@@ -749,19 +768,6 @@ namespace Compiler.CodeGeneration
             {
                 for (int i = 0; i < operandArguments.Count; ++i) // argument regs
                     CurrentFunction.FreeStorage(operandArguments[i]);
-            }
-
-            // RETURN VALUE
-            Storage? retStorage = null;
-            if (function.ReturnType != eCobType.None)
-            {
-                // TODO Can't just clobber reg 0 like this
-                retStorage = CurrentFunction.AllocateStorage(function.ReturnType);
-                CurrentFunction.Body.EmitOO(
-                    Opcode.Move,
-                    retStorage.Operand,
-                    new Operand { Type = OperandType.Register, Value = 0, Size = function.ReturnType.Size }
-                );
             }
 
             return retStorage;
@@ -823,14 +829,11 @@ namespace Compiler.CodeGeneration
             for (var i = 0; i < expression.Arguments.Count; ++i)
             {
                 var argStorage = expression.Arguments[i].Accept(this);
-                CurrentFunction.Body.EmitOA(
+                CurrentFunction.Body.Emit(
                     Opcode.SetField,
                     new Operand { Type = OperandType.Local, Value = local },
-                    new []
-                    {
-                        new Operand { Type = OperandType.ImmediateUnsigned, Value = i },
-                        argStorage.Operand
-                    }
+                    new Operand { Type = OperandType.ImmediateUnsigned, Value = i },
+                    argStorage.Operand
                 );
             }
 
@@ -891,7 +894,7 @@ namespace Compiler.CodeGeneration
             var target = expression.Expression.Accept(this);
 
             var storage = CurrentFunction.AllocateStorage(new CobType(eCobType.Lens, elementType: expression.ElementType));
-            CurrentFunction.Body.EmitOO(Opcode.Lens, storage.Operand, target.Operand);
+            CurrentFunction.Body.Emit(Opcode.Lens, storage.Operand, target.Operand);
             target.Free();
 
             return storage;
@@ -899,22 +902,39 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(ArrayExpression expression)
         {
+            Storage? storage = null;
+
             var source = expression.Left.Accept(this);
             var index = expression.Index.Accept(this);
 
-            var storage = CurrentFunction.AllocateStorage(source.Type.ElementType);
-            CurrentFunction.Body.EmitOA(
-                Opcode.GetElement,
-                storage.Operand,
-                new []
-                {
+            if (source == null)
+                Messages.Add(Message.CannotIndexType, expression, "none");
+            else if (source.Type == eCobType.Struct && source.Type.Tag is StructDefinitionExpression sde
+            &&  sde.Indexer != null)
+            {
+                sde.Indexer.Index = index;
+                BinOpLHS = source; // ???
+                contextStack.Push(sde.Indexer);
+                storage = sde.Indexer.GetterExpression.Accept(this);
+                contextStack.Pop();
+                BinOpLHS = null;
+                sde.Indexer.Index = null;
+            }
+            else if (source.Type == eCobType.Lens)
+            {
+                storage = CurrentFunction.AllocateStorage(source.Type.ElementType);
+                CurrentFunction.Body.Emit(
+                    Opcode.GetElem,
+                    storage.Operand,
                     source.Operand,
                     index.Operand
-                }
-            );
+                );
+            }
+            else
+                Messages.Add(Message.CannotIndexType, expression, source.Type);
 
-            index.Free();
-            source.Free();
+            index?.Free();
+            source?.Free();
 
             return storage;
         }

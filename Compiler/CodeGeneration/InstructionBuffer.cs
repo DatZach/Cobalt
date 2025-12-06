@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace Compiler.CodeGeneration
+﻿namespace Compiler.CodeGeneration
 {
     internal sealed class InstructionBuffer
     {
@@ -44,7 +42,7 @@ namespace Compiler.CodeGeneration
             });
         }
 
-        public void EmitO(Opcode opcode, Operand oprA)
+        public void Emit(Opcode opcode, Operand oprA)
         {
             instructions.Add(new Instruction
             {
@@ -53,7 +51,7 @@ namespace Compiler.CodeGeneration
             });
         }
 
-        public void EmitOO(Opcode opcode, Operand oprA, Operand oprB)
+        public void Emit(Opcode opcode, Operand oprA, Operand oprB)
         {
             instructions.Add(new Instruction
             {
@@ -63,22 +61,54 @@ namespace Compiler.CodeGeneration
             });
         }
 
-        public void EmitOA(Opcode opcode, Operand oprA, IReadOnlyList<Operand>? argC)
+        public void Emit(Opcode opcode, Operand oprA, Operand oprB, Operand oprC)
         {
             instructions.Add(new Instruction
             {
                 Opcode = opcode,
                 A = oprA,
-                C = argC
+                B = oprB,
+                C = oprC
             });
         }
 
-        public void EmitL(Opcode opcode, Label label)
+        public void Emit(Opcode opcode, Operand oprA, IReadOnlyList<Operand>? argD)
         {
             instructions.Add(new Instruction
             {
                 Opcode = opcode,
-                A = new Operand { Type = OperandType.Label, Size = - 1, Value = label.Index }
+                A = oprA,
+                D = argD
+            });
+        }
+
+        public void Emit(Opcode opcode, Operand oprA, Operand oprB, IReadOnlyList<Operand>? argD)
+        {
+            instructions.Add(new Instruction
+            {
+                Opcode = opcode,
+                A = oprA,
+                B = oprB,
+                D = argD
+            });
+        }
+
+        public void Emit(Opcode opcode, Label label)
+        {
+            instructions.Add(new Instruction
+            {
+                Opcode = opcode,
+                A = new Operand { Type = OperandType.Label, Size = -1, Value = label.Index }
+            });
+        }
+
+        public void Emit(Opcode opcode, Operand oprA, Label label)
+        {
+            instructions.Add(new Instruction
+            {
+                Opcode = opcode,
+                A = oprA,
+                B = new Operand { Type = OperandType.Label, Size = -1, Value = label.Index }
             });
         }
     }
@@ -87,7 +117,7 @@ namespace Compiler.CodeGeneration
     {
         public int Index { get; } // TODO Better names
 
-        public int Location { get; /* private */ set; } // HACK TODO Need to be private
+        public int Location { get; private set; }
 
         private readonly InstructionBuffer buffer;
 
@@ -104,6 +134,11 @@ namespace Compiler.CodeGeneration
             if (Location >= 0) throw new InvalidOperationException("Label is already marked");
 
             Location = buffer.Instructions.Count;
+        }
+
+        public override string ToString()
+        {
+            return $".label_{Index}";
         }
     }
 }

@@ -229,6 +229,8 @@ namespace Compiler.Ast
 
         public static Def AotCannotUseVoid { get; } = new(MessageType.Error, "Cannot evaluate ahead-of-time expression on void");
 
+        public static Def CannotIndexType { get; } = new(MessageType.Error, "Cannot index type '{0}'");
+
         public static Def CannotCallType { get; } = new(MessageType.Error, "Cannot call type '{0}'");
 
         public static Def CannotInstantiateType { get; } = new(MessageType.Error, "Cannot instantiate type '{0}'");

@@ -335,9 +335,9 @@ namespace Compiler.CodeGeneration.Platform
                         if (inst.C != null)
                         {
                             //for (int j = 0; j < inst.C.Count; ++j)
-                            for (int j = inst.C.Count - 1; j >= 0; --j)
+                            for (int j = inst.D!.Count - 1; j >= 0; --j)
                             {
-                                var operand = inst.C[j];
+                                var operand = inst.D[j];
                                 EmitMove(
                                     buffer,
                                     new Operand { Type = OperandType.Argument, Value = j, Size = BusWidth },
@@ -513,22 +513,22 @@ namespace Compiler.CodeGeneration.Platform
                     case Opcode.Jump:
                         buffer.EmitLine($"jmp {GetOperandString(inst.A)}");
                         break;
-                    case Opcode.JumpIfFalse:
+                    case Opcode.JumpIfF:
                         buffer.EmitLine($"jne {GetOperandString(inst.A)}");
                         break;
-                    case Opcode.JumpIfTrue:
+                    case Opcode.JumpIfT:
                         buffer.EmitLine($"je {GetOperandString(inst.A)}");
                         break;
-                    case Opcode.JumpIfLessThanOrEqual:
+                    case Opcode.JumpIfLTE:
                         buffer.EmitLine($"jle {GetOperandString(inst.A)}");
                         break;
-                    case Opcode.JumpIfLessThan:
+                    case Opcode.JumpIfLT:
                         buffer.EmitLine($"jl {GetOperandString(inst.A)}");
                         break;
-                    case Opcode.JumpIfMoreThanOrEqual:
+                    case Opcode.JumpIfGTE:
                         buffer.EmitLine($"jge {GetOperandString(inst.A)}");
                         break;
-                    case Opcode.JumpIfMoreThan:
+                    case Opcode.JumpIfGT:
                         buffer.EmitLine($"jg {GetOperandString(inst.A)}");
                         break;
 
