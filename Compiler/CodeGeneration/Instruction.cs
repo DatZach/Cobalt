@@ -69,8 +69,6 @@
     {
         None,
 
-        Stash,
-        Unstash,
         Move,
         GetField,
         SetField,
@@ -90,24 +88,25 @@
         JumpIfGTE,
         Jump,
         
-        Push, // TODO Remove
-        Pop,  // TODO Remove
-        
         Add,
         Sub,
         Mul,
+        Pow,
         Div,
+        DivCeil,
+        DivFloor,
+        Rem,
         Mod,
-        BitShr,
         BitShl,
+        BitShr,
+        BitRol,
+        BitRor,
         BitAnd,
-        BitXor,
         BitOr,
+        BitXor,
         BitNot,
-        Negate,
-        LogicalNot,
-        LogicalAnd,
-        LogicalOr
+        CondAnd,
+        CondOr
     }
 
     public enum OperandType : byte

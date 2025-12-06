@@ -211,7 +211,7 @@ namespace Compiler.CodeGeneration.Platform
                         break;
                     }
                     case eCobType.Function:
-                        buffer.EmitLine($"rdata_{i} dd {(global.Type.Function.NativeImport != null ? global.Type.Function.Name : global.Type.Function.FullyQualifiedName)}");
+                        buffer.EmitLine($"rdata_{i} dd {(global.Type.TagFunction.NativeImport != null ? global.Type.TagFunction.Name : global.Type.TagFunction.FullyQualifiedName)}");
                         break;
                     case eCobType.Array: // T[] -> Struct { Length: uint, Data: ... }
                     {
@@ -833,9 +833,9 @@ namespace Compiler.CodeGeneration.Platform
                     var global = compiler.Globals[(int)operand.Value];
                     if (global.Type == eCobType.Function)
                     {
-                        if (global.Type.Function.NativeImport != null)
-                            return "[" + global.Type.Function.Name + "]";
-                        return global.Type.Function.FullyQualifiedName;
+                        if (global.Type.TagFunction.NativeImport != null)
+                            return "[" + global.Type.TagFunction.Name + "]";
+                        return global.Type.TagFunction.FullyQualifiedName;
                     }
                     if (global.Type == eCobType.Array)
                         return $"rdata_{operand.Value} + 8"; // TODO HACK SHould not + 8 this

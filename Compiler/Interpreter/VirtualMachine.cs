@@ -1,6 +1,6 @@
-﻿using Compiler.CodeGeneration;
+﻿using System.Numerics;
+using Compiler.CodeGeneration;
 using System.Reflection;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using OperandType = Compiler.CodeGeneration.OperandType;
@@ -15,7 +15,6 @@ namespace Compiler.Interpreter
 
         private readonly Stack<Function> functionStack;
         private readonly Stack<IList<CobVariable>?> parameterStack;
-        private readonly Stack<CobVariable> localStack;
         private readonly CobVariable[] registers;
 
         private readonly NativeLibrariesProxy nativeLibrariesProxy;
@@ -26,7 +25,6 @@ namespace Compiler.Interpreter
             this.compiler = compiler ?? throw new ArgumentNullException(nameof(compiler));
             functionStack = new Stack<Function>(4);
             parameterStack = new Stack<IList<CobVariable>?>(4);
-            localStack = new Stack<CobVariable>(4);
             registers = new CobVariable[64];
             
             nativeLibrariesProxy = NativeLibrariesProxy.FromCompiler(compiler);
@@ -38,9 +36,9 @@ namespace Compiler.Interpreter
             parameterStack.Push(parameters);
 
             var instructions = function.Body.Instructions;
-            for (int i = 0; i < instructions.Count; ++i)
+            for (int ip = 0; ip < instructions.Count; ++ip)
             {
-                var inst = instructions[i];
+                var inst = instructions[ip];
                 switch (inst.Opcode)
                 {
                     case Opcode.None:
@@ -117,6 +115,11 @@ namespace Compiler.Interpreter
                         WriteOperand(inst.A!, elemValue);
                         break;
                     }
+                    case Opcode.SetElem:
+                    {
+                        throw new NotImplementedException();
+                        break;
+                    }
                     case Opcode.Lens:
                     {
                         var src = ReadOperand(inst.B!);
@@ -133,16 +136,6 @@ namespace Compiler.Interpreter
                         );
                         break;
                     }
-                    case Opcode.Push:
-                    {
-                        localStack.Push(ReadOperand(inst.A!));
-                        break;
-                    }
-                    case Opcode.Pop:
-                    {
-                        WriteOperand(inst.A!, localStack.Pop());
-                        break;
-                    }
                     case Opcode.BitShr:
                     {
                         var a = ReadOperand(inst.A!).IntValue;
@@ -154,6 +147,22 @@ namespace Compiler.Interpreter
                     {
                         var a = ReadOperand(inst.A!).IntValue;
                         a <<= (int)ReadOperand(inst.B!).IntValue;
+                        WriteOperand(inst.A!, a.ToCobVariable());
+                        break;
+                    }
+                    case Opcode.BitRol:
+                    {
+                        var a = ReadOperand(inst.A!).IntValue;
+                        var b = ReadOperand(inst.B!).IntValue;
+                        a = (long)BitOperations.RotateLeft((ulong)a, (int)b);
+                        WriteOperand(inst.A!, a.ToCobVariable());
+                        break;
+                    }
+                    case Opcode.BitRor:
+                    {
+                        var a = ReadOperand(inst.A!).IntValue;
+                        var b = ReadOperand(inst.B!).IntValue;
+                        a = (long)BitOperations.RotateRight((ulong)a, (int)b);
                         WriteOperand(inst.A!, a.ToCobVariable());
                         break;
                     }
@@ -178,6 +187,13 @@ namespace Compiler.Interpreter
                         WriteOperand(inst.A!, a.ToCobVariable());
                         break;
                     }
+                    case Opcode.BitNot:
+                    {
+                        var a = ReadOperand(inst.A!).IntValue;
+                        a = ~a;
+                        WriteOperand(inst.A!, a.ToCobVariable());
+                        break;
+                    }
                     case Opcode.Add:
                     {
                         var a = ReadOperand(inst.A!).IntValue;
@@ -199,8 +215,32 @@ namespace Compiler.Interpreter
                         WriteOperand(inst.A!, a.ToCobVariable());
                         break;
                     }
+                    case Opcode.Pow:
+                    {
+                        var a = ReadOperand(inst.A!).IntValue;
+                        var e = ReadOperand(inst.B!).IntValue;
+                        a = (long)Math.Pow(a, e);
+                        WriteOperand(inst.A!, a.ToCobVariable());
+                        break;
+                    }
                     case Opcode.Div:
                     {
+                        var a = ReadOperand(inst.A!).IntValue;
+                        a /= ReadOperand(inst.B!).IntValue;
+                        WriteOperand(inst.A!, a.ToCobVariable());
+                        break;
+                    }
+                    case Opcode.DivCeil:
+                    {
+                        var a = ReadOperand(inst.A!).IntValue;
+                        var b = ReadOperand(inst.B!).IntValue;
+                        a = (a + b - 1) / b;
+                        WriteOperand(inst.A!, a.ToCobVariable());
+                        break;
+                    }
+                    case Opcode.DivFloor:
+                    {
+                        // TODO Technically only useful for floats
                         var a = ReadOperand(inst.A!).IntValue;
                         a /= ReadOperand(inst.B!).IntValue;
                         WriteOperand(inst.A!, a.ToCobVariable());
@@ -213,6 +253,14 @@ namespace Compiler.Interpreter
                         WriteOperand(inst.A!, a.ToCobVariable());
                         break;
                     }
+                    case Opcode.Rem:
+                    {
+                        var a = ReadOperand(inst.A!).IntValue;
+                        var b = ReadOperand(inst.A!).IntValue;
+                        a = ((a % b) + b) % b;
+                        WriteOperand(inst.A!, a.ToCobVariable());
+                        break;
+                    }
                     case Opcode.Compare:
                     {
                         // TODO Proper implementation supporting all types
@@ -222,16 +270,67 @@ namespace Compiler.Interpreter
                         WriteOperand(inst.A!, c.ToCobVariable());
                         break;
                     }
+                    case Opcode.CondAnd:
+                    {
+                        var a = ReadOperand(inst.B!).IntValue;
+                        var b = ReadOperand(inst.C!).IntValue;
+                        var c = a == 0 && b == 0 ? 1L : 0L;
+                        WriteOperand(inst.A!, c.ToCobVariable());
+                        break;
+                    }
+                    case Opcode.CondOr:
+                    {
+                        var a = ReadOperand(inst.B!).IntValue;
+                        var b = ReadOperand(inst.C!).IntValue;
+                        var c = a == 0|| b == 0 ? 1L : 0L;
+                        WriteOperand(inst.A!, c.ToCobVariable());
+                        break;
+                    }
                     case Opcode.JumpIfF:
                     {
                         var cmp = ReadOperand(inst.A!).IntValue;
                         if (cmp != 0)
-                            i = currentFunction.Body.Labels[(int)inst.B!.Value].Location - 1;
+                            ip = currentFunction.Body.Labels[(int)inst.B!.Value].Location - 1;
+                        break;
+                    }
+                    case Opcode.JumpIfT:
+                    {
+                        var cmp = ReadOperand(inst.A!).IntValue;
+                        if (cmp == 0)
+                            ip = currentFunction.Body.Labels[(int)inst.B!.Value].Location - 1;
+                        break;
+                    }
+                    case Opcode.JumpIfLT:
+                    {
+                        var cmp = ReadOperand(inst.A!).IntValue;
+                        if (cmp < 0)
+                            ip = currentFunction.Body.Labels[(int)inst.B!.Value].Location - 1;
+                        break;
+                    }
+                    case Opcode.JumpIfLTE:
+                    {
+                        var cmp = ReadOperand(inst.A!).IntValue;
+                        if (cmp <= 0)
+                            ip = currentFunction.Body.Labels[(int)inst.B!.Value].Location - 1;
+                        break;
+                    }
+                    case Opcode.JumpIfGT:
+                    {
+                        var cmp = ReadOperand(inst.A!).IntValue;
+                        if (cmp > 0)
+                            ip = currentFunction.Body.Labels[(int)inst.B!.Value].Location - 1;
+                        break;
+                    }
+                    case Opcode.JumpIfGTE:
+                    {
+                        var cmp = ReadOperand(inst.A!).IntValue;
+                        if (cmp >= 0)
+                            ip = currentFunction.Body.Labels[(int)inst.B!.Value].Location - 1;
                         break;
                     }
                     case Opcode.Jump:
                     {
-                        i = currentFunction.Body.Labels[(int)inst.A!.Value].Location - 1;
+                        ip = currentFunction.Body.Labels[(int)inst.A!.Value].Location - 1;
                         break;
                     }
                     default:
@@ -301,7 +400,7 @@ namespace Compiler.Interpreter
                 {
                     var global = compiler.Globals[(int)registers[operand.Value].IntValue];
                     if (global.Type == eCobType.Function)
-                        return global.Type.Function;
+                        return global.Type.TagFunction;
 
                     throw new InvalidOperationException($"VM Expected function but received {global.Type} instead");
                 }
@@ -310,7 +409,7 @@ namespace Compiler.Interpreter
                 {
                     var global = compiler.Globals[(int)operand.Value];
                     if (global.Type == eCobType.Function)
-                        return global.Type.Function;
+                        return global.Type.TagFunction;
 
                     throw new InvalidOperationException($"VM Expected function but received {global.Type} instead");
                 }

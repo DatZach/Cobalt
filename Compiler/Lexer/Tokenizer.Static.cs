@@ -47,11 +47,10 @@ namespace Compiler.Lexer
                 ["&"] = TokenType.BitAnd,
                 ["|"] = TokenType.BitOr,
                 ["^"] = TokenType.BitXor,
-                ["~"] = TokenType.BitNot,
                 ["!"] = TokenType.Not,
 
-                ["&&"] = TokenType.And,
-                ["||"] = TokenType.Or,
+                ["&&"] = TokenType.ConditionalAnd,
+                ["||"] = TokenType.ConditionalOr,
                 ["=="] = TokenType.Equals,
                 ["!="] = TokenType.NotEquals,
                 ["<="] = TokenType.LessThanOrEquals,

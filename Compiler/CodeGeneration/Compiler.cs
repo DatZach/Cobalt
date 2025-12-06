@@ -361,7 +361,7 @@ namespace Compiler.CodeGeneration
         public Storage? Visit(ExportExpression expression)
         {
             var function = expression.FunctionExpression.Accept(this);
-            var export = new Export { Function = function.Type.Function };
+            var export = new Export { Function = function.Type.TagFunction };
             Exports.Add(export);
             return null;
         }
@@ -377,9 +377,11 @@ namespace Compiler.CodeGeneration
             var elseLabel = CurrentFunction.Body.AllocateLabel();
             var endLabel = CurrentFunction.Body.AllocateLabel();
 
+            ++conditionalStack;
             var conditional = expression.Conditional.Accept(this);
             CurrentFunction.Body.Emit(Opcode.JumpIfF, conditional.Operand, elseLabel);
             conditional?.Free();
+            --conditionalStack;
 
             expression.Then.Accept(this)?.Free();
             CurrentFunction.Body.Emit(Opcode.Jump, endLabel);
@@ -458,7 +460,7 @@ namespace Compiler.CodeGeneration
                     Messages.Add(Message.CannotRedeclareEntryPoint, expression);
                 else
                 {
-                    EntryFunction = value.Type.Function;
+                    EntryFunction = value.Type.TagFunction;
                 }
             }
 
@@ -521,6 +523,7 @@ namespace Compiler.CodeGeneration
 
         public Storage? BinOpLHS { get; set; } // TODO Probably a hack tbh
         public Storage? AssignmentRHS { get; set; }
+        private int conditionalStack;
 
         public Storage? Visit(BinaryOperatorExpression expression)
         {
@@ -531,9 +534,14 @@ namespace Compiler.CodeGeneration
                 TokenType.SubtractAssign => Opcode.Sub,
                 TokenType.MultiplyAssign => Opcode.Mul,
                 TokenType.DivideAssign => Opcode.Div,
+                TokenType.DivideCeilAssign => Opcode.DivCeil,
+                TokenType.DivideFloorAssign => Opcode.DivFloor,
+                TokenType.RemainderAssign => Opcode.Rem,
                 TokenType.ModuloAssign => Opcode.Mod,
                 TokenType.BitLeftShiftAssign => Opcode.BitShl,
                 TokenType.BitRightShiftAssign => Opcode.BitShr,
+                TokenType.BitLeftRotateAssign => Opcode.BitRol,
+                TokenType.BitRightRotateAssign => Opcode.BitRor,
                 TokenType.BitAndAssign => Opcode.BitAnd,
                 TokenType.BitOrAssign => Opcode.BitOr,
                 TokenType.BitXorAssign => Opcode.BitXor,
@@ -546,10 +554,18 @@ namespace Compiler.CodeGeneration
             {
                 TokenType.Equals => Opcode.JumpIfF,
                 TokenType.NotEquals => Opcode.JumpIfT,
-                TokenType.MoreThan => Opcode.JumpIfLTE,
-                TokenType.MoreThanOrEquals => Opcode.JumpIfLT,
                 TokenType.LessThan => Opcode.JumpIfGTE,
                 TokenType.LessThanOrEquals => Opcode.JumpIfGT,
+                TokenType.MoreThan => Opcode.JumpIfLTE,
+                TokenType.MoreThanOrEquals => Opcode.JumpIfLT,
+                _ => Opcode.None
+            };
+
+            // Conditionals
+            var cndOpcode = expression.Operator switch
+            {
+                TokenType.ConditionalAnd => Opcode.CondAnd,
+                TokenType.ConditionalOr => Opcode.CondOr,
                 _ => Opcode.None
             };
 
@@ -559,10 +575,16 @@ namespace Compiler.CodeGeneration
                 TokenType.Add => Opcode.Add,
                 TokenType.Subtract => Opcode.Sub,
                 TokenType.Multiply => Opcode.Mul,
+                TokenType.Exponent => Opcode.Pow,
                 TokenType.Divide => Opcode.Div,
+                TokenType.DivideCeil => Opcode.DivCeil,
+                TokenType.DivideFloor => Opcode.DivFloor,
+                TokenType.Remainder => Opcode.Rem,
                 TokenType.Modulo => Opcode.Mod,
                 TokenType.BitLeftShift => Opcode.BitShl,
                 TokenType.BitRightShift => Opcode.BitShr,
+                TokenType.BitLeftRotate => Opcode.BitRol,
+                TokenType.BitRightRotate => Opcode.BitRor,
                 TokenType.BitAnd => Opcode.BitAnd,
                 TokenType.BitOr => Opcode.BitOr,
                 TokenType.BitXor => Opcode.BitXor,
@@ -610,6 +632,19 @@ namespace Compiler.CodeGeneration
 
                 return a;
             }
+            else if (cndOpcode != Opcode.None) // Conditional && ||
+            {
+                var a = expression.Left.Accept(this);
+                var b = expression.Right.Accept(this);
+                var c = CurrentFunction.AllocateStorage(CobType.Boolean);
+
+                CurrentFunction.Body.Emit(cndOpcode, c.Operand, a.Operand, b.Operand);
+
+                b.Free();
+                a.Free();
+
+                return c;
+            }
             else if (cmpOpcode != Opcode.None) // Equality == != < > <= >=
             {
                 var a = expression.Left.Accept(this);
@@ -618,6 +653,19 @@ namespace Compiler.CodeGeneration
                 var c = CurrentFunction.AllocateStorage(CobType.Int);
 
                 CurrentFunction.Body.Emit(Opcode.Compare, c.Operand, a.Operand, b.Operand);
+
+                if (conditionalStack == 0)
+                {
+                    var elseLabel = CurrentFunction.Body.AllocateLabel();
+                    var endLabel = CurrentFunction.Body.AllocateLabel();
+
+                    CurrentFunction.Body.Emit(cmpOpcode, c.Operand, elseLabel);
+                    CurrentFunction.Body.Emit(Opcode.Move, c.Operand, new Operand { Type = OperandType.ImmediateUnsigned, Value = 1 });
+                    CurrentFunction.Body.Emit(Opcode.Jump, endLabel);
+                    elseLabel.Mark();
+                    CurrentFunction.Body.Emit(Opcode.Move, c.Operand, new Operand { Type = OperandType.ImmediateUnsigned, Value = 0 });
+                    endLabel.Mark();
+                }
 
                 b.Free();
                 a.Free();
@@ -706,7 +754,7 @@ namespace Compiler.CodeGeneration
             if (tuple != null)
                 return tuple;
 
-            var function = functionStorage?.Type.Function;
+            var function = functionStorage?.Type.TagFunction;
             if (function == null)
             {
                 Messages.Add(Message.CannotCallType, expression, functionStorage?.Type.ToString() ?? "(null)");

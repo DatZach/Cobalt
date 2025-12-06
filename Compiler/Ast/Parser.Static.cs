@@ -31,26 +31,49 @@ namespace Compiler.Ast
             Register(TokenType.Add, new BinaryOperatorParselet(PrecedenceTable.Addition));
             Register(TokenType.Subtract, new BinaryOperatorParselet(PrecedenceTable.Subtraction));
             Register(TokenType.Multiply, new BinaryOperatorParselet(PrecedenceTable.Multiplication));
+            Register(TokenType.Exponent, new BinaryOperatorParselet(PrecedenceTable.Exponent));
             Register(TokenType.Divide, new BinaryOperatorParselet(PrecedenceTable.Division));
+            Register(TokenType.DivideCeil, new BinaryOperatorParselet(PrecedenceTable.Division));
+            Register(TokenType.DivideFloor, new BinaryOperatorParselet(PrecedenceTable.Division));
+            Register(TokenType.Remainder, new BinaryOperatorParselet(PrecedenceTable.Modulo));
             Register(TokenType.Modulo, new BinaryOperatorParselet(PrecedenceTable.Modulo));
             Register(TokenType.BitLeftShift, new BinaryOperatorParselet(PrecedenceTable.BitLeftShift));
             Register(TokenType.BitRightShift, new BinaryOperatorParselet(PrecedenceTable.BitRightShift));
+            Register(TokenType.BitLeftRotate, new BinaryOperatorParselet(PrecedenceTable.BitLeftShift));
+            Register(TokenType.BitRightRotate, new BinaryOperatorParselet(PrecedenceTable.BitRightShift));
+            Register(TokenType.BitPack, new BinaryOperatorParselet(PrecedenceTable.BitPack));
             Register(TokenType.BitAnd, new BinaryOperatorParselet(PrecedenceTable.BitAnd));
             Register(TokenType.BitOr, new BinaryOperatorParselet(PrecedenceTable.BitOr));
             Register(TokenType.BitXor, new BinaryOperatorParselet(PrecedenceTable.BitXor));
-            Register(TokenType.BitPack, new BinaryOperatorParselet(PrecedenceTable.BitPack));
+            //Register(TokenType.Not, new UnaryOperatorParselet(PrecedenceTable.Unary));
             Register(TokenType.Dot, new BinaryOperatorParselet(PrecedenceTable.Dereference));
-
-            Register(TokenType.Equals, new BinaryOperatorParselet(PrecedenceTable.ConditionalExpression));
-            Register(TokenType.NotEquals, new BinaryOperatorParselet(PrecedenceTable.ConditionalExpression));
-            Register(TokenType.LessThan, new BinaryOperatorParselet(PrecedenceTable.ConditionalExpression));
-            Register(TokenType.LessThanOrEquals, new BinaryOperatorParselet(PrecedenceTable.ConditionalExpression));
-            Register(TokenType.MoreThan, new BinaryOperatorParselet(PrecedenceTable.ConditionalExpression));
-            Register(TokenType.MoreThanOrEquals, new BinaryOperatorParselet(PrecedenceTable.ConditionalExpression));
+            
+            Register(TokenType.Equals, new BinaryOperatorParselet(PrecedenceTable.Equals));
+            Register(TokenType.NotEquals, new BinaryOperatorParselet(PrecedenceTable.NotEquals));
+            Register(TokenType.LessThan, new BinaryOperatorParselet(PrecedenceTable.LessThan));
+            Register(TokenType.LessThanOrEquals, new BinaryOperatorParselet(PrecedenceTable.LessThanOrEqual));
+            Register(TokenType.MoreThan, new BinaryOperatorParselet(PrecedenceTable.MoreThan));
+            Register(TokenType.MoreThanOrEquals, new BinaryOperatorParselet(PrecedenceTable.MoreThanOrEqual));
+            Register(TokenType.ConditionalAnd, new BinaryOperatorParselet(PrecedenceTable.ConditionalAnd));
+            Register(TokenType.ConditionalOr, new BinaryOperatorParselet(PrecedenceTable.ConditionalOr));
 
             // Assignments
             Register(TokenType.Assign, new BinaryOperatorParselet(PrecedenceTable.Assignment));
             Register(TokenType.AddAssign, new BinaryOperatorParselet(PrecedenceTable.Assignment));
+            Register(TokenType.SubtractAssign, new BinaryOperatorParselet(PrecedenceTable.Assignment));
+            Register(TokenType.MultiplyAssign, new BinaryOperatorParselet(PrecedenceTable.Assignment));
+            Register(TokenType.DivideAssign, new BinaryOperatorParselet(PrecedenceTable.Assignment));
+            Register(TokenType.DivideCeilAssign, new BinaryOperatorParselet(PrecedenceTable.Assignment));
+            Register(TokenType.DivideFloorAssign, new BinaryOperatorParselet(PrecedenceTable.Assignment));
+            Register(TokenType.RemainderAssign, new BinaryOperatorParselet(PrecedenceTable.Assignment));
+            Register(TokenType.ModuloAssign, new BinaryOperatorParselet(PrecedenceTable.Assignment));
+            Register(TokenType.BitLeftShiftAssign, new BinaryOperatorParselet(PrecedenceTable.Assignment));
+            Register(TokenType.BitRightShiftAssign, new BinaryOperatorParselet(PrecedenceTable.Assignment));
+            Register(TokenType.BitLeftRotateAssign, new BinaryOperatorParselet(PrecedenceTable.Assignment));
+            Register(TokenType.BitRightRotateAssign, new BinaryOperatorParselet(PrecedenceTable.Assignment));
+            Register(TokenType.BitAndAssign, new BinaryOperatorParselet(PrecedenceTable.Assignment));
+            Register(TokenType.BitOrAssign, new BinaryOperatorParselet(PrecedenceTable.Assignment));
+            Register(TokenType.BitXorAssign, new BinaryOperatorParselet(PrecedenceTable.Assignment));
 
             // Statements
             Register(TokenType.Artifact, new ArtifactParselet());
