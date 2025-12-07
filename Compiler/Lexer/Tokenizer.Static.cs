@@ -101,6 +101,9 @@ namespace Compiler.Lexer
                 ["bitflags"] = TokenType.BitFlags,
                 ["error"] = TokenType.Error,
 
+                ["true"] = TokenType.True,
+                ["false"] = TokenType.False,
+
                 ["const"] = TokenType.Const,
                 ["var"] = TokenType.Var,
 

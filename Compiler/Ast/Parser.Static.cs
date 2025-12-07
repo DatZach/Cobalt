@@ -19,6 +19,8 @@ namespace Compiler.Ast
             // Primitives
             Register(TokenType.Number, new NumberParselet());
             Register(TokenType.String, new StringParselet());
+            Register(TokenType.True, new BooleanParselet());
+            Register(TokenType.False, new BooleanParselet());
             Register(TokenType.Identifier, new IdentifierParselet());
             Register(TokenType.LeftParen, new GroupParselet());
             Register(TokenType.LeftParen, new CallParselet());
@@ -45,8 +47,9 @@ namespace Compiler.Ast
             Register(TokenType.BitAnd, new BinaryOperatorParselet(PrecedenceTable.BitAnd));
             Register(TokenType.BitOr, new BinaryOperatorParselet(PrecedenceTable.BitOr));
             Register(TokenType.BitXor, new BinaryOperatorParselet(PrecedenceTable.BitXor));
-            //Register(TokenType.Not, new UnaryOperatorParselet(PrecedenceTable.Unary));
+            Register(TokenType.Not, new PrefixOperatorParselet(PrecedenceTable.Unary));
             Register(TokenType.Dot, new BinaryOperatorParselet(PrecedenceTable.Dereference));
+            Register(TokenType.Subtract, new PrefixOperatorParselet(PrecedenceTable.Unary));
             
             Register(TokenType.Equals, new BinaryOperatorParselet(PrecedenceTable.Equals));
             Register(TokenType.NotEquals, new BinaryOperatorParselet(PrecedenceTable.NotEquals));

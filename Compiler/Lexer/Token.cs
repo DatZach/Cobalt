@@ -36,6 +36,8 @@ namespace Compiler.Lexer
         [Description("identifier")] Identifier,
         [Description("number")] Number,
         [Description("string")] String,
+        [Description("true")] True,
+        [Description("false")] False,
         
         [Description("artifact")] Artifact,
         [Description("import")] Import,

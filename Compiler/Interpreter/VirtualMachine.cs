@@ -189,9 +189,23 @@ namespace Compiler.Interpreter
                     }
                     case Opcode.BitNot:
                     {
-                        var a = ReadOperand(inst.A!).IntValue;
-                        a = ~a;
-                        WriteOperand(inst.A!, a.ToCobVariable());
+                        var b = ReadOperand(inst.B!).IntValue;
+                        b = ~b;
+                        WriteOperand(inst.A!, b.ToCobVariable());
+                        break;
+                    }
+                    case Opcode.Not:
+                    {
+                        var b = ReadOperand(inst.B!).IntValue;
+                        b = b != 0 ? 0 : 1;
+                        WriteOperand(inst.A!, b.ToCobVariable());
+                        break;
+                    }
+                    case Opcode.Neg:
+                    {
+                        var b = ReadOperand(inst.B!).IntValue;
+                        b = -b;
+                        WriteOperand(inst.A!, b.ToCobVariable());
                         break;
                     }
                     case Opcode.Add:

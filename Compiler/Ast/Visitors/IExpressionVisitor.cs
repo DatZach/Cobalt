@@ -21,6 +21,7 @@ namespace Compiler.Ast.Visitors
         
         T Visit(FunctionExpression expression);
         T Visit(BinaryOperatorExpression expression);
+        T Visit(PrefixOperatorExpression expression);
         T Visit(BlockExpression expression);
         T Visit(CallExpression expression);
         T Visit(StructInitializerExpression expression);
@@ -28,6 +29,7 @@ namespace Compiler.Ast.Visitors
         T Visit(LensExpression expression);
         T Visit(ArrayExpression expression);
         T Visit(NumberExpression expression);
+        T Visit(BooleanExpression expression);
         T Visit(StringExpression expression);
         T Visit(EmptyExpression expression);
     }

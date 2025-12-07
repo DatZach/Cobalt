@@ -374,14 +374,27 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(IfStatement expression)
         {
-            var elseLabel = CurrentFunction.Body.AllocateLabel();
-            var endLabel = CurrentFunction.Body.AllocateLabel();
-
             ++conditionalStack;
             var conditional = expression.Conditional.Accept(this);
-            CurrentFunction.Body.Emit(Opcode.JumpIfF, conditional.Operand, elseLabel);
-            conditional?.Free();
             --conditionalStack;
+
+            if (conditional == null || conditional.Type != CobType.Boolean)
+            {
+                Messages.Add(Message.TypeMismatch, expression.Conditional, CobType.Boolean, conditional?.Type.ToString() ?? "none");
+                return null;
+            }
+            else if (expression.Conditional is IdentifierExpression)
+            {
+                var c = CurrentFunction.AllocateStorage(CobType.Boolean);
+                CurrentFunction.Body.Emit(Opcode.Compare, c.Operand, conditional.Operand, new Operand { Type = OperandType.ImmediateUnsigned, Value = 1 });
+                conditional.Free();
+                conditional = c;
+            }
+
+            var elseLabel = CurrentFunction.Body.AllocateLabel();
+            var endLabel = CurrentFunction.Body.AllocateLabel();
+            CurrentFunction.Body.Emit(Opcode.JumpIfF, conditional.Operand, elseLabel);
+            conditional.Free();
 
             expression.Then.Accept(this)?.Free();
             CurrentFunction.Body.Emit(Opcode.Jump, endLabel);
@@ -650,7 +663,7 @@ namespace Compiler.CodeGeneration
                 var a = expression.Left.Accept(this);
                 var b = expression.Right.Accept(this);
 
-                var c = CurrentFunction.AllocateStorage(CobType.Int);
+                var c = CurrentFunction.AllocateStorage(CobType.Boolean);
 
                 CurrentFunction.Body.Emit(Opcode.Compare, c.Operand, a.Operand, b.Operand);
 
@@ -722,6 +735,34 @@ namespace Compiler.CodeGeneration
             }
             else
                 throw new ArgumentOutOfRangeException(nameof(expression));
+        }
+
+        public Storage? Visit(PrefixOperatorExpression expression)
+        {
+            var right = expression.Right.Accept(this);
+            var c = CurrentFunction.AllocateStorage(right.Type);
+
+            // TODO Support rhs logical !
+            if (expression.Operator == TokenType.Not && conditionalStack != 0) // Logical !
+            {
+                CurrentFunction.Body.Emit(Opcode.Not, c.Operand, right.Operand);
+                CurrentFunction.Body.Emit(Opcode.Compare, c.Operand, c.Operand, new Operand { Type = OperandType.ImmediateUnsigned, Value = 1 });
+            }
+            else
+            {
+                var opcode = expression.Operator switch
+                {
+                    TokenType.Not => Opcode.BitNot,
+                    TokenType.Subtract => Opcode.Neg,
+                    _ => throw new ArgumentOutOfRangeException(nameof(expression))
+                };
+
+                CurrentFunction.Body.Emit(opcode, c.Operand, right.Operand);
+            }
+
+            right.Free();
+
+            return c;
         }
 
         public Storage? Visit(BlockExpression expression)
@@ -993,6 +1034,11 @@ namespace Compiler.CodeGeneration
                 new CobType(expression.Type, expression.BitSize),
                 expression.LongValue
             );
+        }
+
+        public Storage? Visit(BooleanExpression expression)
+        {
+            return CurrentFunction.AllocateStorage(CobType.Boolean, expression.Value ? 1 : 0);
         }
 
         public Storage? Visit(StringExpression expression)

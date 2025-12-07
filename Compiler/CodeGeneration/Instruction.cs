@@ -106,7 +106,9 @@
         BitXor,
         BitNot,
         CondAnd,
-        CondOr
+        CondOr,
+        Neg,
+        Not
     }
 
     public enum OperandType : byte
