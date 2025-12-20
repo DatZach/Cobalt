@@ -29,6 +29,11 @@ namespace Compiler.Ast
             Register(TokenType.Function, new FunctionParselet());
             Register(TokenType.Semicolon, new EmptyParselet());
 
+            Register(TokenType.Range, new BinaryOperatorParselet(PrecedenceTable.Range));
+            Register(TokenType.RangeInclusive, new BinaryOperatorParselet(PrecedenceTable.Range));
+            Register(TokenType.RangeLength, new BinaryOperatorParselet(PrecedenceTable.Range));
+            Register(TokenType.RangeTerminal, new BinaryOperatorParselet(PrecedenceTable.Range));
+
             // Expression Operators
             Register(TokenType.Add, new BinaryOperatorParselet(PrecedenceTable.Addition));
             Register(TokenType.Subtract, new BinaryOperatorParselet(PrecedenceTable.Subtraction));

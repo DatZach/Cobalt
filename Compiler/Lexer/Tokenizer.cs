@@ -102,7 +102,7 @@ namespace Compiler.Lexer
                         hasBinSpecified = true;
 
                     var startIndex = index;
-                    ident = TakeWhile(c =>
+                    ident = TakeWhile((c, cn) =>
                     {
                         if (c == '_')
                             return true;
@@ -113,7 +113,7 @@ namespace Compiler.Lexer
                             return true;
                         }
 
-                        if (!hasDecimal && c == '.')
+                        if (!hasDecimal && c == '.' && char.IsNumber(cn))
                         {
                             if (hasHexSpecified || hasBinSpecified)
                                 return false;
@@ -277,6 +277,23 @@ namespace Compiler.Lexer
             while(index < length)
             {
                 if (!condition(PeekChar()))
+                    break;
+
+                TakeChar();
+            }
+
+            return source.Substring(i, index - i);
+        }
+
+        // TODO ReadOnlySpan?
+        private string TakeWhile(Func<char, char, bool> condition)
+        {
+            int i = index;
+            while(index < length)
+            {
+                var ch0 = PeekChar();
+                var ch1 = PeekChar(1);
+                if (!condition(ch0, ch1))
                     break;
 
                 TakeChar();

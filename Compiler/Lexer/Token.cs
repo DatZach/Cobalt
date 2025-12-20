@@ -94,6 +94,7 @@ namespace Compiler.Lexer
         [Description("'..'")] Range,
         [Description("'..='")] RangeInclusive,
         [Description("'..+'")] RangeLength,
+        [Description("'..~'")] RangeTerminal,
         [Description("'[?'")] ArrayWhere,
         [Description("'[='")] ArraySelect,
         [Description("'=>'")] FatArrow,

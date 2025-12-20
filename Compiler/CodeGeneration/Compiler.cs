@@ -601,7 +601,7 @@ namespace Compiler.CodeGeneration
                 TokenType.BitAnd => Opcode.BitAnd,
                 TokenType.BitOr => Opcode.BitOr,
                 TokenType.BitXor => Opcode.BitXor,
-                _ => Opcode.None //throw new ArgumentOutOfRangeException(nameof(expression))
+                _ => Opcode.None
             };
 
             if (expression.Operator == TokenType.Dot) // Dereference a.b
@@ -644,6 +644,29 @@ namespace Compiler.CodeGeneration
                 b.Free();
 
                 return a;
+            }
+            else if (expression.Operator is TokenType.Range or TokenType.RangeInclusive
+                                         or TokenType.RangeLength or TokenType.RangeTerminal)
+            {
+                // TODO Should be allocateable on a Register
+                var tdeRangeTuple = rootModule.TupleTypes.First(x => x.Name == "Range");
+                var typeRangeTuple = new CobType(eCobType.Tuple, tag: tdeRangeTuple);
+                var local = CurrentFunction.AllocateLocal(new CobVariable("$tuple", typeRangeTuple, false)
+                {
+                    StructValue = tdeRangeTuple.Fields.Select(x => new CobVariable(x.Name, x.Type, true)).ToArray()
+                });
+                var c = CurrentFunction.AllocateStorage(typeRangeTuple, local);
+
+                var a = expression.Left.Accept(this);
+                var b = expression.Right.Accept(this);
+
+                CurrentFunction.Body.Emit(Opcode.SetField, c.Operand, new Operand { Type = OperandType.ImmediateUnsigned, Value = 0 }, a.Operand);
+                CurrentFunction.Body.Emit(Opcode.SetField, c.Operand, new Operand { Type = OperandType.ImmediateUnsigned, Value = 1 }, b.Operand);
+
+                b.Free();
+                a.Free();
+
+                return c;
             }
             else if (cndOpcode != Opcode.None) // Conditional && ||
             {
@@ -910,6 +933,7 @@ namespace Compiler.CodeGeneration
 
             functionStorage.Free();
             
+            // TODO Should be allocateable on a Register
             var local = CurrentFunction.AllocateLocal(new CobVariable("$tuple", functionStorage.Type, false)
             {
                 StructValue = tde.Fields.Select(x => new CobVariable(x.Name, x.Type, true)).ToArray()

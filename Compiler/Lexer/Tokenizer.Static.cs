@@ -26,6 +26,7 @@ namespace Compiler.Lexer
                 [".."] = TokenType.Range,
                 ["..="] = TokenType.RangeInclusive,
                 ["..+"] = TokenType.RangeLength,
+                ["..~"] = TokenType.RangeTerminal,
                 ["[?"] = TokenType.ArrayWhere,
                 ["[="] = TokenType.ArraySelect,
                 ["=>"] = TokenType.FatArrow,
