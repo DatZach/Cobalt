@@ -625,25 +625,17 @@ namespace Compiler.CodeGeneration
             {
                 var a = expression.Left.Accept(this);
                 var b = expression.Right.Accept(this);
-
-                var aIsMutable = a.Operand.Type is OperandType.Global or OperandType.Local
-                                                or OperandType.Argument or OperandType.Register;
-                if (!aIsMutable)
-                {
-                    var c = CurrentFunction.AllocateStorage(a.Type);
-                    CurrentFunction.Body.Emit(Opcode.Move, c.Operand, a.Operand);
-                    a.Free();
-                    a = c;
-                }
+                var c = CurrentFunction.AllocateStorage(a.Type);
 
                 int shlValue = b.Type.Size;
 
-                CurrentFunction.Body.Emit(Opcode.BitShl, a.Operand, new Operand { Type = OperandType.ImmediateUnsigned, Value = shlValue });
-                CurrentFunction.Body.Emit(Opcode.BitOr, a.Operand, b.Operand);
+                CurrentFunction.Body.Emit(Opcode.BitShl, c.Operand, a.Operand, new Operand { Type = OperandType.ImmediateUnsigned, Value = shlValue });
+                CurrentFunction.Body.Emit(Opcode.BitOr, c.Operand, a.Operand, b.Operand);
                 
                 b.Free();
+                a.Free();
 
-                return a;
+                return c;
             }
             else if (expression.Operator is TokenType.Range or TokenType.RangeInclusive
                                          or TokenType.RangeLength or TokenType.RangeTerminal)
@@ -659,6 +651,28 @@ namespace Compiler.CodeGeneration
 
                 var a = expression.Left.Accept(this);
                 var b = expression.Right.Accept(this);
+
+                if (expression.Operator == TokenType.Range)
+                {
+                    var d = CurrentFunction.AllocateStorage(b.Type);
+                    CurrentFunction.Body.Emit(Opcode.Sub, d.Operand, b.Operand, new Operand { Type = OperandType.ImmediateUnsigned, Value = 1 });
+                    b.Free();
+                    b = d;
+                }
+                else if (expression.Operator == TokenType.RangeLength)
+                {
+                    var d = CurrentFunction.AllocateStorage(b.Type);
+                    CurrentFunction.Body.Emit(Opcode.Add, d.Operand, a.Operand, b.Operand);
+                    b.Free();
+                    b = d;
+                }
+                else if (expression.Operator == TokenType.RangeTerminal)
+                {
+                    var d = CurrentFunction.AllocateStorage(b.Type);
+                    CurrentFunction.Body.Emit(Opcode.BitNot, d.Operand, b.Operand);
+                    b.Free();
+                    b = d;
+                }
 
                 CurrentFunction.Body.Emit(Opcode.SetField, c.Operand, new Operand { Type = OperandType.ImmediateUnsigned, Value = 0 }, a.Operand);
                 CurrentFunction.Body.Emit(Opcode.SetField, c.Operand, new Operand { Type = OperandType.ImmediateUnsigned, Value = 1 }, b.Operand);
@@ -713,21 +727,14 @@ namespace Compiler.CodeGeneration
                 var a = expression.Left.Accept(this);
                 var b = expression.Right.Accept(this);
 
-                var aIsMutable = a.Operand.Type is OperandType.Global or OperandType.Local
-                                                or OperandType.Argument or OperandType.Register;
-                if (!aIsMutable)
-                {
-                    var c = CurrentFunction.AllocateStorage(a.Type);
-                    CurrentFunction.Body.Emit(Opcode.Move, c.Operand, a.Operand);
-                    a.Free();
-                    a = c;
-                }
+                var c = CurrentFunction.AllocateStorage(a.Type);
                 
-                CurrentFunction.Body.Emit(artOpcode, a.Operand, b.Operand);
+                CurrentFunction.Body.Emit(artOpcode, c.Operand, a.Operand, b.Operand);
                 
                 b.Free();
+                a.Free();
 
-                return a;
+                return c;
             }
             else if (asnOpcode != Opcode.None) // Assignment = += -=
             {
@@ -736,8 +743,9 @@ namespace Compiler.CodeGeneration
 
                 if (asnOpcode != Opcode.Move)
                 {
+                    // TODO Can be rewritten
                     c = expression.Left.Accept(this);
-                    CurrentFunction.Body.Emit(asnOpcode, c.Operand, b.Operand);
+                    CurrentFunction.Body.Emit(asnOpcode, c.Operand, c.Operand, b.Operand);
                     AssignmentRHS = c;
                 }
                 else

@@ -138,53 +138,53 @@ namespace Compiler.Interpreter
                     }
                     case Opcode.BitShr:
                     {
-                        var a = ReadOperand(inst.A!).IntValue;
-                        a >>= (int)ReadOperand(inst.B!).IntValue;
-                        WriteOperand(inst.A!, a.ToCobVariable());
+                        var b = ReadOperand(inst.B!).IntValue;
+                        b >>= (int)ReadOperand(inst.C!).IntValue;
+                        WriteOperand(inst.A!, b.ToCobVariable());
                         break;
                     }
                     case Opcode.BitShl:
                     {
-                        var a = ReadOperand(inst.A!).IntValue;
-                        a <<= (int)ReadOperand(inst.B!).IntValue;
-                        WriteOperand(inst.A!, a.ToCobVariable());
+                        var b = ReadOperand(inst.B!).IntValue;
+                        b <<= (int)ReadOperand(inst.C!).IntValue;
+                        WriteOperand(inst.A!, b.ToCobVariable());
                         break;
                     }
                     case Opcode.BitRol:
                     {
-                        var a = ReadOperand(inst.A!).IntValue;
                         var b = ReadOperand(inst.B!).IntValue;
-                        a = (long)BitOperations.RotateLeft((ulong)a, (int)b);
-                        WriteOperand(inst.A!, a.ToCobVariable());
+                        var c = ReadOperand(inst.C!).IntValue;
+                        b = (long)BitOperations.RotateLeft((ulong)b, (int)c);
+                        WriteOperand(inst.A!, b.ToCobVariable());
                         break;
                     }
                     case Opcode.BitRor:
                     {
-                        var a = ReadOperand(inst.A!).IntValue;
                         var b = ReadOperand(inst.B!).IntValue;
-                        a = (long)BitOperations.RotateRight((ulong)a, (int)b);
-                        WriteOperand(inst.A!, a.ToCobVariable());
+                        var c = ReadOperand(inst.C!).IntValue;
+                        b = (long)BitOperations.RotateRight((ulong)b, (int)c);
+                        WriteOperand(inst.A!, b.ToCobVariable());
                         break;
                     }
                     case Opcode.BitAnd:
                     {
-                        var a = ReadOperand(inst.A!).IntValue;
-                        a &= ReadOperand(inst.B!).IntValue;
-                        WriteOperand(inst.A!, a.ToCobVariable());
+                        var b = ReadOperand(inst.B!).IntValue;
+                        b &= ReadOperand(inst.C!).IntValue;
+                        WriteOperand(inst.A!, b.ToCobVariable());
                         break;
                     }
                     case Opcode.BitXor:
                     {
-                        var a = ReadOperand(inst.A!).IntValue;
-                        a ^= ReadOperand(inst.B!).IntValue;
-                        WriteOperand(inst.A!, a.ToCobVariable());
+                        var b = ReadOperand(inst.B!).IntValue;
+                        b ^= ReadOperand(inst.C!).IntValue;
+                        WriteOperand(inst.A!, b.ToCobVariable());
                         break;
                     }
                     case Opcode.BitOr:
                     {
-                        var a = ReadOperand(inst.A!).IntValue;
-                        a |= ReadOperand(inst.B!).IntValue;
-                        WriteOperand(inst.A!, a.ToCobVariable());
+                        var b = ReadOperand(inst.B!).IntValue;
+                        b |= ReadOperand(inst.C!).IntValue;
+                        WriteOperand(inst.A!, b.ToCobVariable());
                         break;
                     }
                     case Opcode.BitNot:
@@ -210,94 +210,94 @@ namespace Compiler.Interpreter
                     }
                     case Opcode.Add:
                     {
-                        var a = ReadOperand(inst.A!).IntValue;
-                        a += ReadOperand(inst.B!).IntValue;
-                        WriteOperand(inst.A!, a.ToCobVariable());
+                        var b = ReadOperand(inst.B!).IntValue;
+                        b += ReadOperand(inst.C!).IntValue;
+                        WriteOperand(inst.A!, b.ToCobVariable());
                         break;
                     }
                     case Opcode.Sub:
                     {
-                        var a = ReadOperand(inst.A!).IntValue;
-                        a -= ReadOperand(inst.B!).IntValue;
-                        WriteOperand(inst.A!, a.ToCobVariable());
+                        var b = ReadOperand(inst.B!).IntValue;
+                        b -= ReadOperand(inst.C!).IntValue;
+                        WriteOperand(inst.A!, b.ToCobVariable());
                         break;
                     }
                     case Opcode.Mul:
                     {
-                        var a = ReadOperand(inst.A!).IntValue;
-                        a *= ReadOperand(inst.B!).IntValue;
-                        WriteOperand(inst.A!, a.ToCobVariable());
+                        var b = ReadOperand(inst.B!).IntValue;
+                        b *= ReadOperand(inst.C!).IntValue;
+                        WriteOperand(inst.A!, b.ToCobVariable());
                         break;
                     }
                     case Opcode.Pow:
                     {
-                        var a = ReadOperand(inst.A!).IntValue;
-                        var e = ReadOperand(inst.B!).IntValue;
-                        a = (long)Math.Pow(a, e);
-                        WriteOperand(inst.A!, a.ToCobVariable());
+                        var b = ReadOperand(inst.B!).IntValue;
+                        var c = ReadOperand(inst.C!).IntValue;
+                        b = (long)Math.Pow(b, c);
+                        WriteOperand(inst.A!, b.ToCobVariable());
                         break;
                     }
                     case Opcode.Div:
                     {
-                        var a = ReadOperand(inst.A!).IntValue;
-                        a /= ReadOperand(inst.B!).IntValue;
-                        WriteOperand(inst.A!, a.ToCobVariable());
+                        var b = ReadOperand(inst.B!).IntValue;
+                        b /= ReadOperand(inst.C!).IntValue;
+                        WriteOperand(inst.A!, b.ToCobVariable());
                         break;
                     }
                     case Opcode.DivCeil:
                     {
-                        var a = ReadOperand(inst.A!).IntValue;
                         var b = ReadOperand(inst.B!).IntValue;
-                        a = (a + b - 1) / b;
-                        WriteOperand(inst.A!, a.ToCobVariable());
+                        var c = ReadOperand(inst.C!).IntValue;
+                        b = (b + c - 1) / c;
+                        WriteOperand(inst.A!, b.ToCobVariable());
                         break;
                     }
                     case Opcode.DivFloor:
                     {
                         // TODO Technically only useful for floats
-                        var a = ReadOperand(inst.A!).IntValue;
-                        a /= ReadOperand(inst.B!).IntValue;
-                        WriteOperand(inst.A!, a.ToCobVariable());
+                        var b = ReadOperand(inst.B!).IntValue;
+                        b /= ReadOperand(inst.C!).IntValue;
+                        WriteOperand(inst.A!, b.ToCobVariable());
                         break;
                     }
                     case Opcode.Mod:
                     {
-                        var a = ReadOperand(inst.A!).IntValue;
-                        a %= ReadOperand(inst.B!).IntValue;
-                        WriteOperand(inst.A!, a.ToCobVariable());
+                        var b = ReadOperand(inst.B!).IntValue;
+                        b %= ReadOperand(inst.C!).IntValue;
+                        WriteOperand(inst.A!, b.ToCobVariable());
                         break;
                     }
                     case Opcode.Rem:
                     {
-                        var a = ReadOperand(inst.A!).IntValue;
-                        var b = ReadOperand(inst.A!).IntValue;
-                        a = ((a % b) + b) % b;
-                        WriteOperand(inst.A!, a.ToCobVariable());
+                        var b = ReadOperand(inst.B!).IntValue;
+                        var c = ReadOperand(inst.C!).IntValue;
+                        b = ((b % c) + c) % c;
+                        WriteOperand(inst.A!, b.ToCobVariable());
                         break;
                     }
                     case Opcode.Compare:
                     {
                         // TODO Proper implementation supporting all types
-                        var a = ReadOperand(inst.B!).IntValue;
-                        var b = ReadOperand(inst.C!).IntValue;
-                        var c = b - a;
-                        WriteOperand(inst.A!, c.ToCobVariable());
+                        var b = ReadOperand(inst.B!).IntValue;
+                        var c = ReadOperand(inst.C!).IntValue;
+                        var d = c - b;
+                        WriteOperand(inst.A!, d.ToCobVariable());
                         break;
                     }
                     case Opcode.CondAnd:
                     {
-                        var a = ReadOperand(inst.B!).IntValue;
-                        var b = ReadOperand(inst.C!).IntValue;
-                        var c = a == 0 && b == 0 ? 1L : 0L;
-                        WriteOperand(inst.A!, c.ToCobVariable());
+                        var b = ReadOperand(inst.B!).IntValue;
+                        var c = ReadOperand(inst.C!).IntValue;
+                        var d = b == 0 && c == 0 ? 1L : 0L;
+                        WriteOperand(inst.A!, d.ToCobVariable());
                         break;
                     }
                     case Opcode.CondOr:
                     {
-                        var a = ReadOperand(inst.B!).IntValue;
-                        var b = ReadOperand(inst.C!).IntValue;
-                        var c = a == 0|| b == 0 ? 1L : 0L;
-                        WriteOperand(inst.A!, c.ToCobVariable());
+                        var b = ReadOperand(inst.B!).IntValue;
+                        var c = ReadOperand(inst.C!).IntValue;
+                        var d = b == 0|| c == 0 ? 1L : 0L;
+                        WriteOperand(inst.A!, d.ToCobVariable());
                         break;
                     }
                     case Opcode.JumpIfF:
