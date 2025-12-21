@@ -15,13 +15,18 @@ namespace Compiler.Ast.Visitors
         T Visit(ExportExpression expression);
         T Visit(ArtifactExpression expression);
         T Visit(ReturnExpression expression);
-        T Visit(IfStatement expression);
         T Visit(AheadOfTimeExpression expression);
         T Visit(FatArrowExpression expression);
+
+        T Visit(IfStatement expression);
+        T Visit(ForStatement expression);
+        T Visit(ContinueStatement expression);
+        T Visit(BreakStatement expression);
         
         T Visit(FunctionExpression expression);
         T Visit(BinaryOperatorExpression expression);
         T Visit(PrefixOperatorExpression expression);
+        T Visit(PostfixOperatorExpression expression);
         T Visit(BlockExpression expression);
         T Visit(CallExpression expression);
         T Visit(StructInitializerExpression expression);

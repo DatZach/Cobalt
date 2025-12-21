@@ -33,6 +33,9 @@ namespace Compiler.Ast
             Register(TokenType.RangeInclusive, new BinaryOperatorParselet(PrecedenceTable.Range));
             Register(TokenType.RangeLength, new BinaryOperatorParselet(PrecedenceTable.Range));
             Register(TokenType.RangeTerminal, new BinaryOperatorParselet(PrecedenceTable.Range));
+            Register(TokenType.Range, new PrefixOperatorParselet(PrecedenceTable.Range));
+            Register(TokenType.RangeInclusive, new PrefixOperatorParselet(PrecedenceTable.Range));
+            Register(TokenType.RangeTerminal, new PrefixOperatorParselet(PrecedenceTable.Range));
 
             // Expression Operators
             Register(TokenType.Add, new BinaryOperatorParselet(PrecedenceTable.Addition));
@@ -55,6 +58,8 @@ namespace Compiler.Ast
             Register(TokenType.Not, new PrefixOperatorParselet(PrecedenceTable.Unary));
             Register(TokenType.Dot, new BinaryOperatorParselet(PrecedenceTable.Dereference));
             Register(TokenType.Subtract, new PrefixOperatorParselet(PrecedenceTable.Unary));
+
+            Register(TokenType.Is, new BinaryOperatorParselet(PrecedenceTable.Is));
             
             Register(TokenType.Equals, new BinaryOperatorParselet(PrecedenceTable.Equals));
             Register(TokenType.NotEquals, new BinaryOperatorParselet(PrecedenceTable.NotEquals));
@@ -96,8 +101,12 @@ namespace Compiler.Ast
             Register(TokenType.Return, new ReturnParselet());
             Register(TokenType.AheadOfTime, new AheadOfTimeParselet());
             Register(TokenType.Lens, new LensParselet());
-            Register(TokenType.If, new IfParselet());
             Register(TokenType.FatArrow, new FatArrowParselet());
+
+            Register(TokenType.If, new IfParselet());
+            Register(TokenType.For, new ForParselet());
+            Register(TokenType.Continue, new ContinueParselet());
+            Register(TokenType.Break, new BreakParselet());
         }
 
         private static void Register(TokenType type, IPrefixExpressionParselet parselet)

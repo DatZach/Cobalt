@@ -37,7 +37,9 @@ namespace Compiler.CodeGeneration
         private readonly Module rootModule;
         private readonly Stack<Function> functionStack;
         private readonly Stack<IContext> contextStack; // TODO IScopedContext or something (Struct, Module, Tuple, etc.)
-        
+        private readonly Stack<Label> continueStack;
+        private readonly Stack<Label> breakStack;
+
         private Compiler(MessageCollection messages)
         {
             Artifacts = new List<ArtifactExpression>();
@@ -47,6 +49,8 @@ namespace Compiler.CodeGeneration
             Globals = new List<CobVariable>();
             functionStack = new Stack<Function>();
             contextStack = new Stack<IContext>();
+            continueStack = new Stack<Label>();
+            breakStack = new Stack<Label>();
 
             CurrentModule = rootModule = new Module(this, null);
             AllocateGlobal(new CobVariable(CurrentModule.InitializerFunction.FullyQualifiedName, new CobType(eCobType.Function, 0, tag: CurrentModule.InitializerFunction), false)); // HACK Awful. Global should be scoped to a Module
@@ -372,42 +376,6 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
-        public Storage? Visit(IfStatement expression)
-        {
-            ++conditionalStack;
-            var conditional = expression.Conditional.Accept(this);
-            --conditionalStack;
-
-            if (conditional == null || conditional.Type != CobType.Boolean)
-            {
-                Messages.Add(Message.TypeMismatch, expression.Conditional, CobType.Boolean, conditional?.Type.ToString() ?? "none");
-                return null;
-            }
-            else if (expression.Conditional is IdentifierExpression)
-            {
-                var c = CurrentFunction.AllocateStorage(CobType.Boolean);
-                CurrentFunction.Body.Emit(Opcode.Compare, c.Operand, conditional.Operand, new Operand { Type = OperandType.ImmediateUnsigned, Value = 1 });
-                conditional.Free();
-                conditional = c;
-            }
-
-            var elseLabel = CurrentFunction.Body.AllocateLabel();
-            var endLabel = CurrentFunction.Body.AllocateLabel();
-            CurrentFunction.Body.Emit(Opcode.JumpIfF, conditional.Operand, elseLabel);
-            conditional.Free();
-
-            expression.Then.Accept(this)?.Free();
-            CurrentFunction.Body.Emit(Opcode.Jump, endLabel);
-
-            elseLabel.Mark();
-
-            expression.Else?.Accept(this)?.Free();
-
-            endLabel.Mark();
-
-            return null;
-        }
-
         public Storage? Visit(ReturnExpression expression)
         {
             if (expression.Expression == null)
@@ -480,6 +448,119 @@ namespace Compiler.CodeGeneration
             return value;
         }
 
+        public Storage? Visit(IfStatement expression)
+        {
+            ++conditionalStack;
+            var conditional = expression.Conditional.Accept(this);
+            --conditionalStack;
+
+            if (conditional == null || conditional.Type != CobType.Boolean)
+            {
+                Messages.Add(Message.TypeMismatch, expression.Conditional, CobType.Boolean, conditional?.Type.ToString() ?? "none");
+                return null;
+            }
+            else if (expression.Conditional is IdentifierExpression)
+            {
+                var c = CurrentFunction.AllocateStorage(CobType.Boolean);
+                CurrentFunction.Body.Emit(Opcode.CmpEQ, c.Operand, conditional.Operand, new Operand { Type = OperandType.ImmediateUnsigned, Value = 1 });
+                conditional.Free();
+                conditional = c;
+            }
+
+            var elseLabel = CurrentFunction.Body.AllocateLabel();
+            var endLabel = CurrentFunction.Body.AllocateLabel();
+            CurrentFunction.Body.Emit(Opcode.JmpF, conditional.Operand, elseLabel);
+            conditional.Free();
+
+            expression.Then.Accept(this)?.Free();
+            CurrentFunction.Body.Emit(Opcode.Jmp, endLabel);
+
+            elseLabel.Mark();
+
+            expression.Else?.Accept(this)?.Free();
+
+            endLabel.Mark();
+
+            return null;
+        }
+
+        public Storage? Visit(ForStatement expression)
+        {
+            //var varIndex = CurrentFunction.AllocateStorage(CobType.Int);
+            var startLabel = CurrentFunction.Body.AllocateLabel();
+            var endLabel = CurrentFunction.Body.AllocateLabel();
+            endLabel.Tag = expression.Label?.Value;
+
+            continueStack.Push(startLabel);
+            breakStack.Push(endLabel);
+
+            //if (expression.Conditional is BinaryOperatorExpression boe
+            //&&  boe.Operator == TokenType.Is)
+            //{
+            //    var index = boe.Left.Accept(this);
+            //    var range = boe.Right.Accept(this);
+            //}
+
+            startLabel.Mark();
+            if (expression.Conditional != null)
+            {
+                var a = expression.Conditional.Accept(this);
+                CurrentFunction.Body.Emit(Opcode.JmpF, a.Operand, endLabel);
+                a.Free();
+            }
+
+            expression.Body.Accept(this)?.Free();
+
+            CurrentFunction.Body.Emit(Opcode.Jmp, startLabel);
+            endLabel.Mark();
+
+            breakStack.Pop();
+            continueStack.Pop();
+
+            return null;
+        }
+
+        public Storage? Visit(ContinueStatement expression)
+        {
+            if (continueStack.Count == 0)
+            {
+                Messages.Add(Message.CannotContinue, expression);
+                return null;
+            }
+
+            CurrentFunction.Body.Emit(Opcode.Jmp, continueStack.Peek());
+
+            return null;
+        }
+
+        public Storage? Visit(BreakStatement expression)
+        {
+            if (breakStack.Count == 0)
+            {
+                Messages.Add(Message.CannotBreak, expression);
+                return null;
+            }
+
+            Label label;
+            if (expression.Label == null)
+                label = breakStack.Peek();
+            else
+            {
+                var fLabel = breakStack.FirstOrDefault(x => x.Tag == expression.Label.Value);
+                if (fLabel == null)
+                {
+                    Messages.Add(Message.CannotBreakNoLabel, expression, expression.Label.Value);
+                    return null;
+                }
+
+                label = fLabel;
+            }
+
+            CurrentFunction.Body.Emit(Opcode.Jmp, label);
+
+            return null;
+        }
+
         public Storage? Visit(FunctionExpression expression)
         {
             if (expression.Body == null)
@@ -525,7 +606,7 @@ namespace Compiler.CodeGeneration
             contextStack.Pop();
             functionStack.Pop();
 
-            function.Body.HACK_Optmize();
+            //function.Body.HACK_Optmize();
 
             return new Storage(
                 CurrentFunction,
@@ -565,12 +646,12 @@ namespace Compiler.CodeGeneration
             // Equality
             var cmpOpcode = expression.Operator switch
             {
-                TokenType.Equals => Opcode.JumpIfF,
-                TokenType.NotEquals => Opcode.JumpIfT,
-                TokenType.LessThan => Opcode.JumpIfGTE,
-                TokenType.LessThanOrEquals => Opcode.JumpIfGT,
-                TokenType.MoreThan => Opcode.JumpIfLTE,
-                TokenType.MoreThanOrEquals => Opcode.JumpIfLT,
+                TokenType.Equals => Opcode.CmpEQ,
+                TokenType.NotEquals => Opcode.CmpNEQ,
+                TokenType.LessThan => Opcode.CmpLT,
+                TokenType.LessThanOrEquals => Opcode.CmpLTE,
+                TokenType.MoreThan => Opcode.CmpGT,
+                TokenType.MoreThanOrEquals => Opcode.CmpGTE,
                 _ => Opcode.None
             };
 
@@ -652,6 +733,11 @@ namespace Compiler.CodeGeneration
                 var a = expression.Left.Accept(this);
                 var b = expression.Right.Accept(this);
 
+                if (expression.Left is EmptyExpression)
+                    a = CurrentFunction.AllocateStorage(b.Type, 0);
+                else if (expression.Right is EmptyExpression)
+                    b = CurrentFunction.AllocateStorage(a.Type, ~0);
+
                 if (expression.Operator == TokenType.Range)
                 {
                     var d = CurrentFunction.AllocateStorage(b.Type);
@@ -699,23 +785,9 @@ namespace Compiler.CodeGeneration
             {
                 var a = expression.Left.Accept(this);
                 var b = expression.Right.Accept(this);
-
                 var c = CurrentFunction.AllocateStorage(CobType.Boolean);
 
-                CurrentFunction.Body.Emit(Opcode.Compare, c.Operand, a.Operand, b.Operand);
-
-                if (conditionalStack == 0)
-                {
-                    var elseLabel = CurrentFunction.Body.AllocateLabel();
-                    var endLabel = CurrentFunction.Body.AllocateLabel();
-
-                    CurrentFunction.Body.Emit(cmpOpcode, c.Operand, elseLabel);
-                    CurrentFunction.Body.Emit(Opcode.Move, c.Operand, new Operand { Type = OperandType.ImmediateUnsigned, Value = 1 });
-                    CurrentFunction.Body.Emit(Opcode.Jump, endLabel);
-                    elseLabel.Mark();
-                    CurrentFunction.Body.Emit(Opcode.Move, c.Operand, new Operand { Type = OperandType.ImmediateUnsigned, Value = 0 });
-                    endLabel.Mark();
-                }
+                CurrentFunction.Body.Emit(cmpOpcode, c.Operand, a.Operand, b.Operand);
 
                 b.Free();
                 a.Free();
@@ -726,7 +798,6 @@ namespace Compiler.CodeGeneration
             {
                 var a = expression.Left.Accept(this);
                 var b = expression.Right.Accept(this);
-
                 var c = CurrentFunction.AllocateStorage(a.Type);
                 
                 CurrentFunction.Body.Emit(artOpcode, c.Operand, a.Operand, b.Operand);
@@ -777,7 +848,6 @@ namespace Compiler.CodeGeneration
             if (expression.Operator == TokenType.Not && conditionalStack != 0) // Logical !
             {
                 CurrentFunction.Body.Emit(Opcode.Not, c.Operand, right.Operand);
-                CurrentFunction.Body.Emit(Opcode.Compare, c.Operand, c.Operand, new Operand { Type = OperandType.ImmediateUnsigned, Value = 1 });
             }
             else
             {
@@ -794,6 +864,11 @@ namespace Compiler.CodeGeneration
             right.Free();
 
             return c;
+        }
+
+        public Storage? Visit(PostfixOperatorExpression expression)
+        {
+            throw new NotImplementedException();
         }
 
         public Storage? Visit(BlockExpression expression)

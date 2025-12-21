@@ -507,30 +507,30 @@ namespace Compiler.CodeGeneration.Platform
                         }
                         break;
                     }
-                    case Opcode.Compare:
-                        buffer.EmitLine($"cmp {GetOperandString(inst.A)}, {GetOperandString(inst.B)}");
-                        break;
-                    case Opcode.Jump:
-                        buffer.EmitLine($"jmp {GetOperandString(inst.A)}");
-                        break;
-                    case Opcode.JumpIfF:
-                        buffer.EmitLine($"jne {GetOperandString(inst.A)}");
-                        break;
-                    case Opcode.JumpIfT:
-                        buffer.EmitLine($"je {GetOperandString(inst.A)}");
-                        break;
-                    case Opcode.JumpIfLTE:
-                        buffer.EmitLine($"jle {GetOperandString(inst.A)}");
-                        break;
-                    case Opcode.JumpIfLT:
-                        buffer.EmitLine($"jl {GetOperandString(inst.A)}");
-                        break;
-                    case Opcode.JumpIfGTE:
-                        buffer.EmitLine($"jge {GetOperandString(inst.A)}");
-                        break;
-                    case Opcode.JumpIfGT:
-                        buffer.EmitLine($"jg {GetOperandString(inst.A)}");
-                        break;
+                    //case Opcode.Compare:
+                    //    buffer.EmitLine($"cmp {GetOperandString(inst.A)}, {GetOperandString(inst.B)}");
+                    //    break;
+                    //case Opcode.Jump:
+                    //    buffer.EmitLine($"jmp {GetOperandString(inst.A)}");
+                    //    break;
+                    //case Opcode.JumpIfF:
+                    //    buffer.EmitLine($"jne {GetOperandString(inst.A)}");
+                    //    break;
+                    //case Opcode.JumpIfT:
+                    //    buffer.EmitLine($"je {GetOperandString(inst.A)}");
+                    //    break;
+                    //case Opcode.JumpIfLTE:
+                    //    buffer.EmitLine($"jle {GetOperandString(inst.A)}");
+                    //    break;
+                    //case Opcode.JumpIfLT:
+                    //    buffer.EmitLine($"jl {GetOperandString(inst.A)}");
+                    //    break;
+                    //case Opcode.JumpIfGTE:
+                    //    buffer.EmitLine($"jge {GetOperandString(inst.A)}");
+                    //    break;
+                    //case Opcode.JumpIfGT:
+                    //    buffer.EmitLine($"jg {GetOperandString(inst.A)}");
+                    //    break;
 
                     default:
                         throw new ArgumentOutOfRangeException();

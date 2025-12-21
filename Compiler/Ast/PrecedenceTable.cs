@@ -39,6 +39,8 @@
 
         //public const int ConditionalExpression = 2; // ?
 
+        public const int Is = 2;
+
         public const int Assignment = 1;
     }
 }

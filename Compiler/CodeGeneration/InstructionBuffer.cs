@@ -16,15 +16,16 @@
             labels = new List<Label>(4);
         }
 
-        public void HACK_Optmize()
-        {
-            instructions.RemoveAll(x =>
-            {
-                return x.Opcode == Opcode.Move
-                       && x.A.Type == x.B.Type
-                       && x.A.Value == x.B.Value;
-            });
-        }
+        // TODO Reimplement correctly later. This implementation does not update label offsets.
+        //public void HACK_Optmize()
+        //{
+        //    instructions.RemoveAll(x =>
+        //    {
+        //        return x.Opcode == Opcode.Move
+        //               && x.A.Type == x.B.Type
+        //               && x.A.Value == x.B.Value;
+        //    });
+        //}
 
         public Label AllocateLabel() // TODO Should be moved to CurrentFunction, perhaps
         {
@@ -118,6 +119,8 @@
         public int Index { get; } // TODO Better names
 
         public int Location { get; private set; }
+
+        public string? Tag { get; set; }
 
         private readonly InstructionBuffer buffer;
 

@@ -8,7 +8,9 @@ namespace Compiler.Ast.Parselets.Statements
     {
         public Expression Parse(Parser parser, Token token)
         {
-            var conditional = parser.ParseExpression();
+            parser.Take(TokenType.LeftParen);
+            var conditional = parser.ParseExpression(isConditional: true);
+            parser.Take(TokenType.RightParen);
 
             var then = parser.ParseBlock();
 

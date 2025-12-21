@@ -275,15 +275,6 @@ namespace Compiler.Interpreter
                         WriteOperand(inst.A!, b.ToCobVariable());
                         break;
                     }
-                    case Opcode.Compare:
-                    {
-                        // TODO Proper implementation supporting all types
-                        var b = ReadOperand(inst.B!).IntValue;
-                        var c = ReadOperand(inst.C!).IntValue;
-                        var d = c - b;
-                        WriteOperand(inst.A!, d.ToCobVariable());
-                        break;
-                    }
                     case Opcode.CondAnd:
                     {
                         var b = ReadOperand(inst.B!).IntValue;
@@ -300,49 +291,69 @@ namespace Compiler.Interpreter
                         WriteOperand(inst.A!, d.ToCobVariable());
                         break;
                     }
-                    case Opcode.JumpIfF:
+                    case Opcode.CmpEQ:
+                    {
+                        var b = ReadOperand(inst.B!).IntValue;
+                        var c = ReadOperand(inst.C!).IntValue;
+                        var d = b == c ? 1L : 0L;
+                        WriteOperand(inst.A!, d.ToCobVariable());
+                        break;
+                    }
+                    case Opcode.CmpNEQ:
+                    {
+                        var b = ReadOperand(inst.B!).IntValue;
+                        var c = ReadOperand(inst.C!).IntValue;
+                        var d = b != c ? 1L : 0L;
+                        WriteOperand(inst.A!, d.ToCobVariable());
+                        break;
+                    }
+                    case Opcode.CmpLT:
+                    {
+                        var b = ReadOperand(inst.B!).IntValue;
+                        var c = ReadOperand(inst.C!).IntValue;
+                        var d = b < c ? 1L : 0L;
+                        WriteOperand(inst.A!, d.ToCobVariable());
+                        break;
+                    }
+                    case Opcode.CmpLTE:
+                    {
+                        var b = ReadOperand(inst.B!).IntValue;
+                        var c = ReadOperand(inst.C!).IntValue;
+                        var d = b <= c ? 1L : 0L;
+                        WriteOperand(inst.A!, d.ToCobVariable());
+                        break;
+                    }
+                    case Opcode.CmpGT:
+                    {
+                        var b = ReadOperand(inst.B!).IntValue;
+                        var c = ReadOperand(inst.C!).IntValue;
+                        var d = b > c ? 1L : 0L;
+                        WriteOperand(inst.A!, d.ToCobVariable());
+                        break;
+                    }
+                    case Opcode.CmpGTE:
+                    {
+                        var b = ReadOperand(inst.B!).IntValue;
+                        var c = ReadOperand(inst.C!).IntValue;
+                        var d = b >= c ? 1L : 0L;
+                        WriteOperand(inst.A!, d.ToCobVariable());
+                        break;
+                    }
+                    case Opcode.JmpT:
                     {
                         var cmp = ReadOperand(inst.A!).IntValue;
-                        if (cmp != 0)
+                        if (cmp == 1)
                             ip = currentFunction.Body.Labels[(int)inst.B!.Value].Location - 1;
                         break;
                     }
-                    case Opcode.JumpIfT:
+                    case Opcode.JmpF:
                     {
                         var cmp = ReadOperand(inst.A!).IntValue;
                         if (cmp == 0)
                             ip = currentFunction.Body.Labels[(int)inst.B!.Value].Location - 1;
                         break;
                     }
-                    case Opcode.JumpIfLT:
-                    {
-                        var cmp = ReadOperand(inst.A!).IntValue;
-                        if (cmp < 0)
-                            ip = currentFunction.Body.Labels[(int)inst.B!.Value].Location - 1;
-                        break;
-                    }
-                    case Opcode.JumpIfLTE:
-                    {
-                        var cmp = ReadOperand(inst.A!).IntValue;
-                        if (cmp <= 0)
-                            ip = currentFunction.Body.Labels[(int)inst.B!.Value].Location - 1;
-                        break;
-                    }
-                    case Opcode.JumpIfGT:
-                    {
-                        var cmp = ReadOperand(inst.A!).IntValue;
-                        if (cmp > 0)
-                            ip = currentFunction.Body.Labels[(int)inst.B!.Value].Location - 1;
-                        break;
-                    }
-                    case Opcode.JumpIfGTE:
-                    {
-                        var cmp = ReadOperand(inst.A!).IntValue;
-                        if (cmp >= 0)
-                            ip = currentFunction.Body.Labels[(int)inst.B!.Value].Location - 1;
-                        break;
-                    }
-                    case Opcode.Jump:
+                    case Opcode.Jmp:
                     {
                         ip = currentFunction.Body.Labels[(int)inst.A!.Value].Location - 1;
                         break;

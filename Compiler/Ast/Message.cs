@@ -257,6 +257,12 @@ namespace Compiler.Ast
 
         public static Def CannotFindImport { get; } = new(MessageType.Error, "Unable to find any module which matches '{0}'");
 
+        public static Def CannotContinue { get; } = new(MessageType.Error, "No loop context to continue from");
+
+        public static Def CannotBreak { get; } = new(MessageType.Error, "No loop context to break from");
+
+        public static Def CannotBreakNoLabel { get; } = new(MessageType.Error, "No loop label '{0}' declared in scope to break from");
+
         public sealed record Def(
             MessageType Type,
             string Content,

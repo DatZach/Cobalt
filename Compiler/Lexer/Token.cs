@@ -149,6 +149,8 @@ namespace Compiler.Lexer
         [Description("'!.'")] ErrorDot,
         [Description("'!!'")] ErrorCoalesce,
 
+        [Description("'@'")] At,
+
         [Description("<illegal token>")] IllegalToken,
         [Description("<end-of-stream>")] EndOfStream
     }

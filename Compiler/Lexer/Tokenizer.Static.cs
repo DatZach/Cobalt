@@ -79,7 +79,9 @@ namespace Compiler.Lexer
                 ["?."] = TokenType.NilDot,
                 ["??"] = TokenType.NilCoalesce,
                 ["!."] = TokenType.ErrorDot,
-                ["!!"] = TokenType.ErrorCoalesce
+                ["!!"] = TokenType.ErrorCoalesce,
+
+                ["@"] = TokenType.At
             };
             
             Keywords = new Dictionary<string, TokenType>
