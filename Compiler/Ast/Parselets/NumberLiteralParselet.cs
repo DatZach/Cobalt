@@ -5,7 +5,7 @@ using Compiler.CodeGeneration;
 
 namespace Compiler.Ast.Parselets
 {
-    internal sealed class NumberParselet : IPrefixExpressionParselet
+    internal sealed class NumberLiteralParselet : IPrefixExpressionParselet
     {
         private readonly static char[] TypeSpecifiers = { 'u', 's', 'f' };
 
@@ -82,27 +82,27 @@ namespace Compiler.Ast.Parselets
             if (hasHexSpecified)
             {
                 if (TryParse(value, 16, out integerNumber))
-                    return new NumberExpression(token, integerNumber, type, bitSize);
+                    return new NumberLiteralExpression(token, integerNumber, type, bitSize);
             }
             else if (hasBinSpecified)
             {
                 if (TryParse(value, 2, out integerNumber))
-                    return new NumberExpression(token, integerNumber, type, bitSize);
+                    return new NumberLiteralExpression(token, integerNumber, type, bitSize);
             }
             else if (hasDotSpecified
                  &&  double.TryParse(value, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out floatNumber))
             {
                 integerNumber = BitConverter.DoubleToInt64Bits(floatNumber);
-                return new NumberExpression(token, integerNumber, type, bitSize);
+                return new NumberLiteralExpression(token, integerNumber, type, bitSize);
             }
             else
             {
                 if (TryParse(value, 10, out integerNumber))
-                    return new NumberExpression(token, integerNumber, type, bitSize);
+                    return new NumberLiteralExpression(token, integerNumber, type, bitSize);
             }
 
             parser.Messages.Add(Message.IllegalNumber, token, value);
-            return new NumberExpression(token, 0, eCobType.None, 0);
+            return new NumberLiteralExpression(token, 0, eCobType.None, 0);
         }
 
         private static bool TryParse(string value, int fromBase, out long result)

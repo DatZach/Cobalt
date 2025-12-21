@@ -17,10 +17,10 @@ namespace Compiler.Ast
             StatementPrefixParselets = new Dictionary<TokenType, IPrefixStatementParselet>();
 
             // Primitives
-            Register(TokenType.Number, new NumberParselet());
-            Register(TokenType.String, new StringParselet());
-            Register(TokenType.True, new BooleanParselet());
-            Register(TokenType.False, new BooleanParselet());
+            Register(TokenType.Number, new NumberLiteralParselet());
+            Register(TokenType.String, new StringLiteralParselet());
+            Register(TokenType.True, new BooleanLiteralParselet());
+            Register(TokenType.False, new BooleanLiteralParselet());
             Register(TokenType.Identifier, new IdentifierParselet());
             Register(TokenType.LeftParen, new GroupParselet());
             Register(TokenType.LeftParen, new CallParselet());
@@ -60,6 +60,7 @@ namespace Compiler.Ast
             Register(TokenType.Subtract, new PrefixOperatorParselet(PrecedenceTable.Unary));
 
             Register(TokenType.Is, new BinaryOperatorParselet(PrecedenceTable.Is));
+            Register(TokenType.In, new BinaryOperatorParselet(PrecedenceTable.In));
             
             Register(TokenType.Equals, new BinaryOperatorParselet(PrecedenceTable.Equals));
             Register(TokenType.NotEquals, new BinaryOperatorParselet(PrecedenceTable.NotEquals));

@@ -4,11 +4,11 @@ using System.Diagnostics;
 
 namespace Compiler.Ast.Expressions
 {
-    internal sealed class BooleanExpression : Expression
+    internal sealed class BooleanLiteralExpression : Expression
     {
         public bool Value => Token.Type == TokenType.True;
 
-        public BooleanExpression(Token token)
+        public BooleanLiteralExpression(Token token)
             : base(token)
         {
 

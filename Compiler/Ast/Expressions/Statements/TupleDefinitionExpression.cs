@@ -48,11 +48,12 @@ namespace Compiler.Ast.Expressions.Statements
                 }
                 else
                 {
+                    var @this = compiler.BinOpLHS == null ? Operand.This : compiler.BinOpLHS.Operand;
                     var storage = compiler.CurrentFunction.AllocateStorage(fieldType);
                     compiler.CurrentFunction.Body.Emit(
                         Opcode.GetField,
                         storage.Operand,
-                        compiler.BinOpLHS.Operand,
+                        @this,
                         new Operand { Type = OperandType.ImmediateUnsigned, Value = idx }
                     );
                     return storage;
@@ -83,7 +84,9 @@ namespace Compiler.Ast.Expressions.Statements
                 );
             }
 
-            return null;
+            return compiler.CurrentModule.GetIdentifier(compiler, expression);
+
+            //return null;
         }
 
         public void SetIdentifier(CodeGeneration.Compiler compiler, IdentifierExpression expression)

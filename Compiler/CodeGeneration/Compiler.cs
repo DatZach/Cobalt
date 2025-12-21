@@ -37,8 +37,7 @@ namespace Compiler.CodeGeneration
         private readonly Module rootModule;
         private readonly Stack<Function> functionStack;
         private readonly Stack<IContext> contextStack; // TODO IScopedContext or something (Struct, Module, Tuple, etc.)
-        private readonly Stack<Label> continueStack;
-        private readonly Stack<Label> breakStack;
+        private readonly Stack<LoopContext> loopStack;
 
         private Compiler(MessageCollection messages)
         {
@@ -49,8 +48,7 @@ namespace Compiler.CodeGeneration
             Globals = new List<CobVariable>();
             functionStack = new Stack<Function>();
             contextStack = new Stack<IContext>();
-            continueStack = new Stack<Label>();
-            breakStack = new Stack<Label>();
+            loopStack = new Stack<LoopContext>();
 
             CurrentModule = rootModule = new Module(this, null);
             AllocateGlobal(new CobVariable(CurrentModule.InitializerFunction.FullyQualifiedName, new CobType(eCobType.Function, 0, tag: CurrentModule.InitializerFunction), false)); // HACK Awful. Global should be scoped to a Module
@@ -486,56 +484,79 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(ForStatement expression)
         {
-            //var varIndex = CurrentFunction.AllocateStorage(CobType.Int);
             var startLabel = CurrentFunction.Body.AllocateLabel();
             var endLabel = CurrentFunction.Body.AllocateLabel();
-            endLabel.Tag = expression.Label?.Value;
 
-            continueStack.Push(startLabel);
-            breakStack.Push(endLabel);
+            loopStack.Push(new LoopContext(expression.Label?.Value, startLabel, endLabel));
 
-            //if (expression.Conditional is BinaryOperatorExpression boe
-            //&&  boe.Operator == TokenType.Is)
-            //{
-            //    var index = boe.Left.Accept(this);
-            //    var range = boe.Right.Accept(this);
-            //}
-
-            startLabel.Mark();
-            if (expression.Conditional != null)
+            if (expression.Conditional is BinaryOperatorExpression boe
+            &&  boe.Operator == TokenType.In)
             {
+                //var varIndex = CurrentFunction.AllocateStorage(CobType.Int);
+                var index = boe.Left.Accept(this);
+                var range = boe.Right.Accept(this);
+
+                var tdeRangeEnumerator = rootModule.TupleTypes.First(x => x.Name == "RangeEnumerator");
+                var typeRangeTuple = new CobType(eCobType.Struct, tag: tdeRangeEnumerator);
+                var varEnumerator = CurrentFunction.AllocateStorage(typeRangeTuple);
+
+                CurrentFunction.Body.Emit(
+                    Opcode.Call,
+                    new Operand { Type = OperandType.Global, Value = FindGlobal("GetEnumerator") },
+                    varEnumerator.Operand,
+                    new[] { range.Operand }
+                );
+                range.Free();
+
+                startLabel.Mark();
+
+                var moveNextResultStorage = CurrentFunction.AllocateStorage(CobType.Boolean);
+                CurrentFunction.Body.Emit(
+                    Opcode.Call,
+                    new Operand { Type = OperandType.Global, Value = FindGlobal("MoveNext") },
+                    moveNextResultStorage.Operand,
+                    new[] { varEnumerator.Operand }
+                );
+
+                CurrentFunction.Body.Emit(Opcode.JmpF, moveNextResultStorage.Operand, endLabel);
+                CurrentFunction.Body.Emit(Opcode.GetField, index.Operand, varEnumerator.Operand, new Operand { Type = OperandType.ImmediateUnsigned, Value = 0 });
+            }
+            else if (expression.Conditional != null)
+            {
+                startLabel.Mark();
                 var a = expression.Conditional.Accept(this);
                 CurrentFunction.Body.Emit(Opcode.JmpF, a.Operand, endLabel);
                 a.Free();
             }
+            else
+                startLabel.Mark();
 
             expression.Body.Accept(this)?.Free();
 
             CurrentFunction.Body.Emit(Opcode.Jmp, startLabel);
             endLabel.Mark();
 
-            breakStack.Pop();
-            continueStack.Pop();
+            loopStack.Pop();
 
             return null;
         }
 
         public Storage? Visit(ContinueStatement expression)
         {
-            if (continueStack.Count == 0)
+            if (loopStack.Count == 0)
             {
                 Messages.Add(Message.CannotContinue, expression);
                 return null;
             }
 
-            CurrentFunction.Body.Emit(Opcode.Jmp, continueStack.Peek());
+            CurrentFunction.Body.Emit(Opcode.Jmp, loopStack.Peek().Continue);
 
             return null;
         }
 
         public Storage? Visit(BreakStatement expression)
         {
-            if (breakStack.Count == 0)
+            if (loopStack.Count == 0)
             {
                 Messages.Add(Message.CannotBreak, expression);
                 return null;
@@ -543,17 +564,17 @@ namespace Compiler.CodeGeneration
 
             Label label;
             if (expression.Label == null)
-                label = breakStack.Peek();
+                label = loopStack.Peek().Break;
             else
             {
-                var fLabel = breakStack.FirstOrDefault(x => x.Tag == expression.Label.Value);
-                if (fLabel == null)
+                var context = loopStack.FirstOrDefault(x => x.Tag == expression.Label.Value);
+                if (context == null)
                 {
                     Messages.Add(Message.CannotBreakNoLabel, expression, expression.Label.Value);
                     return null;
                 }
 
-                label = fLabel;
+                label = context.Break;
             }
 
             CurrentFunction.Body.Emit(Opcode.Jmp, label);
@@ -1135,7 +1156,7 @@ namespace Compiler.CodeGeneration
             return storage;
         }
 
-        public Storage? Visit(NumberExpression expression)
+        public Storage? Visit(NumberLiteralExpression expression)
         {
             return CurrentFunction.AllocateStorage(
                 new CobType(expression.Type, expression.BitSize),
@@ -1143,12 +1164,12 @@ namespace Compiler.CodeGeneration
             );
         }
 
-        public Storage? Visit(BooleanExpression expression)
+        public Storage? Visit(BooleanLiteralExpression expression)
         {
             return CurrentFunction.AllocateStorage(CobType.Boolean, expression.Value ? 1 : 0);
         }
 
-        public Storage? Visit(StringExpression expression)
+        public Storage? Visit(StringLiteralExpression expression)
         {
             var byteCount = Encoding.UTF8.GetByteCount(expression.Value);
             var data = new byte[byteCount + 1];
@@ -1261,4 +1282,6 @@ namespace Compiler.CodeGeneration
 
         void SetIdentifier(Compiler compiler, IdentifierExpression expression);
     }
+
+    internal sealed record LoopContext(string? Tag, Label Continue, Label Break);
 }

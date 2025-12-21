@@ -86,7 +86,8 @@ namespace Compiler.CodeGeneration
                 eCobType.Float => AllocateRegister(),
                 eCobType.Array => AllocateRegister(), // ????????
                 eCobType.Lens => AllocateRegister(), // ??
-                eCobType.Tuple => AllocateLocal(new CobVariable("$tuple", type, true)),
+                eCobType.Tuple => AllocateRegister(),//AllocateLocal(new CobVariable("$tuple", type, true)),
+                eCobType.Struct => AllocateRegister(),
                 _ => throw new NotSupportedException()
             };
 

@@ -42,5 +42,6 @@
         public const int Is = 2;
 
         public const int Assignment = 1;
+        public const int In = 1;
     }
 }

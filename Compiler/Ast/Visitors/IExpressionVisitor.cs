@@ -33,9 +33,9 @@ namespace Compiler.Ast.Visitors
         T Visit(IdentifierExpression expression);
         T Visit(LensExpression expression);
         T Visit(ArrayExpression expression);
-        T Visit(NumberExpression expression);
-        T Visit(BooleanExpression expression);
-        T Visit(StringExpression expression);
+        T Visit(NumberLiteralExpression expression);
+        T Visit(BooleanLiteralExpression expression);
+        T Visit(StringLiteralExpression expression);
         T Visit(EmptyExpression expression);
     }
 }

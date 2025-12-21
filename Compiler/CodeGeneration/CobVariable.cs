@@ -54,6 +54,11 @@ namespace Compiler.CodeGeneration
 
         public CobVariable DeepClone()
         {
+            // HACK REMOVE ASAP /////////////////////
+            if (Type == eCobType.Tuple) // Structs are reference types
+                return this;
+            /////////////////////////////////////////
+
             if (Type == eCobType.Struct) // Structs are reference types
                 return this;
 

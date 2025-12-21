@@ -120,8 +120,6 @@
 
         public int Location { get; private set; }
 
-        public string? Tag { get; set; }
-
         private readonly InstructionBuffer buffer;
 
         public Label(InstructionBuffer buffer, int index)

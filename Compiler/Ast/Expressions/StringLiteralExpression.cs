@@ -4,11 +4,11 @@ using System.Diagnostics;
 
 namespace Compiler.Ast.Expressions
 {
-    internal sealed class StringExpression : Expression
+    internal sealed class StringLiteralExpression : Expression
     {
         public string Value { get; }
 
-        public StringExpression(Token token, string value)
+        public StringLiteralExpression(Token token, string value)
             : base(token)
         {
             Value = value;

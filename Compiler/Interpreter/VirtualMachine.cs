@@ -15,7 +15,8 @@ namespace Compiler.Interpreter
 
         private readonly Stack<Function> functionStack;
         private readonly Stack<IList<CobVariable>?> parameterStack;
-        private readonly CobVariable[] registers;
+        private readonly Stack<CobVariable[]> registerStack;
+        private CobVariable[] registers;
 
         private readonly NativeLibrariesProxy nativeLibrariesProxy;
         private readonly CodeGeneration.Compiler compiler;
@@ -25,6 +26,7 @@ namespace Compiler.Interpreter
             this.compiler = compiler ?? throw new ArgumentNullException(nameof(compiler));
             functionStack = new Stack<Function>(4);
             parameterStack = new Stack<IList<CobVariable>?>(4);
+            registerStack = new Stack<CobVariable[]>(4);
             registers = new CobVariable[64];
             
             nativeLibrariesProxy = NativeLibrariesProxy.FromCompiler(compiler);
@@ -34,6 +36,8 @@ namespace Compiler.Interpreter
         {
             functionStack.Push(function);
             parameterStack.Push(parameters);
+            registerStack.Push(registers);
+            registers = new CobVariable[64];
 
             var instructions = function.Body.Instructions;
             for (int ip = 0; ip < instructions.Count; ++ip)
@@ -70,6 +74,7 @@ namespace Compiler.Interpreter
                     case Opcode.Return:
                     {
                         var value = inst.A != null ? ReadOperand(inst.A) : null;
+                        registers = registerStack.Pop();
                         parameterStack.Pop();
                         functionStack.Pop();
                         return value;

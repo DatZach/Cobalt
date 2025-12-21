@@ -4,7 +4,7 @@ using Compiler.Ast.Expressions;
 
 namespace Compiler.Ast.Parselets
 {
-    internal sealed class StringParselet : IPrefixExpressionParselet
+    internal sealed class StringLiteralParselet : IPrefixExpressionParselet
     {
         private const char EscapeCharacter = '^';
 
@@ -12,7 +12,7 @@ namespace Compiler.Ast.Parselets
         {
             var value = token.Value;
             if (!value.Contains(EscapeCharacter))
-                return new StringExpression(token, token.Value);
+                return new StringLiteralExpression(token, token.Value);
 
             var length = value.Length;
             var sb = new StringBuilder(length);
@@ -66,7 +66,7 @@ namespace Compiler.Ast.Parselets
                 sb.Append(ch);
             }
 
-            return new StringExpression(token, sb.ToString());
+            return new StringLiteralExpression(token, sb.ToString());
         }
 
         private static bool TryParseByte(string value, out char result)

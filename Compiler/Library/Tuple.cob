@@ -1,18 +1,16 @@
-/*
-tuple RangeIterator (
-    Value: u64;
+tuple RangeEnumerator (
+    Current: u64;
     End: u64;
 
     func MoveNext() bool {
-        if (Value < End) {
-            Value += 1;
+        if (Current < End) {
+            Current += 1;
             return true;
         }
 
         return false;
     }
 )
-*/
 
 tuple Range (
     Start: u64;
@@ -20,5 +18,5 @@ tuple Range (
 
     Length: u64 => End - Start;
 
-    //func GetIterator() RangeIterator => RangeIterator ( Start, End );
+    func GetEnumerator() RangeEnumerator => RangeEnumerator ( Start - 1, End );
 )

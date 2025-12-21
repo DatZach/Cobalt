@@ -16,7 +16,8 @@ namespace Compiler
 
         internal static string PreambleSource { get; private set; }
 
-        private static Stopwatch stopwatch;
+        private static Stopwatch swCompiler;
+        private static Stopwatch swRuntime;
 
         public static void Main(string[] args)
         {
@@ -29,7 +30,7 @@ namespace Compiler
 
             EstablishEnvironment();
 
-            stopwatch = Stopwatch.StartNew();
+            swCompiler = Stopwatch.StartNew();
 
             var messages = new MessageCollection();
             var source = PreambleSource + FileSystem.ReadAllText(Config.EntrySourceFilePath);
@@ -47,13 +48,14 @@ namespace Compiler
 
             ArtifactFactory.Assemble(compiler);
 
-            stopwatch.Stop();
+            swCompiler.Stop();
 
             PrintCompilerState(compiler);
             PrintCompilerStatistics();
             
             if (compiler.Artifacts.Count == 0)
             {
+                swRuntime = Stopwatch.StartNew();
                 using var vm = new VirtualMachine(compiler);
                 if (compiler.EntryFunction == null)
                 {
@@ -62,6 +64,9 @@ namespace Compiler
                 }
 
                 vm.ExecuteFunction(compiler.EntryFunction);
+                swRuntime.Stop();
+
+                PrintRuntimeStatistics();
             }
         }
 
@@ -139,7 +144,7 @@ namespace Compiler
             if (Config.StatisticsVerboseOutputLevel <= 0)
                 return;
 
-            Console.WriteLine($"Compiled in {stopwatch.ElapsedMilliseconds}ms");
+            Console.WriteLine($"Compiled in {swCompiler.ElapsedMilliseconds}ms");
             if (Config.StatisticsVerboseOutputLevel > 1)
             {
                 Console.WriteLine($"\tFile IO    {FileSystem.TotalMilliseconds}ms");
@@ -150,6 +155,14 @@ namespace Compiler
             }
 
             Console.WriteLine();
+        }
+
+        private static void PrintRuntimeStatistics()
+        {
+            if (Config.StatisticsVerboseOutputLevel > 1)
+            {
+                Console.WriteLine($"Runtime complete in {swRuntime.ElapsedMilliseconds}ms");
+            }
         }
     }
 

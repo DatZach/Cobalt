@@ -5,7 +5,7 @@ using Compiler.CodeGeneration;
 
 namespace Compiler.Ast.Expressions
 {
-    internal sealed class NumberExpression : Expression
+    internal sealed class NumberLiteralExpression : Expression
     {
         public long LongValue { get; }
 
@@ -13,7 +13,7 @@ namespace Compiler.Ast.Expressions
 
         public int BitSize { get; }
 
-        public NumberExpression(Token token, long longValue, eCobType type, int bitSize)
+        public NumberLiteralExpression(Token token, long longValue, eCobType type, int bitSize)
             : base(token)
         {
             LongValue = longValue;
