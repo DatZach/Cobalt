@@ -791,12 +791,13 @@ namespace Compiler.CodeGeneration.Platform
                     var globalIdx = compiler.FindGlobal(valueName);
                     if (globalIdx == -1)
                     {
-                        globalIdx = compiler.AllocateGlobal(new CobVariable(
-                            valueName,
-                            new CobType(eCobType.Float, operand.Size),
-                            false,
-                            operand.Value
-                        ));
+                        throw new NotImplementedException();
+                        //globalIdx = compiler.AllocateGlobal(new CobVariable(
+                        //    valueName,
+                        //    new CobType(eCobType.Float, operand.Size),
+                        //    false,
+                        //    operand.Value
+                        //));
                     }
 
                     var type = compiler.Globals[globalIdx].Type;

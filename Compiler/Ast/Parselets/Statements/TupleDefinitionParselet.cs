@@ -27,7 +27,7 @@ namespace Compiler.Ast.Parselets.Statements
                     // Field decl
                     var fieldName = parser.Take(TokenType.Identifier);
                     parser.Take(TokenType.Colon);
-                    var fieldType = parser.ParseTypeName();
+                    var fieldType = CobType.FromString(parser.ParseTypeName());
 
                     StructDefinitionParselet.ParseGetterSetters(parser, out var getterExpression, out var setterExpression);
 
@@ -37,13 +37,7 @@ namespace Compiler.Ast.Parselets.Statements
                 parser.MatchAndTakeToken(TokenType.Semicolon);
             }
 
-            var result = new TupleDefinitionExpression(token, name.Value, fields, functions);
-
-            // TODO HACK Should be done in a Compiler FirstPass, not here
-            if (!CobType.TryAddAlias(name.Value, new CobType(eCobType.Tuple, tag: result)))
-                parser.Messages.Add(Message.SymbolConflictsWithOther, token, name.Value);
-
-            return result;
+            return new TupleDefinitionExpression(token, name.Value, fields, functions);
         }
     }
 }

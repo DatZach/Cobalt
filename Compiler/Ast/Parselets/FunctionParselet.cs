@@ -42,8 +42,7 @@ namespace Compiler.Ast.Parselets
 
             parser.Take(TokenType.RightParen);
 
-            var sReturnType = parser.MatchAndTakeToken(TokenType.Identifier)?.Value;
-            var returnType = CobType.FromString(sReturnType);
+            var returnTypeName = parser.Match(TokenType.Identifier) ? parser.ParseTypeName() : null;
 
             CallingConvention callingConvention;
             if (parser.MatchAndTakeToken(TokenType.CCall) != null)
@@ -74,7 +73,7 @@ namespace Compiler.Ast.Parselets
                 name,
                 parameters,
                 body,
-                returnType,
+                returnTypeName,
                 callingConvention
             );
         }

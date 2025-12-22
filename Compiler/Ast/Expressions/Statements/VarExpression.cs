@@ -29,16 +29,18 @@ namespace Compiler.Ast.Expressions.Statements
         {
             public Token Token { get; }
 
-            public CobType? Type { get; }
+            public string? TypeName { get; }
+
+            public CobType? Type => TypeName != null ? CobType.FromString(TypeName) : null;
 
             public Expression? Initializer { get; }
 
             public string Name => Token.Value!;
 
-            public Declaration(Token token, CobType? type, Expression? initializer)
+            public Declaration(Token token, string? typeName, Expression? initializer)
             {
                 Token = token;
-                Type = type;
+                TypeName = typeName;
                 Initializer = initializer;
             }
         }

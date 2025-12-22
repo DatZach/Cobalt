@@ -20,6 +20,8 @@ namespace Compiler.CodeGeneration
         public List<StructDefinitionExpression> StructTypes { get; } = new ();
 
         public Function InitializerFunction { get; }
+        
+        public bool IsRoot => Name == null;
 
         public Module(Compiler compiler, string? name)
         {
@@ -130,73 +132,6 @@ namespace Compiler.CodeGeneration
                     compiler.AssignmentRHS.Operand
                 );
                 return;
-            }
-        }
-
-        public void ForwardDeclare(Compiler compiler, Expression expression)
-        {
-            if (expression is FatArrowExpression fae)
-            {
-                ForwardDeclare(compiler, fae.Expression);
-            }
-            else if (expression is BlockExpression be)
-            {
-                foreach (var expr in be.Expressions)
-                    ForwardDeclare(compiler, expr);
-            }
-            else if (expression is FunctionExpression fe)
-            {
-                CallingConvention callingConvention;
-                IReadOnlyList<Function.Parameter> parameters;
-                if (compiler.CurrentContext is TupleDefinitionExpression)
-                {
-                    callingConvention = CallingConvention.ThisCall;
-                    var lParameters = new List<Function.Parameter>(fe.Parameters);
-                    lParameters.Insert(0, new Function.Parameter("this", new CobType(eCobType.Tuple, tag: compiler.CurrentContext), false));
-                    parameters = lParameters;
-                }
-                else
-                {
-                    callingConvention = fe.CallingConvention;
-                    parameters = fe.Parameters;
-                }
-
-                var function = AllocateFunction(
-                    fe.Name,
-                    callingConvention,
-                    parameters,
-                    fe.ReturnType
-                );
-
-                if (!fe.IsAnonymous)
-                {
-                    var type = new CobType(eCobType.Function, tag: function);
-                    compiler.AllocateGlobal(new CobVariable(fe.Name, type, false));
-                }
-            }
-            else if (expression is VarExpression ve)
-            {
-                if (compiler.CurrentFunction != compiler.CurrentModule.InitializerFunction)
-                    return;
-
-                foreach (var decl in ve.Declarations)
-                {
-                    var mutable = ve.Type == TokenType.Var;
-                    var variable = new CobVariable(decl.Name, CobType.None, mutable);
-                    compiler.AllocateGlobal(variable);
-                }
-            }
-            else if (expression is TupleDefinitionExpression tde)
-            {
-                TupleTypes.Add(tde);
-                foreach (var expr in tde.Functions)
-                    ForwardDeclare(compiler, expr);
-            }
-            else if (expression is StructDefinitionExpression sde)
-            {
-                StructTypes.Add(sde);
-                foreach (var expr in sde.Functions)
-                    ForwardDeclare(compiler, expr);
             }
         }
     }

@@ -40,7 +40,7 @@ namespace Compiler.Ast.Parselets.Statements
                 }
                 else
                 {
-                    symbolType = parser.ParseTypeName();
+                    symbolType = CobType.FromString(parser.ParseTypeName());
                     functionSignature = null;
                 }
             }

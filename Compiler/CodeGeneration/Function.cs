@@ -281,14 +281,25 @@ namespace Compiler.CodeGeneration
         {
             public string Name { get; }
 
-            public CobType Type { get; }
+            private string? typeName;
+            public string TypeName => typeName ??= Type.ToString();
+
+            private CobType? type;
+            public CobType Type => type ??= CobType.FromString(TypeName);
 
             public bool IsSpread { get; }
+
+            public Parameter(string name, string typeName, bool isSpread)
+            {
+                Name = name;
+                this.typeName = typeName;
+                IsSpread = isSpread;
+            }
 
             public Parameter(string name, CobType type, bool isSpread)
             {
                 Name = name;
-                Type = type;
+                this.type = type;
                 IsSpread = isSpread;
             }
         }

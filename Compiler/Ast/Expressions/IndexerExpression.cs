@@ -4,7 +4,7 @@ using System.Diagnostics;
 
 namespace Compiler.Ast.Expressions
 {
-    internal sealed class ArrayExpression : Expression
+    internal sealed class IndexerExpression : Expression
     {
         public Expression Left { get; }
 
@@ -12,7 +12,7 @@ namespace Compiler.Ast.Expressions
 
         public override Token EndToken { get; }
 
-        public ArrayExpression(Token token, Token endToken, Expression left, Expression index)
+        public IndexerExpression(Token token, Token endToken, Expression left, Expression index)
             : base(token)
         {
             EndToken = endToken;

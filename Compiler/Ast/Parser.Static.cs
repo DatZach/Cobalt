@@ -24,8 +24,8 @@ namespace Compiler.Ast
             Register(TokenType.Identifier, new IdentifierParselet());
             Register(TokenType.LeftParen, new GroupParselet());
             Register(TokenType.LeftParen, new CallParselet());
-            Register(TokenType.LeftBrace, new StructInitializerParselet());
-            Register(TokenType.LeftSquare, new ArrayParselet());
+            Register(TokenType.LeftBrace, new StructLiteralParselet());
+            Register(TokenType.LeftSquare, new IndexerParselet());
             Register(TokenType.Function, new FunctionParselet());
             Register(TokenType.Semicolon, new EmptyParselet());
 

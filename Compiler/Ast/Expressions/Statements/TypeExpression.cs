@@ -1,7 +1,6 @@
 ﻿using Compiler.Ast.Visitors;
 using Compiler.Lexer;
 using System.Diagnostics;
-using Compiler.CodeGeneration;
 
 namespace Compiler.Ast.Expressions.Statements
 {
@@ -9,13 +8,13 @@ namespace Compiler.Ast.Expressions.Statements
     {
         public string Name { get; }
 
-        public CobType Type { get; }
+        public string TypeName { get; }
 
-        public TypeExpression(Token token, string name, CobType type)
+        public TypeExpression(Token token, string name, string typeName)
             : base(token)
         {
             Name = name;
-            Type = type;
+            TypeName = typeName;
         }
 
         [DebuggerStepThrough]

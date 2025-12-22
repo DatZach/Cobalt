@@ -4,7 +4,7 @@ using System.Diagnostics;
 
 namespace Compiler.Ast.Expressions
 {
-    internal sealed class StructInitializerExpression : Expression
+    internal sealed class StructLiteralExpression : Expression
     {
         public Expression StructTypeExpression { get; }
 
@@ -14,7 +14,7 @@ namespace Compiler.Ast.Expressions
 
         public override Token EndToken { get; }
 
-        public StructInitializerExpression(
+        public StructLiteralExpression(
             Token token,
             Token endToken,
             Expression structTypeExpression,

@@ -90,7 +90,7 @@ namespace Compiler.Ast
 
         // TODO Not sure if this is actually the best place for this...
         //      Imports CodeGeneration namespace
-        public CobType ParseTypeName()
+        public string ParseTypeName()
         {
             string typeName;
 
@@ -108,11 +108,7 @@ namespace Compiler.Ast
                 endToken = type;
             }
 
-            var result = CobType.FromString(typeName);
-            if (result == CobType.None)
-                Messages.Add(Message.IllegalTypeName, type, endToken, typeName);
-
-            return result;
+            return typeName;
         }
 
         public Token? MatchAndTakeToken(TokenType type)

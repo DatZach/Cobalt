@@ -25,10 +25,10 @@ namespace Compiler.Ast.Parselets.Statements
                 else if (parser.Match(TokenType.LeftSquare)) // Indexer
                 {
                     parser.Take(TokenType.LeftSquare);
-                    var keyType = parser.ParseTypeName();
+                    var keyType = CobType.FromString(parser.ParseTypeName());
                     parser.Take(TokenType.RightSquare);
                     parser.Take(TokenType.Colon);
-                    var returnType = parser.ParseTypeName();
+                    var returnType = CobType.FromString(parser.ParseTypeName());
 
                     ParseGetterSetters(parser, out var getterExpression, out var setterExpression);
 
@@ -38,7 +38,7 @@ namespace Compiler.Ast.Parselets.Statements
                 {
                     var fieldName = parser.Take(TokenType.Identifier);
                     parser.Take(TokenType.Colon);
-                    var fieldType = parser.ParseTypeName();
+                    var fieldType = CobType.FromString(parser.ParseTypeName());
 
                     ParseGetterSetters(parser, out var getterExpression, out var setterExpression);
 
@@ -48,13 +48,7 @@ namespace Compiler.Ast.Parselets.Statements
                 parser.MatchAndTakeToken(TokenType.Semicolon);
             }
 
-            var result = new StructDefinitionExpression(token, name.Value, fields, functions, indexerDefinition);
-
-            // TODO HACK Should be done in a Compiler FirstPass, not here
-            if (!CobType.TryAddAlias(name.Value, new CobType(eCobType.Struct, tag: result)))
-                parser.Messages.Add(Message.SymbolConflictsWithOther, token, name.Value);
-
-            return result;
+            return new StructDefinitionExpression(token, name.Value, fields, functions, indexerDefinition);
         }
 
         public static void ParseGetterSetters(

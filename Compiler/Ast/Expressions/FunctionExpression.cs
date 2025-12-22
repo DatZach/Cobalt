@@ -10,8 +10,10 @@ namespace Compiler.Ast.Expressions
         public string Name { get; }
 
         public bool IsAnonymous { get; }
-        
-        public CobType ReturnType { get; }
+
+        public string? ReturnTypeName { get; }
+
+        public CobType ReturnType => CobType.FromString(ReturnTypeName);
 
         public CallingConvention CallingConvention { get; }
 
@@ -24,7 +26,7 @@ namespace Compiler.Ast.Expressions
             string? name,
             IReadOnlyList<Function.Parameter> parameters,
             Expression? body,
-            CobType returnType,
+            string? returnTypeName,
             CallingConvention callingConvention
         )
             : base(token)
@@ -33,7 +35,7 @@ namespace Compiler.Ast.Expressions
             IsAnonymous = name == null;
             Parameters = parameters;
             Body = body;
-            ReturnType = returnType;
+            ReturnTypeName = returnTypeName;
             CallingConvention = callingConvention;
         }
 

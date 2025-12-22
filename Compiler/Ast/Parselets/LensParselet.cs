@@ -1,4 +1,5 @@
 ﻿using Compiler.Ast.Expressions;
+using Compiler.CodeGeneration;
 using Compiler.Lexer;
 
 namespace Compiler.Ast.Parselets
@@ -7,7 +8,7 @@ namespace Compiler.Ast.Parselets
     {
         public Expression Parse(Parser parser, Token token)
         {
-            var elementType = parser.ParseTypeName();
+            var elementType = CobType.FromString(parser.ParseTypeName());
             var expression = parser.ParseExpression();
 
             return new LensExpression(token, elementType, expression);

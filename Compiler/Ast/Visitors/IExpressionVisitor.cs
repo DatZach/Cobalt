@@ -29,10 +29,10 @@ namespace Compiler.Ast.Visitors
         T Visit(PostfixOperatorExpression expression);
         T Visit(BlockExpression expression);
         T Visit(CallExpression expression);
-        T Visit(StructInitializerExpression expression);
+        T Visit(StructLiteralExpression expression);
         T Visit(IdentifierExpression expression);
         T Visit(LensExpression expression);
-        T Visit(ArrayExpression expression);
+        T Visit(IndexerExpression expression);
         T Visit(NumberLiteralExpression expression);
         T Visit(BooleanLiteralExpression expression);
         T Visit(StringLiteralExpression expression);

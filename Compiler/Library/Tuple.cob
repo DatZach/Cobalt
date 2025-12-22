@@ -1,3 +1,5 @@
+// module System;
+
 tuple RangeEnumerator (
     Current: u64;
     End: u64;

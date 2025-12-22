@@ -3,7 +3,7 @@ using Compiler.Lexer;
 
 namespace Compiler.Ast.Parselets
 {
-    internal sealed class ArrayParselet : IInfixExpressionParselet
+    internal sealed class IndexerParselet : IInfixExpressionParselet
     {
         public int Precedence => PrecedenceTable.ArrayIndexer;
 
@@ -12,7 +12,7 @@ namespace Compiler.Ast.Parselets
             var index = parser.ParseExpression();
             var endToken = parser.Take(TokenType.RightSquare);
 
-            return new ArrayExpression(token, endToken, left, index);
+            return new IndexerExpression(token, endToken, left, index);
         }
     }
 }

@@ -21,6 +21,8 @@ namespace Compiler.CodeGeneration
 
         public List<CobVariable> Globals { get; } // TODO Remove
 
+        public List<ScriptExpression> Scripts { get; }
+
         public Function? EntryFunction { get; private set; }
 
         // TODO Possible to collapse contextStack and functionStack into 1?
@@ -34,7 +36,7 @@ namespace Compiler.CodeGeneration
 
         public MessageCollection Messages { get; } // TODO Make this private again, somehow
 
-        private readonly Module rootModule;
+        //private readonly Module rootModule;
         private readonly Stack<Function> functionStack;
         private readonly Stack<IContext> contextStack; // TODO IScopedContext or something (Struct, Module, Tuple, etc.)
         private readonly Stack<LoopContext> loopStack;
@@ -46,19 +48,19 @@ namespace Compiler.CodeGeneration
             Exports = new List<Export>();
             Modules = new List<Module>();
             Globals = new List<CobVariable>();
+            Scripts = new List<ScriptExpression>();
             functionStack = new Stack<Function>();
             contextStack = new Stack<IContext>();
             loopStack = new Stack<LoopContext>();
-
-            CurrentModule = rootModule = new Module(this, null);
-            AllocateGlobal(new CobVariable(CurrentModule.InitializerFunction.FullyQualifiedName, new CobType(eCobType.Function, 0, tag: CurrentModule.InitializerFunction), false)); // HACK Awful. Global should be scoped to a Module
-            Modules.Add(rootModule);
 
             this.Messages = messages ?? throw new ArgumentNullException(nameof(messages));
         }
 
         public Storage? Visit(ScriptExpression expression)
         {
+            var rootModule = FindModule(null);
+            CurrentModule = rootModule;
+
             contextStack.Push(rootModule);
             functionStack.Push(CurrentModule.InitializerFunction);
 
@@ -88,12 +90,6 @@ namespace Compiler.CodeGeneration
             //    hackInitializers = null;
 
             var expressions = expression.Expressions;
-
-            for (int i = 0; i < expressions.Count; ++i)
-            {
-                if (expressions[i] is ModuleExpression) break;
-                CurrentModule.ForwardDeclare(this, expressions[i]);
-            }
 
             for (int i = 0; i < expressions.Count; ++i)
                 expressions[i].Accept(this);
@@ -132,23 +128,14 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(ModuleExpression expression)
         {
-            var module = Modules.FirstOrDefault(x => x.Name == expression.Name);
-            if (module == null)
-            {
-                module = new Module(this, expression.Name);
-                AllocateGlobal(new CobVariable(
-                    module.InitializerFunction.FullyQualifiedName,
-                    new CobType(eCobType.Function, 0, tag: module.InitializerFunction),
-                    false)); // HACK Awful. Global should be scoped to a Module
-                Modules.Add(module);
-            }
+            var module = FindModule(expression.Name);
 
             // TODO Remove this rule and implement AllocateModule
-            if (CurrentModule != rootModule && module != rootModule)
-            {
-                Messages.Add(Message.CannotNestModules, expression);
-                return null;
-            }
+            //if (CurrentModule != rootModule && module != rootModule)
+            //{
+            //    Messages.Add(Message.CannotNestModules, expression);
+            //    return null;
+            //}
 
             var prevModule = CurrentModule;
             CurrentModule = module;
@@ -158,8 +145,6 @@ namespace Compiler.CodeGeneration
 
             if (expression.Block != null)
             {
-                CurrentModule.ForwardDeclare(this, expression.Block);
-
                 var storage = expression.Block.Accept(this);
                 storage?.Free();
 
@@ -274,101 +259,9 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(ImportExpression expression)
         {
-            // X import *
-            // X import CobaltSourceFile
-            // X import Directory.CobaltSourceFile
-            // X import Directory.*
-            // X import StandardLibraryCobaltFile
-            
-            //   import CobaltAssembly *
-            //   import CobaltAssembly SpecificIdentifier
-
-            // X import NativeLibrary SpecificIdentifier Type
-
-            // TODO Invoke initializer
-
-            var isNativeImport = expression.SymbolName != null && expression.SymbolTypeSignature != null;
-            if (!isNativeImport)
-            {
-                var paths = new List<string>(4);
-
-                var srcDirectory = Path.GetDirectoryName(expression.Token.Filename);
-                var libDirectory = Program.LibraryDirectory;
-
-                var sourcePatternName = expression.SourceFile.Replace('.', Path.DirectorySeparatorChar);
-                
-                var srcSourcePath = Path.Combine(srcDirectory, sourcePatternName + ".cob");
-                if (FileSystem.FileExists(srcSourcePath)) paths.Add(srcSourcePath); 
-                
-                var libSourcePath = Path.Combine(libDirectory, sourcePatternName + ".cob");
-                if (FileSystem.FileExists(libSourcePath)) paths.Add(libSourcePath);
-
-                if (sourcePatternName.Contains('*'))
-                {
-                    var sourceDirectory = Path.GetDirectoryName(srcSourcePath);
-                    paths.AddRange(Directory.EnumerateFiles(sourceDirectory, "*.cob", SearchOption.AllDirectories));
-                }
-
-                if (paths.Count == 0)
-                    Messages.Add(Message.CannotFindImport, expression, expression.SourceFile);
-                else foreach (var path in paths)
-                {
-                    // HACK Caching the FileSystem level does not mean the compiler has already seen this file per se
-                    if (FileSystem.IsCached(path))
-                        continue;
-
-                    var source = FileSystem.ReadAllText(path);
-                    var tokens = Tokenizer.Tokenize(source, path, Messages);
-                    var ast = Parser.Parse(tokens, Messages);
-                    ast.Accept(this);
-
-                    //if (initializerFunction != null)
-                    //{
-                    //    CurrentFunction.Body.Emit(Opcode.Call, initializerFunction.Operand, Array.Empty<Operand>());
-                    //    initializerFunction.Free();
-                    //}
-                }
-            }
-            else
-            {
-                // Symbol import
-                Function? function;
-                if (expression.SymbolTypeSignature != null)
-                {
-                    function = new Function(
-                        expression.SymbolName,
-                        CurrentModule,
-                        expression.SymbolTypeSignature.CallingConvention,
-                        expression.SymbolTypeSignature.Parameters,
-                        expression.SymbolTypeSignature.ReturnType
-                    );
-                }
-                else
-                    function = null;
-
-                var import = new Import
-                {
-                    Library = expression.SourceFile,
-                    SymbolName = expression.SymbolName,
-                    Function = function
-                };
-
-                Imports.Add(import);
-                
-                if (function != null)
-                {
-                    function.NativeImport = import;
-                    AllocateGlobal(new CobVariable(
-                        expression.SymbolName,
-                        new CobType(eCobType.Function, tag: function),
-                        false
-                    ));
-                }
-            }
-
             return null;
         }
-
+        
         public Storage? Visit(ExportExpression expression)
         {
             var function = expression.FunctionExpression.Accept(this);
@@ -379,8 +272,60 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(ArtifactExpression expression)
         {
-            Artifacts.Add(expression);
             return null;
+        }
+
+        public Storage? Visit(FunctionExpression expression)
+        {
+            if (expression.Body == null)
+            {
+                Messages.Add(Message.MissingFunctionBody, expression);
+                return null;
+            }
+
+            //CallingConvention callingConvention;
+            //IReadOnlyList<Function.Parameter> parameters;
+            //if (CurrentContext is TupleDefinitionExpression)
+            //{
+            //    callingConvention = CallingConvention.ThisCall;
+            //    var lParameters = new List<Function.Parameter>(expression.Parameters);
+            //    lParameters.Insert(0, new Function.Parameter("this", new CobType(eCobType.Tuple, tag: CurrentContext), false));
+            //    parameters = lParameters;
+            //}
+            //else
+            //{
+            //    callingConvention = expression.CallingConvention;
+            //    parameters = expression.Parameters;
+            //}
+
+            //var function = CurrentModule.AllocateFunction(
+            //   expression.Name,
+            //    callingConvention,
+            //    parameters,
+            //    expression.ReturnType
+            //);
+
+            // TODO Make a clean API for this
+            var function = CurrentModule.Functions.First(x => x.Name == expression.Name);
+
+            functionStack.Push(function);
+            contextStack.Push(function);
+            
+            expression.Body.Accept(this);
+            
+            function.ReturnLabel.Mark();
+            function.Body.Emit(Opcode.Return); // TODO Error if not all paths return
+
+            contextStack.Pop();
+            functionStack.Pop();
+
+            //function.Body.HACK_Optmize();
+
+            return new Storage(
+                CurrentFunction,
+                new Operand(), //null, // TODO ???
+                new CobType(eCobType.Function, tag: function)
+            );
         }
 
         public Storage? Visit(ReturnExpression expression)
@@ -442,7 +387,7 @@ namespace Compiler.CodeGeneration
         public Storage? Visit(FatArrowExpression expression)
         {
             var value = expression.Expression.Accept(this);
-            if (CurrentModule == rootModule && value != null && value.Type == eCobType.Function)
+            if (CurrentModule.IsRoot && value != null && value.Type == eCobType.Function)
             {
                 if (EntryFunction != null)
                     Messages.Add(Message.CannotRedeclareEntryPoint, expression);
@@ -505,6 +450,8 @@ namespace Compiler.CodeGeneration
                 var index = boe.Left.Accept(this);
                 var range = boe.Right.Accept(this);
 
+                // TODO Should not find types like this...
+                var rootModule = FindModule(null);
                 var tdeRangeEnumerator = rootModule.TupleTypes.First(x => x.Name == "RangeEnumerator");
                 var typeRangeTuple = new CobType(eCobType.Struct, tag: tdeRangeEnumerator);
                 var varEnumerator = CurrentFunction.AllocateStorage(typeRangeTuple);
@@ -589,59 +536,6 @@ namespace Compiler.CodeGeneration
             CurrentFunction.Body.Emit(Opcode.Jmp, label);
 
             return null;
-        }
-
-        public Storage? Visit(FunctionExpression expression)
-        {
-            if (expression.Body == null)
-            {
-                Messages.Add(Message.MissingFunctionBody, expression);
-                return null;
-            }
-
-            //CallingConvention callingConvention;
-            //IReadOnlyList<Function.Parameter> parameters;
-            //if (CurrentContext is TupleDefinitionExpression)
-            //{
-            //    callingConvention = CallingConvention.ThisCall;
-            //    var lParameters = new List<Function.Parameter>(expression.Parameters);
-            //    lParameters.Insert(0, new Function.Parameter("this", new CobType(eCobType.Tuple, tag: CurrentContext), false));
-            //    parameters = lParameters;
-            //}
-            //else
-            //{
-            //    callingConvention = expression.CallingConvention;
-            //    parameters = expression.Parameters;
-            //}
-
-            //var function = CurrentModule.AllocateFunction(
-            //   expression.Name,
-            //    callingConvention,
-            //    parameters,
-            //    expression.ReturnType
-            //);
-
-            // TODO Make a clean API for this
-            var function = CurrentModule.Functions.First(x => x.Name == expression.Name);
-
-            functionStack.Push(function);
-            contextStack.Push(function);
-            
-            expression.Body.Accept(this);
-            
-            function.ReturnLabel.Mark();
-            function.Body.Emit(Opcode.Return); // TODO Error if not all paths return
-
-            contextStack.Pop();
-            functionStack.Pop();
-
-            //function.Body.HACK_Optmize();
-
-            return new Storage(
-                CurrentFunction,
-                new Operand(), //null, // TODO ???
-                new CobType(eCobType.Function, tag: function)
-            );
         }
 
         public Storage? BinOpLHS { get; set; } // TODO Probably a hack tbh
@@ -751,6 +645,8 @@ namespace Compiler.CodeGeneration
                                          or TokenType.RangeLength or TokenType.RangeTerminal)
             {
                 // TODO Should be allocateable on a Register
+                // TODO Should not discover this type like this...
+                var rootModule = FindModule(null);
                 var tdeRangeTuple = rootModule.TupleTypes.First(x => x.Name == "Range");
                 var typeRangeTuple = new CobType(eCobType.Tuple, tag: tdeRangeTuple);
                 var local = CurrentFunction.AllocateLocal(new CobVariable("$tuple", typeRangeTuple, false)
@@ -968,7 +864,7 @@ namespace Compiler.CodeGeneration
                     ||  (paramType != null && !CobType.IsCastable(argStorage.Type, paramType.Type)))
                     {
                         aOperandArguments[i] = Operand.None;
-                        Messages.Add(Message.TypeMismatch, arguments[i], paramType?.Type, argStorage);
+                        Messages.Add(Message.TypeMismatch, arguments[i], paramType?.Type, argStorage.Type);
                         continue;
                     }
                     
@@ -1064,36 +960,6 @@ namespace Compiler.CodeGeneration
 
             return CurrentFunction.AllocateStorage(functionStorage.Type, local);
         }
-
-        public Storage? Visit(StructInitializerExpression expression)
-        {
-            var structTypeStorage = expression.StructTypeExpression.Accept(this);
-            if (structTypeStorage == null || structTypeStorage.Type != eCobType.Struct
-            ||  structTypeStorage.Type.Tag is not StructDefinitionExpression sde)
-            {
-                Messages.Add(Message.CannotInstantiateType, expression.StructTypeExpression, structTypeStorage?.Type.ToString() ?? "(null)");
-                return null;
-            }
-            
-            var local = CurrentFunction.AllocateLocal(new CobVariable("$struct", structTypeStorage.Type, false)
-            {
-                StructValue = sde.Fields.Select(x => new CobVariable(x.Name, x.Type, true)).ToArray()
-            });
-
-            var storage = CurrentFunction.AllocateStorage(structTypeStorage.Type, local);
-
-            if (expression.Assignments != null)
-            {
-                BinOpLHS = storage;
-                contextStack.Push(sde);
-                for (var i = 0; i < expression.Assignments.Count; ++i)
-                    expression.Assignments[i].Accept(this);
-                contextStack.Pop();
-                BinOpLHS = null;
-            }
-
-            return storage;
-        }
         
         public Storage? Visit(IdentifierExpression expression)
         {
@@ -1125,7 +991,7 @@ namespace Compiler.CodeGeneration
             return storage;
         }
 
-        public Storage? Visit(ArrayExpression expression)
+        public Storage? Visit(IndexerExpression expression)
         {
             Storage? storage = null;
 
@@ -1160,6 +1026,36 @@ namespace Compiler.CodeGeneration
 
             index?.Free();
             source?.Free();
+
+            return storage;
+        }
+
+        public Storage? Visit(StructLiteralExpression expression)
+        {
+            var structTypeStorage = expression.StructTypeExpression.Accept(this);
+            if (structTypeStorage == null || structTypeStorage.Type != eCobType.Struct
+            ||  structTypeStorage.Type.Tag is not StructDefinitionExpression sde)
+            {
+                Messages.Add(Message.CannotInstantiateType, expression.StructTypeExpression, structTypeStorage?.Type.ToString() ?? "(null)");
+                return null;
+            }
+            
+            var local = CurrentFunction.AllocateLocal(new CobVariable("$struct", structTypeStorage.Type, false)
+            {
+                StructValue = sde.Fields.Select(x => new CobVariable(x.Name, x.Type, true)).ToArray()
+            });
+
+            var storage = CurrentFunction.AllocateStorage(structTypeStorage.Type, local);
+
+            if (expression.Assignments != null)
+            {
+                BinOpLHS = storage;
+                contextStack.Push(sde);
+                for (var i = 0; i < expression.Assignments.Count; ++i)
+                    expression.Assignments[i].Accept(this);
+                contextStack.Pop();
+                BinOpLHS = null;
+            }
 
             return storage;
         }
@@ -1228,9 +1124,29 @@ namespace Compiler.CodeGeneration
             var idx = Globals.Count;
             Globals.Add(variable);
 
-            CurrentModule.Variables[variable.Name] = variable;
-
             return idx;
+        }
+
+        public Module FindModule(string? name)
+        {
+            return Modules.First(x => x.Name == name);
+        }
+
+        public Module FindOrAllocateModule(string? name)
+        {
+            var module = Modules.FirstOrDefault(x => x.Name == name);
+            if (module != null)
+                return module;
+
+            module = new Module(this, name);
+            AllocateGlobal(new CobVariable(
+                module.InitializerFunction.FullyQualifiedName,
+                new CobType(eCobType.Function, 0, tag: module.InitializerFunction),
+                false
+            )); // HACK Awful. Global should be scoped to a Module
+            Modules.Add(module);
+
+            return module;
         }
 
         public bool IsSymbolVisible(CobVariable variable)
@@ -1256,8 +1172,18 @@ namespace Compiler.CodeGeneration
             try
             {
                 stopwatch.Start();
+                
                 var compiler = new Compiler(messages);
+                
+                var pass0 = new ForwardDeclaration(compiler);
+                ast.Accept(pass0);
+
+                // NOTE We must compile all imported scripts before we compile this script; list is in import order
+                for (var i = 0; i < compiler.Scripts.Count; ++i)
+                    compiler.Scripts[i].Accept(compiler);
+                
                 ast.Accept(compiler);
+                
                 return compiler;
             }
             finally

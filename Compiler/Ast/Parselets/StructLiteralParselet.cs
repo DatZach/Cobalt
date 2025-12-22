@@ -3,7 +3,7 @@ using Compiler.Lexer;
 
 namespace Compiler.Ast.Parselets
 {
-    internal sealed class StructInitializerParselet : IInfixExpressionParselet
+    internal sealed class StructLiteralParselet : IInfixExpressionParselet
     {
         public int Precedence => PrecedenceTable.StructInitializer;
 
@@ -33,7 +33,7 @@ namespace Compiler.Ast.Parselets
 
             var endToken = parser.Take(TokenType.RightBrace);
 
-            return new StructInitializerExpression(token, endToken, left, assignments);
+            return new StructLiteralExpression(token, endToken, left, assignments);
         }
     }
 }
