@@ -18,9 +18,6 @@
     <None Update="Library\Library.cob">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="Library\System.cob">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
     <None Update="Library\Tuple.cob">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

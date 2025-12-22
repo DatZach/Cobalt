@@ -76,7 +76,7 @@ namespace Compiler
             SourceDirectory = Path.GetDirectoryName(Config.EntrySourceFilePath);
             LibraryDirectory = Config.LibraryDirectory ?? Path.Combine(Path.GetDirectoryName(asm.Location), "Library");
 
-            PreambleSource = $"import Library;{Environment.NewLine}{Environment.NewLine}";
+            PreambleSource = Config.PreambleSource ?? $"import Library;{Environment.NewLine}{Environment.NewLine}";
         }
 
         private static void PrintCompilerState(CodeGeneration.Compiler compiler)
@@ -172,6 +172,8 @@ namespace Compiler
 
         public string? LibraryDirectory { get; init; }
 
+        public string? PreambleSource { get; init; }
+
         public string? FasmPath { get; init; }
 
         public bool FasmVerboseOutput { get; init; }
@@ -196,6 +198,7 @@ namespace Compiler
             {
                 EntrySourceFilePath = args[0],
                 LibraryDirectory = OptionalArgument<string>("--library-directory"),
+                PreambleSource = OptionalArgument<string>("--preamble"),
                 FasmPath = OptionalArgument<string>("--fasm"),
                 FasmVerboseOutput = OptionalArgument("--fasm-verbose", false),
                 AstVerboseOutput = OptionalArgument("--ast-verbose", false),

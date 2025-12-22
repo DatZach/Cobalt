@@ -1,9 +1,7 @@
 ﻿using System.Numerics;
 using Compiler.CodeGeneration;
 using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Text;
-using OperandType = Compiler.CodeGeneration.OperandType;
 
 namespace Compiler.Interpreter
 {
@@ -55,7 +53,13 @@ namespace Compiler.Interpreter
                         {
                             var aCalleeParameters = new CobVariable[callee.Parameters.Count];
                             for (int j = 0; j < aCalleeParameters.Length; ++j)
-                                aCalleeParameters[j] = ReadOperand(inst.D![j]).DeepClone();
+                            {
+                                var aCalleeParameter = ReadOperand(inst.D![j]);
+                                if (j != 0 || callee.CallingConvention != CallingConvention.ThisCall)
+                                    aCalleeParameter = aCalleeParameter.DeepClone();
+                                
+                                aCalleeParameters[j] = aCalleeParameter;
+                            }
 
                             calleeParameters = aCalleeParameters;
                         }
@@ -495,12 +499,12 @@ namespace Compiler.Interpreter
                 {
                     if (!proxies.TryGetValue(import.Library, out var proxy))
                     {
-                        var nativeLibrary = NativeLibrary.Load(import.Library);
+                        var nativeLibrary = System.Runtime.InteropServices.NativeLibrary.Load(import.Library);
                         proxy = new NativeLibraryProxy(nativeLibrary);
                         proxies.Add(import.Library, proxy);
                     }
 
-                    var address = NativeLibrary.GetExport(proxy.Library, import.SymbolName!);
+                    var address = System.Runtime.InteropServices.NativeLibrary.GetExport(proxy.Library, import.SymbolName!);
 
                     var method = new System.Reflection.Emit.DynamicMethod(
                         $"dynm_{import.SymbolName}",
@@ -545,7 +549,7 @@ namespace Compiler.Interpreter
             public void Dispose()
             {
                 foreach (var proxy in proxies.Values)
-                    NativeLibrary.Free(proxy.Library);
+                    System.Runtime.InteropServices.NativeLibrary.Free(proxy.Library);
 
                 proxies.Clear();
             }

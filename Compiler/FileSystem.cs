@@ -45,9 +45,8 @@ namespace Compiler
         {
             var content = ReadAllText(path);
 
-            // HACK
             if (path == Program.Config.EntrySourceFilePath)
-                lineIndex -= 2;
+                lineIndex -= Program.PreambleSource.Count(x => x == '\n');
 
             int idx = 0;
             int i = 0;

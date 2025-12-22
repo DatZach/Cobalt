@@ -28,7 +28,7 @@ namespace Compiler.CodeGeneration
 
         public IContext ParentContext => contextStack.Skip(1).FirstOrDefault();
 
-        private IContext CurrentContext => contextStack.Peek();
+        public IContext CurrentContext => contextStack.Peek();
 
         public Module CurrentModule { get; private set; } // TODO Make this private again
 
@@ -88,6 +88,13 @@ namespace Compiler.CodeGeneration
             //    hackInitializers = null;
 
             var expressions = expression.Expressions;
+
+            for (int i = 0; i < expressions.Count; ++i)
+            {
+                if (expressions[i] is ModuleExpression) break;
+                CurrentModule.ForwardDeclare(this, expressions[i]);
+            }
+
             for (int i = 0; i < expressions.Count; ++i)
                 expressions[i].Accept(this);
 
@@ -151,6 +158,8 @@ namespace Compiler.CodeGeneration
 
             if (expression.Block != null)
             {
+                CurrentModule.ForwardDeclare(this, expression.Block);
+
                 var storage = expression.Block.Accept(this);
                 storage?.Free();
 
@@ -174,7 +183,7 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(TupleDefinitionExpression expression)
         {
-            CurrentModule.TupleTypes.Add(expression);
+            //CurrentModule.TupleTypes.Add(expression);
 
             contextStack.Push(expression);
             foreach (var functionExpression in expression.Functions)
@@ -186,7 +195,7 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(StructDefinitionExpression expression)
         {
-            CurrentModule.StructTypes.Add(expression);
+            //CurrentModule.StructTypes.Add(expression);
 
             contextStack.Push(expression);
             foreach (var functionExpression in expression.Functions)
@@ -231,7 +240,7 @@ namespace Compiler.CodeGeneration
                 {
                     if (CurrentFunction == CurrentModule.InitializerFunction) // Global Decl
                     {
-                        var global = AllocateGlobal(variable);
+                        var global = FindGlobal(variable.Name);//AllocateGlobal(variable);
                         if (rhs != null)
                         {
                             CurrentFunction.Body.Emit( // TODO Not right
@@ -590,32 +599,31 @@ namespace Compiler.CodeGeneration
                 return null;
             }
 
-            CallingConvention callingConvention;
-            IReadOnlyList<Function.Parameter> parameters;
-            if (CurrentContext is TupleDefinitionExpression)
-            {
-                callingConvention = CallingConvention.ThisCall;
-                var lParameters = new List<Function.Parameter>(expression.Parameters);
-                lParameters.Insert(0, new Function.Parameter("this", new CobType(eCobType.Tuple, tag: CurrentContext), false));
-                parameters = lParameters;
-            }
-            else
-            {
-                callingConvention = expression.CallingConvention;
-                parameters = expression.Parameters;
-            }
+            //CallingConvention callingConvention;
+            //IReadOnlyList<Function.Parameter> parameters;
+            //if (CurrentContext is TupleDefinitionExpression)
+            //{
+            //    callingConvention = CallingConvention.ThisCall;
+            //    var lParameters = new List<Function.Parameter>(expression.Parameters);
+            //    lParameters.Insert(0, new Function.Parameter("this", new CobType(eCobType.Tuple, tag: CurrentContext), false));
+            //    parameters = lParameters;
+            //}
+            //else
+            //{
+            //    callingConvention = expression.CallingConvention;
+            //    parameters = expression.Parameters;
+            //}
 
-            var function = CurrentModule.AllocateFunction(
-               expression.Name,
-                callingConvention,
-                parameters,
-                expression.ReturnType
-            );
+            //var function = CurrentModule.AllocateFunction(
+            //   expression.Name,
+            //    callingConvention,
+            //    parameters,
+            //    expression.ReturnType
+            //);
 
-            var type = new CobType(eCobType.Function, tag: function);
-            if (!expression.IsAnonymous)
-                AllocateGlobal(new CobVariable(expression.Name, type, false));
-            
+            // TODO Make a clean API for this
+            var function = CurrentModule.Functions.First(x => x.Name == expression.Name);
+
             functionStack.Push(function);
             contextStack.Push(function);
             
@@ -632,7 +640,7 @@ namespace Compiler.CodeGeneration
             return new Storage(
                 CurrentFunction,
                 new Operand(), //null, // TODO ???
-                type
+                new CobType(eCobType.Function, tag: function)
             );
         }
 
