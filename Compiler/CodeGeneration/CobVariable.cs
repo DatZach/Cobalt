@@ -1,4 +1,5 @@
-﻿using Compiler.Ast.Expressions;
+﻿using System.Text;
+using Compiler.Ast.Expressions;
 
 namespace Compiler.CodeGeneration
 {
@@ -49,7 +50,13 @@ namespace Compiler.CodeGeneration
 
         public override string ToString()
         {
-            return $"{Name,-25}{Type} = {Value}";
+            string value;
+            if (Type == CobType.String)
+                value = '"' + Encoding.UTF8.GetString(BufferValue).Replace("\n", "^n") + '"';
+            else
+                value = Value?.ToString() ?? "(null)";
+
+            return $"{Name,-25}{Type} = {value}";
         }
 
         public CobVariable DeepClone()

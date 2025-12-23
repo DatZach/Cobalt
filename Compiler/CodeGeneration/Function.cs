@@ -1,4 +1,5 @@
 ﻿using Compiler.Ast.Expressions;
+using Compiler.Interpreter;
 using System.Diagnostics;
 
 namespace Compiler.CodeGeneration
@@ -117,13 +118,11 @@ namespace Compiler.CodeGeneration
 
         private int AllocateRegister()
         {
-            const int MaxRegisters = 32;
-
             var i = freeRegisterIndex;
-            while ((registers & (1 << i)) != 0 && i < MaxRegisters)
+            while ((registers & (1 << i)) != 0 && i < VirtualMachine.MaxRegisters)
                 ++i;
 
-            if (i >= MaxRegisters)
+            if (i >= VirtualMachine.MaxRegisters)
                 throw new InvalidOperationException("Exhausted registers!");
 
             registers |= (1 << i);

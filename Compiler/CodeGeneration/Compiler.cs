@@ -70,31 +70,6 @@ namespace Compiler.CodeGeneration
             contextStack.Push(rootModule);
             functionStack.Push(CurrentModule.InitializerFunction);
 
-            // HACK For now, let's just call a special function that invokes all our module initializers in the
-            //      program's entry point
-            //Function? hackInitializers;
-            //if (contextStack.Count == 1)
-            //{
-            //    hackInitializers = CurrentModule.AllocateFunction(
-            //        "$HACK_InvokeInitializers",
-            //        CallingConvention.CCall,
-            //        Array.Empty<Function.Parameter>(),
-            //        CobType.None
-            //    );
-            //    var varGlobHackInitializers = new CobVariable(hackInitializers.FullyQualifiedName,
-            //        new CobType(eCobType.Function, 0, tag: hackInitializers), false);
-            //    var globHackInitializers =
-            //        AllocateGlobal(varGlobHackInitializers); // HACK Awful. Global should be scoped to a Module
-
-            //    CurrentFunction.Body.Emit(
-            //        Opcode.Call,
-            //        new Operand { Type = OperandType.Global, Value = globHackInitializers },
-            //        Array.Empty<Operand>()
-            //    );
-            //}
-            //else
-            //    hackInitializers = null;
-
             var expressions = expression.Expressions;
 
             for (int i = 0; i < expressions.Count; ++i)
@@ -107,27 +82,6 @@ namespace Compiler.CodeGeneration
             CurrentModule = contextStack.Count == 0 ? rootModule : contextStack.Peek() as Module ?? rootModule;
             
             functionStack.Pop();
-
-            // HACK Populate the initializers calling function from earlier now that we know what all our modules
-            //      are
-            //if (hackInitializers != null)
-            //{
-            //    foreach (var module in Modules)
-            //    {
-            //        hackInitializers.Body.Emit(
-            //            Opcode.Call,
-            //            new Operand
-            //            {
-            //                Type = OperandType.Global,
-            //                Value = FindGlobal(module.InitializerFunction.FullyQualifiedName),
-            //                Size = 0
-            //            },
-            //            Array.Empty<Operand>()
-            //        );
-            //    }
-
-            //    hackInitializers.Body.Emit(Opcode.Return);
-            //}
 
             return null;
         }
@@ -186,14 +140,11 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(TypeAliasStatement expression)
         {
-            // NOTE Type Alias added by the Lexer/Parselet
             return null;
         }
 
         public Storage? Visit(TupleDeclStatement expression)
         {
-            //CurrentModule.TupleTypes.Add(expression);
-
             contextStack.Push(expression);
             foreach (var functionExpression in expression.Functions)
                 functionExpression.Accept(this);
@@ -204,8 +155,6 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(StructDeclStatement expression)
         {
-            //CurrentModule.StructTypes.Add(expression);
-
             contextStack.Push(expression);
             foreach (var functionExpression in expression.Functions)
                 functionExpression.Accept(this);
@@ -222,34 +171,26 @@ namespace Compiler.CodeGeneration
                 return null;
             }
 
-            //CallingConvention callingConvention;
-            //IReadOnlyList<Function.Parameter> parameters;
-            //if (CurrentContext is TupleDefinitionExpression)
-            //{
-            //    callingConvention = CallingConvention.ThisCall;
-            //    var lParameters = new List<Function.Parameter>(expression.Parameters);
-            //    lParameters.Insert(0, new Function.Parameter("this", new CobType(eCobType.Tuple, tag: CurrentContext), false));
-            //    parameters = lParameters;
-            //}
-            //else
-            //{
-            //    callingConvention = expression.CallingConvention;
-            //    parameters = expression.Parameters;
-            //}
-
-            //var function = CurrentModule.AllocateFunction(
-            //   expression.Name,
-            //    callingConvention,
-            //    parameters,
-            //    expression.ReturnType
-            //);
-
             // TODO Make a clean API for this
             var function = CurrentModule.Functions.First(x => x.Name == expression.Name);
 
             functionStack.Push(function);
             contextStack.Push(function);
-            
+
+            // TODO Temporary hack to call our initializer functions in the entry point
+            if (HACK_isDivingFatArrow)
+            {
+                foreach (var module in Modules)
+                {
+                    CurrentFunction.Body.Emit(
+                        Opcode.Call,
+                        new Operand { Type = OperandType.Function, Value = Functions.FindIndex(x => x.FullyQualifiedName == module.InitializerFunction.FullyQualifiedName) },
+                        Operand.R0,
+                        Array.Empty<Operand>()
+                    );
+                }
+            }
+
             expression.Body.Accept(this);
             
             function.ReturnLabel.Mark();
@@ -509,8 +450,12 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
+        private bool HACK_isDivingFatArrow;
+
         public Storage? Visit(FatArrowStatement expression)
         {
+            HACK_isDivingFatArrow = true;
+
             var value = expression.Expression.Accept(this);
             if (CurrentModule.IsRoot && value != null && value.Type == eCobType.Function)
             {
@@ -521,6 +466,8 @@ namespace Compiler.CodeGeneration
                     EntryFunction = value.Type.TagFunction;
                 }
             }
+
+            HACK_isDivingFatArrow = false;
 
             return value;
         }
@@ -1113,12 +1060,6 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
-        //[Obsolete]
-        //public int FindGlobal(string name)
-        //{
-        //    return Globals.FindIndex(x => x.Name == name);
-        //}
-
         public int FindGlobal(CobVariable variable)
         {
             return Globals.FindIndex(x => x == variable);
@@ -1149,11 +1090,6 @@ namespace Compiler.CodeGeneration
                 return module;
 
             module = new Module(this, name);
-            //AllocateGlobal(new CobVariable(
-            //    module.InitializerFunction.FullyQualifiedName,
-            //    new CobType(eCobType.Function, 0, tag: module.InitializerFunction),
-            //    false
-            //)); // HACK Awful. Global should be scoped to a Module
             Modules.Add(module);
 
             return module;

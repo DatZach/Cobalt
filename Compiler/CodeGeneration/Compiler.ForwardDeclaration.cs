@@ -129,9 +129,8 @@ namespace Compiler.CodeGeneration
             Function? function;
             if (expression.SymbolTypeSignature != null)
             {
-                function = new Function(
+                function = currentModule.AllocateFunction(
                     expression.SymbolName,
-                    currentModule,
                     expression.SymbolTypeSignature.CallingConvention,
                     expression.SymbolTypeSignature.Parameters,
                     expression.SymbolTypeSignature.ReturnType
@@ -150,16 +149,7 @@ namespace Compiler.CodeGeneration
             compiler.Imports.Add(import);
                 
             if (function != null)
-            {
                 function.NativeImport = import;
-                var variable = new CobVariable(
-                    expression.SymbolName,
-                    new CobType(eCobType.Function, tag: function),
-                    false
-                );
-                compiler.AllocateGlobal(variable);
-                currentModule.Variables[variable.Name] = variable; // TODO Weird
-            }
 
             return Unit.Value;
         }

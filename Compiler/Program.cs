@@ -99,6 +99,15 @@ namespace Compiler
                 Console.WriteLine($"\t{export}");
             Console.WriteLine();
 
+            Console.WriteLine("Functions");
+            for (var i = 0; i < compiler.Functions.Count; ++i)
+            {
+                var function = compiler.Functions[i];
+                Console.WriteLine($"\t{i}\t{function.FullyQualifiedName}");
+            }
+
+            Console.WriteLine();
+
             Console.WriteLine("Globals");
             for (var i = 0; i < compiler.Globals.Count; i++)
             {

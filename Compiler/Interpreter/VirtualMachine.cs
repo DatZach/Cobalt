@@ -1,5 +1,4 @@
-﻿using System.Formats.Asn1;
-using System.Numerics;
+﻿using System.Numerics;
 using Compiler.CodeGeneration;
 using System.Reflection;
 using System.Text;
@@ -8,14 +7,7 @@ namespace Compiler.Interpreter
 {
     internal sealed class VirtualMachine : IDisposable
     {
-        // TODO Remove function and parameter stacks, poor engineering
-        private Function currentFunction => functionStack.Peek(); // TODO Optimize
-        private IList<CobVariable>? currentParameters => parameterStack.Peek(); // TODO Optimize
-
-        private readonly Stack<Function> functionStack;
-        private readonly Stack<IList<CobVariable>?> parameterStack;
-        private readonly Stack<CobVariable[]> registerStack;
-        private CobVariable[] registers;
+        public const int MaxRegisters = 32;
 
         private readonly NativeLibrariesProxy nativeLibrariesProxy;
         private readonly CodeGeneration.Compiler compiler;
@@ -23,20 +15,13 @@ namespace Compiler.Interpreter
         public VirtualMachine(CodeGeneration.Compiler compiler)
         {
             this.compiler = compiler ?? throw new ArgumentNullException(nameof(compiler));
-            functionStack = new Stack<Function>(4);
-            parameterStack = new Stack<IList<CobVariable>?>(4);
-            registerStack = new Stack<CobVariable[]>(4);
-            registers = new CobVariable[64];
             
             nativeLibrariesProxy = NativeLibrariesProxy.FromCompiler(compiler);
         }
         
         public CobVariable? ExecuteFunction(Function function, IList<CobVariable>? parameters = null)
         {
-            functionStack.Push(function);
-            parameterStack.Push(parameters);
-            registerStack.Push(registers);
-            registers = new CobVariable[64];
+            var registers = new CobVariable[MaxRegisters];
 
             var instructions = function.Body.Instructions;
             for (int ip = 0; ip < instructions.Count; ++ip)
@@ -80,9 +65,6 @@ namespace Compiler.Interpreter
                     case Opcode.Return:
                     {
                         var value = inst.A != null ? ReadOperand(inst.A) : null;
-                        registers = registerStack.Pop();
-                        parameterStack.Pop();
-                        functionStack.Pop();
                         return value;
                     }
                     case Opcode.Move:
@@ -354,19 +336,19 @@ namespace Compiler.Interpreter
                     {
                         var cmp = ReadOperand(inst.A!).IntValue;
                         if (cmp == 1)
-                            ip = currentFunction.Body.Labels[(int)inst.B!.Value].Location - 1;
+                            ip = function.Body.Labels[(int)inst.B!.Value].Location - 1;
                         break;
                     }
                     case Opcode.JmpF:
                     {
                         var cmp = ReadOperand(inst.A!).IntValue;
                         if (cmp == 0)
-                            ip = currentFunction.Body.Labels[(int)inst.B!.Value].Location - 1;
+                            ip = function.Body.Labels[(int)inst.B!.Value].Location - 1;
                         break;
                     }
                     case Opcode.Jmp:
                     {
-                        ip = currentFunction.Body.Labels[(int)inst.A!.Value].Location - 1;
+                        ip = function.Body.Labels[(int)inst.A!.Value].Location - 1;
                         break;
                     }
                     default:
@@ -375,64 +357,64 @@ namespace Compiler.Interpreter
             }
 
             throw new InvalidOperationException("End of buffer without a ret instruction");
-        }
 
-        private void WriteOperand(Operand operand, CobVariable value)
-        {
-            switch (operand.Type)
+            void WriteOperand(Operand operand, CobVariable value)
             {
-                case OperandType.ImmediateSigned:
-                case OperandType.ImmediateUnsigned:
-                case OperandType.ImmediateFloat:
-                case OperandType.Function:
-                    throw new InvalidOperationException();
-                case OperandType.Register:
-                    registers[operand.Value] = value;
-                    break;
-                case OperandType.Local:
-                    currentFunction.Locals[(int)operand.Value] = value;
-                    break;
-                case OperandType.Global:
-                    compiler.Globals[(int)operand.Value] = value;
-                    break;
-                case OperandType.Argument:
-                    currentParameters[(int)operand.Value] = value;
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
-        }
-
-        private CobVariable ReadOperand(Operand operand)
-        {
-            switch (operand.Type)
-            {
-                case OperandType.ImmediateSigned:
-                    return new CobVariable("$imm", CobType.Int, false, operand.Value);
-                case OperandType.ImmediateUnsigned:
-                    return new CobVariable("$imm", CobType.UInt, false, operand.Value);
-                case OperandType.ImmediateFloat:
-                    return new CobVariable("$imm", CobType.Float, false, operand.Value);
-                case OperandType.Register:
-                    return registers[operand.Value];
-                case OperandType.Argument:
-                    return currentParameters[(int)operand.Value];
-                case OperandType.Local:
-                    return currentFunction.Locals[(int)operand.Value];
-                case OperandType.Global:
-                    return compiler.Globals[(int)operand.Value];
-                case OperandType.Function:
+                switch (operand.Type)
                 {
-                    //var modIdx = (int)((operand.Value & 0x0FFFFFFF_00000000) >> 32);
-                    //var fnIdx  = (int)( operand.Value & 0x00000000_FFFFFFFF);
-                    //var function = compiler.Modules[modIdx].Functions[fnIdx];
-                    var function = compiler.Functions[(int)operand.Value];
-                    var type = new CobType(eCobType.Function, tag: function);
-
-                    return new CobVariable("$func", type, false) { Value = function };
+                    case OperandType.ImmediateSigned:
+                    case OperandType.ImmediateUnsigned:
+                    case OperandType.ImmediateFloat:
+                    case OperandType.Function:
+                        throw new InvalidOperationException();
+                    case OperandType.Register:
+                        registers[operand.Value] = value;
+                        break;
+                    case OperandType.Local:
+                        function.Locals[(int)operand.Value] = value;
+                        break;
+                    case OperandType.Global:
+                        compiler.Globals[(int)operand.Value] = value;
+                        break;
+                    case OperandType.Argument:
+                        parameters[(int)operand.Value] = value;
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException();
                 }
-                default:
-                    throw new ArgumentOutOfRangeException();
+            }
+            
+            CobVariable ReadOperand(Operand operand)
+            {
+                switch (operand.Type)
+                {
+                    case OperandType.ImmediateSigned:
+                        return new CobVariable("$imm", CobType.Int, false, operand.Value);
+                    case OperandType.ImmediateUnsigned:
+                        return new CobVariable("$imm", CobType.UInt, false, operand.Value);
+                    case OperandType.ImmediateFloat:
+                        return new CobVariable("$imm", CobType.Float, false, operand.Value);
+                    case OperandType.Register:
+                        return registers[operand.Value];
+                    case OperandType.Argument:
+                        return parameters[(int)operand.Value];
+                    case OperandType.Local:
+                        return function.Locals[(int)operand.Value];
+                    case OperandType.Global:
+                        return compiler.Globals[(int)operand.Value];
+                    case OperandType.Function:
+                    {
+                        //var modIdx = (int)((operand.Value & 0x0FFFFFFF_00000000) >> 32);
+                        //var fnIdx  = (int)( operand.Value & 0x00000000_FFFFFFFF);
+                        //var function = compiler.Modules[modIdx].Functions[fnIdx];
+                        var function = compiler.Functions[(int)operand.Value];
+                        var type = new CobType(eCobType.Function, tag: function);
+
+                        return new CobVariable("$func", type, false) { Value = function };
+                    }
+                    default:
+                        throw new ArgumentOutOfRangeException();
+                }
             }
         }
 
