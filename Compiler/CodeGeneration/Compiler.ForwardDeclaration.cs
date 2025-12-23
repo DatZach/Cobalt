@@ -276,20 +276,12 @@ namespace Compiler.CodeGeneration
                 parameters = expression.Parameters;
             }
 
-            var function = currentModule.AllocateFunction(
+            currentModule.AllocateFunction(
                 expression.Name,
                 callingConvention,
                 parameters,
                 expression.ReturnType
             );
-
-            if (!expression.IsAnonymous)
-            {
-                var type = new CobType(eCobType.Function, tag: function);
-                var variable = new CobVariable(expression.Name, type, false);
-                compiler.AllocateGlobal(variable);
-                currentModule.Variables[variable.Name] = variable; // TODO Weird
-            }
 
             return Unit.Value;
         }

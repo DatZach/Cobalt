@@ -1,19 +1,16 @@
 ﻿using Compiler.Ast;
 using Compiler.Ast.Expressions;
 using Compiler.Ast.Expressions.Statements;
-using Compiler.Lexer;
 
 namespace Compiler.CodeGeneration
 {
     internal sealed class Module : IContext
     {
-        public Compiler Compiler { get; }
-
         public string? Name { get; init; }
 
-        public List<Function> Functions { get; } = new ();
+        public List<Function> Functions { get; } = new (); // TODO Should this just be a name? An index to compiler.Functions?
 
-        public Dictionary<string, CobVariable> Variables { get; } = new ();
+        public Dictionary<string, CobVariable> Variables { get; } = new (); // TODO Should this just be a name? An index to compiler.Functions? These are globals
 
         public List<TupleDeclStatement> TupleTypes { get; } = new ();
 
@@ -23,9 +20,11 @@ namespace Compiler.CodeGeneration
         
         public bool IsRoot => Name == null;
 
+        private readonly Compiler compiler;
+
         public Module(Compiler compiler, string? name)
         {
-            Compiler = compiler;
+            this.compiler = compiler;
             Name = name;
 
             InitializerFunction = AllocateFunction(
@@ -44,6 +43,7 @@ namespace Compiler.CodeGeneration
         ) {
             var function = new Function(name, this, callingConvention, parameters, returnType);
             Functions.Add(function);
+            compiler.Functions.Add(function);
 
             return function;
         }
@@ -52,17 +52,18 @@ namespace Compiler.CodeGeneration
         {
             var value = expression.Value;
 
+            // GLOBAL
             int idx;
             if (Variables.TryGetValue(value, out var global)
-            &&  (idx = Compiler.FindGlobal(global)) != -1)
+            &&  (idx = compiler.FindGlobal(global)) != -1)
             {
-                if (!Compiler.IsSymbolVisible(global))
+                if (!compiler.IsSymbolVisible(global))
                 {
-                    Compiler.Messages.Add(Message.CannotAccessPrivateSymbol, expression, expression.Value, Compiler.CurrentModule.Name ?? "(root)");
+                    compiler.Messages.Add(Message.CannotAccessPrivateSymbol, expression, expression.Value, compiler.CurrentModule.Name ?? "(root)");
                     return null;
                 }
 
-                var type = Compiler.Globals[idx];
+                var type = compiler.Globals[idx];
                 return new Storage(
                     null,
                     new Operand
@@ -75,10 +76,33 @@ namespace Compiler.CodeGeneration
                 );
             }
 
+            // FUNCTION
+            idx = compiler.Functions.FindIndex(x => x.Name == expression.Value); // TODO AllocateFunction + FindFunctionIndex()
+            if (idx != -1)
+            {
+                // TODO Implement
+                //if (!Compiler.IsSymbolVisible(global))
+                //{
+                //    Compiler.Messages.Add(Message.CannotAccessPrivateSymbol, expression, expression.Value, Compiler.CurrentModule.Name ?? "(root)");
+                //    return null;
+                //}
+
+                var function = compiler.Functions[idx];
+                return new Storage(
+                    null,
+                    new Operand
+                    {
+                        Type = OperandType.Function,
+                        Value = idx
+                    },
+                    new CobType(eCobType.Function, tag: function)
+                );
+            }
+
             // MODULES
             // TODO Compiler.Modules should be nested here
             Module? module;
-            if ((module = Compiler.Modules.FirstOrDefault(x => x.Name == value)) != null)
+            if ((module = compiler.Modules.FirstOrDefault(x => x.Name == value)) != null)
             {
                 return new Storage(
                     null,
@@ -118,7 +142,7 @@ namespace Compiler.CodeGeneration
 
             int idx;
             if (Variables.TryGetValue(value, out var global)
-            &&  (idx = Compiler.FindGlobal(global)) != -1)
+            &&  (idx = compiler.FindGlobal(global)) != -1)
             {
                 compiler.ValidateVariableAccess(global, expression);
                 compiler.CurrentFunction.Body.Emit(

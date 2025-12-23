@@ -34,7 +34,7 @@
 
         public OperandType Type { get; init; }
 
-        public int Size { get; init; }
+        public int Size { get; init; } // TODO Remove?
 
         public long Value { get; init; }
 
@@ -53,6 +53,7 @@
                 case OperandType.Argument:
                 case OperandType.Local:
                 case OperandType.Global:
+                case OperandType.Function:
                     return Type.ToString()[..1].ToLowerInvariant()
                            + Value.ToString("G")
                            + "."
@@ -123,6 +124,7 @@
         Argument,
         Local,
         Global,
-        Label
+        Label,
+        Function
     }
 }

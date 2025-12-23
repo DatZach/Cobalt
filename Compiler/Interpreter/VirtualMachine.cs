@@ -1,4 +1,5 @@
-﻿using System.Numerics;
+﻿using System.Formats.Asn1;
+using System.Numerics;
 using Compiler.CodeGeneration;
 using System.Reflection;
 using System.Text;
@@ -47,7 +48,8 @@ namespace Compiler.Interpreter
                         break;
                     case Opcode.Call:
                     {
-                        var callee = ReadOperandAsFunction(inst.A!);
+                        var callee = ReadOperand(inst.A!).Type.TagFunction!;
+
                         IList<CobVariable>? calleeParameters;
                         if (callee.Parameters.Count > 0)
                         {
@@ -382,6 +384,7 @@ namespace Compiler.Interpreter
                 case OperandType.ImmediateSigned:
                 case OperandType.ImmediateUnsigned:
                 case OperandType.ImmediateFloat:
+                case OperandType.Function:
                     throw new InvalidOperationException();
                 case OperandType.Register:
                     registers[operand.Value] = value;
@@ -418,38 +421,18 @@ namespace Compiler.Interpreter
                     return currentFunction.Locals[(int)operand.Value];
                 case OperandType.Global:
                     return compiler.Globals[(int)operand.Value];
+                case OperandType.Function:
+                {
+                    //var modIdx = (int)((operand.Value & 0x0FFFFFFF_00000000) >> 32);
+                    //var fnIdx  = (int)( operand.Value & 0x00000000_FFFFFFFF);
+                    //var function = compiler.Modules[modIdx].Functions[fnIdx];
+                    var function = compiler.Functions[(int)operand.Value];
+                    var type = new CobType(eCobType.Function, tag: function);
+
+                    return new CobVariable("$func", type, false) { Value = function };
+                }
                 default:
                     throw new ArgumentOutOfRangeException();
-            }
-        }
-
-        // TODO Deprecate?
-        // TODO This really should be unified somehow, but this is the fastest approach rn
-        private Function ReadOperandAsFunction(Operand operand)
-        {
-            switch (operand.Type)
-            {
-                // TODO AAAA???? This is just as hacky! We don't know if we have a global or a function index or what
-                case OperandType.Register:
-                {
-                    var global = compiler.Globals[(int)registers[operand.Value].IntValue];
-                    if (global.Type == eCobType.Function)
-                        return global.Type.TagFunction;
-
-                    throw new InvalidOperationException($"VM Expected function but received {global.Type} instead");
-                }
-
-                case OperandType.Global:
-                {
-                    var global = compiler.Globals[(int)operand.Value];
-                    if (global.Type == eCobType.Function)
-                        return global.Type.TagFunction;
-
-                    throw new InvalidOperationException($"VM Expected function but received {global.Type} instead");
-                }
-
-                default:
-                    throw new InvalidOperationException($"VM Expected function operand but received {operand.Type} instead");
             }
         }
 

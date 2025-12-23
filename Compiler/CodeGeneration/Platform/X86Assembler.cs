@@ -786,23 +786,23 @@ namespace Compiler.CodeGeneration.Platform
                     return ((ulong)operand.Value).ToString("D");
                 case OperandType.ImmediateFloat:
                 {
-                    var valueName = BitConverter.Int64BitsToDouble(operand.Value).ToString("F").Replace('.', '_');
-                    valueName = $"real_{operand.Size}_{valueName}";
-                    var globalIdx = compiler.FindGlobal(valueName);
-                    if (globalIdx == -1)
-                    {
-                        throw new NotImplementedException();
+                    throw new NotImplementedException();
+                    //var valueName = BitConverter.Int64BitsToDouble(operand.Value).ToString("F").Replace('.', '_');
+                    //valueName = $"real_{operand.Size}_{valueName}";
+                    //var globalIdx = compiler.FindGlobal(valueName);
+                    //if (globalIdx == -1)
+                    //{
                         //globalIdx = compiler.AllocateGlobal(new CobVariable(
                         //    valueName,
                         //    new CobType(eCobType.Float, operand.Size),
                         //    false,
                         //    operand.Value
                         //));
-                    }
+                    //}
 
-                    var type = compiler.Globals[globalIdx].Type;
+                    //var type = compiler.Globals[globalIdx].Type;
                     
-                    return $"{GetWidthName(type.Size)} [rdata_{globalIdx}]";
+                    //return $"{GetWidthName(type.Size)} [rdata_{globalIdx}]";
                 }
                 case OperandType.Register:
                 {

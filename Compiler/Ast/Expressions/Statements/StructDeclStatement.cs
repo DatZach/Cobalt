@@ -66,8 +66,9 @@ namespace Compiler.Ast.Expressions.Statements
             }
 
             // FUNCTION
-            if (Functions.FirstOrDefault(x => x.Name == expression.Value) != null
-                && (idx = compiler.FindGlobal(expression.Value)) != -1)
+            //var function = Functions.FirstOrDefault(x => x.Name == expression.Value);
+            idx = compiler.Functions.FindIndex(x => x.Name == expression.Value); // TODO AllocateFunction + FindFunctionIndex()
+            if (idx != -1)
             {
                 // TODO Implement
                 //if (!Compiler.IsSymbolVisible(global))
@@ -76,16 +77,15 @@ namespace Compiler.Ast.Expressions.Statements
                 //    return null;
                 //}
 
-                var type = compiler.Globals[idx];
+                var function = compiler.Functions[idx];
                 return new Storage(
                     null,
                     new Operand
                     {
-                        Type = OperandType.Global,
-                        Value = idx,
-                        Size = type.Type.Size
+                        Type = OperandType.Function,
+                        Value = idx
                     },
-                    type.Type
+                    new CobType(eCobType.Function, tag: function)
                 );
             }
 

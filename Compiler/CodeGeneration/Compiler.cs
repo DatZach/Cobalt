@@ -19,7 +19,12 @@ namespace Compiler.CodeGeneration
 
         public List<Module> Modules { get; }
 
-        public List<CobVariable> Globals { get; } // TODO Remove
+        // TODO NOTE Globals/Functions are exposed here because we need to translate references to something
+        //      that the VM and CGs can index. Functions more-so as they're readonly. Might actually be able
+        //      to remove this field?
+        public List<CobVariable> Globals { get; } // TODO Rework?
+
+        public List<Function> Functions { get; } // TODO Rework?
 
         public List<ScriptExpression> Scripts { get; }
 
@@ -49,6 +54,7 @@ namespace Compiler.CodeGeneration
             Modules = new List<Module>();
             Globals = new List<CobVariable>();
             Scripts = new List<ScriptExpression>();
+            Functions = new List<Function>();
             functionStack = new Stack<Function>();
             contextStack = new Stack<IContext>();
             loopStack = new Stack<LoopContext>();
@@ -296,7 +302,7 @@ namespace Compiler.CodeGeneration
                 {
                     if (CurrentFunction == CurrentModule.InitializerFunction) // Global Decl
                     {
-                        var global = FindGlobal(variable.Name);//AllocateGlobal(variable);
+                        var global = FindGlobal(CurrentModule.Variables[decl.Name]);
                         if (rhs != null)
                         {
                             CurrentFunction.Body.Emit( // TODO Not right
@@ -384,9 +390,11 @@ namespace Compiler.CodeGeneration
                 var typeRangeTuple = new CobType(eCobType.Struct, tag: tdeRangeEnumerator);
                 var varEnumerator = CurrentFunction.AllocateStorage(typeRangeTuple);
 
+                // TODO Need to refactor TupleType to be a discrete class instead of the AST expression...
+                // TODO tdeRangeEnumerator.FindFunctionIndex("GetEnumerator");
                 CurrentFunction.Body.Emit(
                     Opcode.Call,
-                    new Operand { Type = OperandType.Global, Value = FindGlobal("GetEnumerator") },
+                    new Operand { Type = OperandType.Function, Value = Functions.FindIndex(x => x.Name == "GetEnumerator") },
                     varEnumerator.Operand,
                     new[] { range.Operand }
                 );
@@ -394,10 +402,11 @@ namespace Compiler.CodeGeneration
 
                 startLabel.Mark();
 
+                // TODO tdeRangeEnumerator.FindFunctionIndex("MoveNext");
                 var moveNextResultStorage = CurrentFunction.AllocateStorage(CobType.Boolean);
                 CurrentFunction.Body.Emit(
                     Opcode.Call,
-                    new Operand { Type = OperandType.Global, Value = FindGlobal("MoveNext") },
+                    new Operand { Type = OperandType.Function, Value = Functions.FindIndex(x => x.Name == "MoveNext") },
                     moveNextResultStorage.Operand,
                     new[] { varEnumerator.Operand }
                 );
@@ -1104,11 +1113,11 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
-        [Obsolete]
-        public int FindGlobal(string name)
-        {
-            return Globals.FindIndex(x => x.Name == name);
-        }
+        //[Obsolete]
+        //public int FindGlobal(string name)
+        //{
+        //    return Globals.FindIndex(x => x.Name == name);
+        //}
 
         public int FindGlobal(CobVariable variable)
         {
@@ -1140,11 +1149,11 @@ namespace Compiler.CodeGeneration
                 return module;
 
             module = new Module(this, name);
-            AllocateGlobal(new CobVariable(
-                module.InitializerFunction.FullyQualifiedName,
-                new CobType(eCobType.Function, 0, tag: module.InitializerFunction),
-                false
-            )); // HACK Awful. Global should be scoped to a Module
+            //AllocateGlobal(new CobVariable(
+            //    module.InitializerFunction.FullyQualifiedName,
+            //    new CobType(eCobType.Function, 0, tag: module.InitializerFunction),
+            //    false
+            //)); // HACK Awful. Global should be scoped to a Module
             Modules.Add(module);
 
             return module;

@@ -39,7 +39,7 @@ namespace Compiler.CodeGeneration
             Mutable = mutable;
         }
 
-        public CobVariable(string name, CobType type, bool mutable, long intValue)
+        public CobVariable(string name, CobType type, bool mutable, long intValue) // TODO object instead
         {
             Name = name;
             Type = type;
