@@ -29,7 +29,7 @@ namespace Compiler.Ast.Parselets.Statements
 
             var filename = parser.MatchAndTakeToken(TokenType.String);
 
-            return new ArtifactExpression(
+            return new ArtifactStatement(
                 token,
                 container.Value,
                 containerParameters,

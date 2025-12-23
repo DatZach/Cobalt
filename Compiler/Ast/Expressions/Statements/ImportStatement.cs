@@ -5,7 +5,7 @@ using Compiler.CodeGeneration;
 
 namespace Compiler.Ast.Expressions.Statements
 {
-    internal sealed class ImportExpression : Expression
+    internal sealed class ImportStatement : Expression
     {
         public string SourceFile { get; }
 
@@ -13,14 +13,14 @@ namespace Compiler.Ast.Expressions.Statements
 
         public CobType? SymbolType { get; }
 
-        public FunctionExpression? SymbolTypeSignature { get; }
+        public FunctionDeclStatement? SymbolTypeSignature { get; }
 
-        public ImportExpression(
+        public ImportStatement(
             Token token,
             string sourceFile,
             string? symbolName,
             CobType? symbolType,
-            FunctionExpression? functionSignature
+            FunctionDeclStatement? functionSignature
         )
             : base(token)
         {

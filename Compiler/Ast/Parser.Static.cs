@@ -26,7 +26,7 @@ namespace Compiler.Ast
             Register(TokenType.LeftParen, new CallParselet());
             Register(TokenType.LeftBrace, new StructLiteralParselet());
             Register(TokenType.LeftSquare, new IndexerParselet());
-            Register(TokenType.Function, new FunctionParselet());
+            Register(TokenType.Function, new FunctionDeclParselet());
             Register(TokenType.Semicolon, new EmptyParselet());
 
             Register(TokenType.Range, new BinaryOperatorParselet(PrecedenceTable.Range));
@@ -92,11 +92,11 @@ namespace Compiler.Ast
             // Statements
             Register(TokenType.Artifact, new ArtifactParselet());
             Register(TokenType.Module, new ModuleParselet());
-            Register(TokenType.Type, new TypeParselet());
-            Register(TokenType.Tuple, new TupleDefinitionParselet());
-            Register(TokenType.Struct, new StructDefinitionParselet());
-            Register(TokenType.Const, new VarParselet());
-            Register(TokenType.Var, new VarParselet());
+            Register(TokenType.Type, new TypeAliasParselet());
+            Register(TokenType.Tuple, new TupleDeclParselet());
+            Register(TokenType.Struct, new StructDeclParselet());
+            Register(TokenType.Const, new VariableDeclParselet());
+            Register(TokenType.Var, new VariableDeclParselet());
             Register(TokenType.Import, new ImportParselet());
             Register(TokenType.Export, new ExportParselet());
             Register(TokenType.Return, new ReturnParselet());

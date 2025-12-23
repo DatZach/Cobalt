@@ -5,13 +5,13 @@ using Compiler.Lexer;
 
 namespace Compiler.Ast.Parselets.Statements
 {
-    internal sealed class TupleDefinitionParselet : IPrefixStatementParselet
+    internal sealed class TupleDeclParselet : IPrefixStatementParselet
     {
         public Expression Parse(Parser parser, Token token)
         {
             var name = parser.Take(TokenType.Identifier);
             var fields = new List<FieldDefinition>();
-            var functions = new List<FunctionExpression>();
+            var functions = new List<FunctionDeclStatement>();
 
             parser.Take(TokenType.LeftParen);
             while (parser.MatchAndTakeToken(TokenType.RightParen) == null)
@@ -19,7 +19,7 @@ namespace Compiler.Ast.Parselets.Statements
                 if (parser.Match(TokenType.Function))
                 {
                     // Function decl
-                    var expr = (FunctionExpression)parser.ParseStatement();
+                    var expr = (FunctionDeclStatement)parser.ParseStatement();
                     functions.Add(expr);
                 }
                 else
@@ -29,7 +29,7 @@ namespace Compiler.Ast.Parselets.Statements
                     parser.Take(TokenType.Colon);
                     var fieldType = CobType.FromString(parser.ParseTypeName());
 
-                    StructDefinitionParselet.ParseGetterSetters(parser, out var getterExpression, out var setterExpression);
+                    StructDeclParselet.ParseGetterSetters(parser, out var getterExpression, out var setterExpression);
 
                     fields.Add(new FieldDefinition(fieldName.Value, fieldType, getterExpression, setterExpression));
                 }
@@ -37,7 +37,7 @@ namespace Compiler.Ast.Parselets.Statements
                 parser.MatchAndTakeToken(TokenType.Semicolon);
             }
 
-            return new TupleDefinitionExpression(token, name.Value, fields, functions);
+            return new TupleDeclStatement(token, name.Value, fields, functions);
         }
     }
 }

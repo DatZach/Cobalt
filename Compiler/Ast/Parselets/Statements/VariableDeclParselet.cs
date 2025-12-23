@@ -4,11 +4,11 @@ using Compiler.Ast.Expressions.Statements;
 
 namespace Compiler.Ast.Parselets.Statements
 {
-    internal sealed class VarParselet : IPrefixStatementParselet
+    internal sealed class VariableDeclParselet : IPrefixStatementParselet
     {
         public Expression Parse(Parser parser, Token token)
         {
-            var declarations = new List<VarExpression.Declaration>();
+            var declarations = new List<VariableDeclStatement.Declaration>();
             
             do
             {
@@ -19,10 +19,10 @@ namespace Compiler.Ast.Parselets.Statements
                 if (parser.MatchAndTakeToken(TokenType.Assign) != null)
                     initializer = parser.ParseExpression(isConditional: true);
 
-                declarations.Add(new VarExpression.Declaration(identifier, typeName, initializer));
+                declarations.Add(new VariableDeclStatement.Declaration(identifier, typeName, initializer));
             } while(parser.Match(TokenType.Comma));
 
-            return new VarExpression(token, declarations);
+            return new VariableDeclStatement(token, declarations);
         }
     }
 }

@@ -5,13 +5,13 @@ using Compiler.Lexer;
 
 namespace Compiler.Ast.Parselets.Statements
 {
-    internal sealed class StructDefinitionParselet : IPrefixStatementParselet
+    internal sealed class StructDeclParselet : IPrefixStatementParselet
     {
         public Expression Parse(Parser parser, Token token)
         {
             var name = parser.Take(TokenType.Identifier);
             var fields = new List<FieldDefinition>();
-            var functions = new List<FunctionExpression>();
+            var functions = new List<FunctionDeclStatement>();
             IndexerDefinition? indexerDefinition = null;
 
             parser.Take(TokenType.LeftBrace);
@@ -19,7 +19,7 @@ namespace Compiler.Ast.Parselets.Statements
             {
                 if (parser.Match(TokenType.Function)) // Function
                 {
-                    var expr = (FunctionExpression)parser.ParseStatement();
+                    var expr = (FunctionDeclStatement)parser.ParseStatement();
                     functions.Add(expr);
                 }
                 else if (parser.Match(TokenType.LeftSquare)) // Indexer
@@ -48,7 +48,7 @@ namespace Compiler.Ast.Parselets.Statements
                 parser.MatchAndTakeToken(TokenType.Semicolon);
             }
 
-            return new StructDefinitionExpression(token, name.Value, fields, functions, indexerDefinition);
+            return new StructDeclStatement(token, name.Value, fields, functions, indexerDefinition);
         }
 
         public static void ParseGetterSetters(

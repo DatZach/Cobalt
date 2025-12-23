@@ -4,11 +4,11 @@ using System.Diagnostics;
 
 namespace Compiler.Ast.Expressions.Statements
 {
-    internal sealed class FatArrowExpression : Expression
+    internal sealed class FatArrowStatement : Expression
     {
         public Expression Expression { get; }
 
-        public FatArrowExpression(Token token, Expression expression)
+        public FatArrowStatement(Token token, Expression expression)
             : base(token)
         {
             Expression = expression;

@@ -30,13 +30,13 @@ namespace Compiler.Ast.Parselets.Statements
             var symbolName = parser.MatchAndTakeToken(TokenType.Identifier);
 
             CobType? symbolType;
-            FunctionExpression? functionSignature;
+            FunctionDeclStatement? functionSignature;
             if (symbolName != null)
             {
                 if (parser.Match(TokenType.Function))
                 {
                     symbolType = CobType.Func;
-                    functionSignature = parser.ParseExpression() as FunctionExpression;
+                    functionSignature = parser.ParseExpression() as FunctionDeclStatement;
                 }
                 else
                 {
@@ -50,7 +50,7 @@ namespace Compiler.Ast.Parselets.Statements
                 functionSignature = null;
             }
 
-            return new ImportExpression(
+            return new ImportStatement(
                 token,
                 sourceFile.ToString(),
                 symbolName?.Value,

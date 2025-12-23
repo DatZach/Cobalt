@@ -5,19 +5,19 @@ using System.Diagnostics;
 
 namespace Compiler.Ast.Expressions.Statements
 {
-    internal sealed class TupleDefinitionExpression : Expression, IContext
+    internal sealed class TupleDeclStatement : Expression, IContext
     {
         public string Name { get; }
 
         public IReadOnlyList<FieldDefinition> Fields { get; }
 
-        public IReadOnlyList<FunctionExpression> Functions { get; }
+        public IReadOnlyList<FunctionDeclStatement> Functions { get; }
 
-        public TupleDefinitionExpression(
+        public TupleDeclStatement(
             Token token,
             string name,
             IReadOnlyList<FieldDefinition> fields,
-            IReadOnlyList<FunctionExpression> functions
+            IReadOnlyList<FunctionDeclStatement> functions
         )
             : base(token)
         {

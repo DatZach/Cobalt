@@ -1,8 +1,7 @@
 ﻿using Compiler.Ast.Expressions;
-using Compiler.Ast.Expressions.Statements;
 using Compiler.Lexer;
 
-namespace Compiler.Ast.Parselets.Statements
+namespace Compiler.Ast.Parselets
 {
     internal sealed class AheadOfTimeParselet : IPrefixExpressionParselet
     {

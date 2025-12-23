@@ -4,13 +4,13 @@ using System.Diagnostics;
 
 namespace Compiler.Ast.Expressions.Statements
 {
-    internal sealed class TypeExpression : Expression
+    internal sealed class TypeAliasStatement : Expression
     {
         public string Name { get; }
 
         public string TypeName { get; }
 
-        public TypeExpression(Token token, string name, string typeName)
+        public TypeAliasStatement(Token token, string name, string typeName)
             : base(token)
         {
             Name = name;

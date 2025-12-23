@@ -5,21 +5,21 @@ using System.Diagnostics;
 
 namespace Compiler.Ast.Expressions.Statements
 {
-    internal sealed class StructDefinitionExpression : Expression, IContext
+    internal sealed class StructDeclStatement : Expression, IContext
     {
         public string Name { get; }
 
         public IReadOnlyList<FieldDefinition> Fields { get; }
 
-        public IReadOnlyList<FunctionExpression> Functions { get; }
+        public IReadOnlyList<FunctionDeclStatement> Functions { get; }
 
         public IndexerDefinition? Indexer { get; }
 
-        public StructDefinitionExpression(
+        public StructDeclStatement(
             Token token,
             string name,
             IReadOnlyList<FieldDefinition> fields,
-            IReadOnlyList<FunctionExpression> functions,
+            IReadOnlyList<FunctionDeclStatement> functions,
             IndexerDefinition? indexer
         )
             : base(token)
@@ -122,7 +122,7 @@ namespace Compiler.Ast.Expressions.Statements
         Expression? SetterExpression
     ) : IContext
     {
-        public StructDefinitionExpression Parent { get; set; }
+        public StructDeclStatement Parent { get; set; }
 
         public Storage? Index { get; set; }
 

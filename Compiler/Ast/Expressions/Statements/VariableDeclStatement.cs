@@ -5,7 +5,7 @@ using Compiler.CodeGeneration;
 
 namespace Compiler.Ast.Expressions.Statements
 {
-    internal sealed class VarExpression : Expression
+    internal sealed class VariableDeclStatement : Expression
     {
         public TokenType Type => Token.Type;
 
@@ -13,7 +13,7 @@ namespace Compiler.Ast.Expressions.Statements
 
         public override Token EndToken => Declarations.LastOrDefault()?.Initializer?.EndToken ?? Token;
 
-        public VarExpression(Token token, IReadOnlyList<Declaration> declarations)
+        public VariableDeclStatement(Token token, IReadOnlyList<Declaration> declarations)
             : base(token)
         {
             Declarations = declarations;

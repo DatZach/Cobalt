@@ -15,9 +15,9 @@ namespace Compiler.CodeGeneration
 
         public Dictionary<string, CobVariable> Variables { get; } = new ();
 
-        public List<TupleDefinitionExpression> TupleTypes { get; } = new ();
+        public List<TupleDeclStatement> TupleTypes { get; } = new ();
 
-        public List<StructDefinitionExpression> StructTypes { get; } = new ();
+        public List<StructDeclStatement> StructTypes { get; } = new ();
 
         public Function InitializerFunction { get; }
         
@@ -88,7 +88,7 @@ namespace Compiler.CodeGeneration
             }
 
             // TUPLE TYPES
-            TupleDefinitionExpression? tupleType;
+            TupleDeclStatement? tupleType;
             if ((tupleType = TupleTypes.FirstOrDefault(x => x.Name == value)) != null)
             {
                 return new Storage(
@@ -99,7 +99,7 @@ namespace Compiler.CodeGeneration
             }
 
             // TUPLE TYPES
-            StructDefinitionExpression? structType;
+            StructDeclStatement? structType;
             if ((structType = StructTypes.FirstOrDefault(x => x.Name == value)) != null)
             {
                 return new Storage(

@@ -11,7 +11,7 @@ namespace Compiler.Ast.Parselets.Statements
             var nameToken = parser.MatchAndTakeToken(TokenType.Identifier);
             var block = parser.Match(TokenType.LeftBrace) ? parser.ParseBlock(true) : null;
 
-            return new ModuleExpression(token, nameToken?.Value, block);
+            return new ModuleStatement(token, nameToken?.Value, block);
         }
     }
 }

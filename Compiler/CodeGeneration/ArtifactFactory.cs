@@ -56,6 +56,6 @@ namespace Compiler.CodeGeneration
 
         public abstract string DefaultExtension { get; }
         
-        public abstract void Assemble(Compiler compiler, ArtifactExpression artifact, string outputFilename);
+        public abstract void Assemble(Compiler compiler, ArtifactStatement artifact, string outputFilename);
     }
 }

@@ -3,11 +3,11 @@ using Compiler.Ast.Expressions;
 using Compiler.Ast.Expressions.Statements;
 using Compiler.Ast.Visitors;
 using Compiler.Lexer;
-using System.Diagnostics;
+using Compiler.Utility;
 
 namespace Compiler.CodeGeneration
 {
-    internal sealed class ForwardDeclaration : IExpressionVisitor<object>
+    internal sealed class ForwardDeclaration : IExpressionVisitor<Unit>
     {
         public DeclPhase Phase { get; private set; }
 
@@ -24,10 +24,8 @@ namespace Compiler.CodeGeneration
             contextStack = new Stack<IContext>(4);
         }
 
-        public object Visit(ScriptExpression expression)
+        public Unit Visit(ScriptExpression expression)
         {
-            //Debug.Assert(compiler.Modules.Count == 0, "ForwardDeclaration cannot operate on a mutated compiler state");
-
             currentModule = compiler.FindOrAllocateModule(null);
             contextStack.Push(currentModule);
 
@@ -42,106 +40,10 @@ namespace Compiler.CodeGeneration
 
             contextStack.Pop();
 
-            return null;
+            return Unit.Value;
         }
 
-        public object Visit(ModuleExpression expression)
-        {
-            var prevModule = currentModule;
-
-            if (Phase == DeclPhase.Modules)
-                currentModule = compiler.FindOrAllocateModule(expression.Name);
-            else if (Phase > DeclPhase.Modules)
-                currentModule = compiler.FindModule(expression.Name);
-            else
-                return null;
-
-            contextStack.Push(currentModule);
-
-            if (expression.Block != null)
-            {
-                expression.Block.Accept(this);
-                currentModule = prevModule;
-                contextStack.Pop();
-            }
-
-            return null;
-        }
-
-        public object Visit(TypeExpression expression)
-        {
-            if (Phase != DeclPhase.Types)
-                return null;
-
-            var typeName = CobType.FromString(expression.TypeName);
-            if (!CobType.TryAddAlias(expression.Name, typeName))
-                compiler.Messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
-
-            return null;
-        }
-
-        public object Visit(TupleDefinitionExpression expression)
-        {
-            if (Phase == DeclPhase.Types)
-            {
-                // TODO Is this actually a type alias? Shouldn't we resolve these from the TupleTypes field?
-                if (!CobType.TryAddAlias(expression.Name, new CobType(eCobType.Tuple, tag: expression)))
-                    compiler.Messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
-
-                currentModule.TupleTypes.Add(expression);
-            }
-            else if (Phase > DeclPhase.Types)
-            {
-                contextStack.Push(expression);
-                for (var i = 0; i < expression.Functions.Count; ++i)
-                    expression.Functions[i].Accept(this);
-                contextStack.Pop();
-            }
-            
-            return null;
-        }
-
-        public object Visit(StructDefinitionExpression expression)
-        {
-            if (Phase == DeclPhase.Types)
-            {
-                // TODO Is this actually a type alias? Shouldn't we resolve these from the StructTypes field?
-                if (!CobType.TryAddAlias(expression.Name, new CobType(eCobType.Struct, tag: expression)))
-                    compiler.Messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
-
-                currentModule.StructTypes.Add(expression);
-            }
-            else if (Phase > DeclPhase.Types)
-            {
-                contextStack.Push(expression);
-                for (var i = 0; i < expression.Functions.Count; ++i)
-                    expression.Functions[i].Accept(this);
-                contextStack.Pop();
-            }
-
-            return null;
-        }
-
-        public object Visit(VarExpression expression)
-        {
-            // NOTE We do not dive function bodies in this visitor so any VarExpressions we visit will be
-            //      module-level declarations
-
-            if (Phase != DeclPhase.Fields)
-                return null;
-
-            foreach (var decl in expression.Declarations)
-            {
-                var mutable = expression.Type == TokenType.Var;
-                var variable = new CobVariable(decl.Name, decl.Type, mutable);
-                compiler.AllocateGlobal(variable);
-                currentModule.Variables[variable.Name] = variable; // TODO Weird?
-            }
-
-            return null;
-        }
-
-        public object Visit(ImportExpression expression)
+        public Unit Visit(ImportStatement expression)
         {
             // X import *
             // X import CobaltSourceFile
@@ -162,13 +64,13 @@ namespace Compiler.CodeGeneration
             else
                 return VisitImportSymbol(expression);
 
-            return null;
+            return Unit.Value;
         }
 
-        private object VisitImportModule(ImportExpression expression)
+        private Unit VisitImportModule(ImportStatement expression)
         {
             if (Phase != DeclPhase.ModuleImports)
-                return null;
+                return Unit.Value;
 
             var paths = new List<string>(4);
 
@@ -215,13 +117,13 @@ namespace Compiler.CodeGeneration
                 //}
             }
 
-            return null;
+            return Unit.Value;
         }
 
-        private object VisitImportSymbol(ImportExpression expression)
+        private Unit VisitImportSymbol(ImportStatement expression)
         {
             if (Phase != DeclPhase.Functions)
-                return null;
+                return Unit.Value;
 
             // Symbol import
             Function? function;
@@ -259,32 +161,109 @@ namespace Compiler.CodeGeneration
                 currentModule.Variables[variable.Name] = variable; // TODO Weird
             }
 
-            return null;
+            return Unit.Value;
         }
 
-        public object Visit(ExportExpression expression)
+        public Unit Visit(ExportStatement expression)
         {
-            return null; // NOTE Nothing to do
+            return Unit.Value; // NOTE Nothing to do
         }
 
-        public object Visit(ArtifactExpression expression)
+        public Unit Visit(ArtifactStatement expression)
         {
             if (Phase != DeclPhase.Modules)
-                return null;
+                return Unit.Value;
 
             compiler.Artifacts.Add(expression);
 
-            return null;
+            return Unit.Value;
         }
 
-        public object Visit(FunctionExpression expression)
+        public Unit Visit(ModuleStatement expression)
+        {
+            var prevModule = currentModule;
+
+            if (Phase == DeclPhase.Modules)
+                currentModule = compiler.FindOrAllocateModule(expression.Name);
+            else if (Phase > DeclPhase.Modules)
+                currentModule = compiler.FindModule(expression.Name);
+            else
+                return Unit.Value;
+
+            contextStack.Push(currentModule);
+
+            if (expression.Block != null)
+            {
+                expression.Block.Accept(this);
+                currentModule = prevModule;
+                contextStack.Pop();
+            }
+
+            return Unit.Value;
+        }
+
+        public Unit Visit(TypeAliasStatement expression)
+        {
+            if (Phase != DeclPhase.Types)
+                return Unit.Value;
+
+            var typeName = CobType.FromString(expression.TypeName);
+            if (!CobType.TryAddAlias(expression.Name, typeName))
+                compiler.Messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
+
+            return Unit.Value;
+        }
+
+        public Unit Visit(TupleDeclStatement expression)
+        {
+            if (Phase == DeclPhase.Types)
+            {
+                // TODO Is this actually a type alias? Shouldn't we resolve these from the TupleTypes field?
+                if (!CobType.TryAddAlias(expression.Name, new CobType(eCobType.Tuple, tag: expression)))
+                    compiler.Messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
+
+                currentModule.TupleTypes.Add(expression);
+            }
+            else if (Phase > DeclPhase.Types)
+            {
+                contextStack.Push(expression);
+                for (var i = 0; i < expression.Functions.Count; ++i)
+                    expression.Functions[i].Accept(this);
+                contextStack.Pop();
+            }
+            
+            return Unit.Value;
+        }
+
+        public Unit Visit(StructDeclStatement expression)
+        {
+            if (Phase == DeclPhase.Types)
+            {
+                // TODO Is this actually a type alias? Shouldn't we resolve these from the StructTypes field?
+                if (!CobType.TryAddAlias(expression.Name, new CobType(eCobType.Struct, tag: expression)))
+                    compiler.Messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
+
+                currentModule.StructTypes.Add(expression);
+            }
+            else if (Phase > DeclPhase.Types)
+            {
+                contextStack.Push(expression);
+                for (var i = 0; i < expression.Functions.Count; ++i)
+                    expression.Functions[i].Accept(this);
+                contextStack.Pop();
+            }
+
+            return Unit.Value;
+        }
+
+        public Unit Visit(FunctionDeclStatement expression)
         {
             if (Phase != DeclPhase.Functions)
-                return null;
+                return Unit.Value;
 
             CallingConvention callingConvention;
             IReadOnlyList<Function.Parameter> parameters;
-            if (CurrentContext is TupleDefinitionExpression)
+            if (CurrentContext is TupleDeclStatement)
             {
                 callingConvention = CallingConvention.ThisCall;
                 var lParameters = new List<Function.Parameter>(expression.Parameters);
@@ -312,111 +291,130 @@ namespace Compiler.CodeGeneration
                 currentModule.Variables[variable.Name] = variable; // TODO Weird
             }
 
-            return null;
+            return Unit.Value;
         }
 
-        public object Visit(ReturnExpression expression)
+        public Unit Visit(VariableDeclStatement expression)
         {
-            return null;
+            // NOTE We do not dive function bodies in this visitor so any VarExpressions we visit will be
+            //      module-level declarations
+
+            if (Phase != DeclPhase.Fields)
+                return Unit.Value;
+
+            foreach (var decl in expression.Declarations)
+            {
+                var mutable = expression.Type == TokenType.Var;
+                var variable = new CobVariable(decl.Name, decl.Type, mutable);
+                compiler.AllocateGlobal(variable);
+                currentModule.Variables[variable.Name] = variable; // TODO Weird?
+            }
+
+            return Unit.Value;
         }
 
-        public object Visit(AheadOfTimeExpression expression)
+        public Unit Visit(IfStatement expression)
         {
-            return null; // NOTE Nothing to do
+            return Unit.Value;
         }
 
-        public object Visit(FatArrowExpression expression)
+        public Unit Visit(ForStatement expression)
         {
-            expression.Expression.Accept(this);
-            return null;
+            return Unit.Value;
         }
 
-        public object Visit(IfStatement expression)
+        public Unit Visit(ContinueStatement expression)
         {
-            return null;
+            return Unit.Value;
         }
 
-        public object Visit(ForStatement expression)
+        public Unit Visit(BreakStatement expression)
         {
-            return null;
+            return Unit.Value;
         }
 
-        public object Visit(ContinueStatement expression)
+        public Unit Visit(ReturnStatement expression)
         {
-            return null;
+            return Unit.Value;
         }
 
-        public object Visit(BreakStatement expression)
-        {
-            return null;
-        }
-
-        public object Visit(BinaryOperatorExpression expression)
-        {
-            return null;
-        }
-
-        public object Visit(PrefixOperatorExpression expression)
-        {
-            return null;
-        }
-
-        public object Visit(PostfixOperatorExpression expression)
-        {
-            return null;
-        }
-
-        public object Visit(BlockExpression expression)
+        public Unit Visit(BlockExpression expression)
         {
             for (var i = 0; i < expression.Expressions.Count; ++i)
                 expression.Expressions[i].Accept(this);
 
-            return null;
+            return Unit.Value;
         }
 
-        public object Visit(CallExpression expression)
+        public Unit Visit(FatArrowStatement expression)
         {
-            return null;
+            expression.Expression.Accept(this);
+            return Unit.Value;
         }
 
-        public object Visit(IdentifierExpression expression)
+        public Unit Visit(BinaryOperatorExpression expression)
         {
-            return null;
+            return Unit.Value;
         }
 
-        public object Visit(LensExpression expression)
+        public Unit Visit(PrefixOperatorExpression expression)
         {
-            return null;
+            return Unit.Value;
         }
 
-        public object Visit(IndexerExpression expression)
+        public Unit Visit(PostfixOperatorExpression expression)
         {
-            return null;
+            return Unit.Value;
         }
 
-        public object Visit(StructLiteralExpression expression)
+        public Unit Visit(CallExpression expression)
         {
-            return null;
+            return Unit.Value;
         }
 
-        public object Visit(NumberLiteralExpression expression)
+        public Unit Visit(IdentifierExpression expression)
         {
-            return null;
+            return Unit.Value;
         }
 
-        public object Visit(BooleanLiteralExpression expression)
+        public Unit Visit(AheadOfTimeExpression expression)
         {
-            return null;
+            return Unit.Value;
         }
 
-        public object Visit(StringLiteralExpression expression)
+        public Unit Visit(LensExpression expression)
         {
-            return null;
+            return Unit.Value;
         }
 
-        public object Visit(EmptyExpression expression)
+        public Unit Visit(IndexerExpression expression)
         {
-            return null;
+            return Unit.Value;
+        }
+
+        public Unit Visit(StructLiteralExpression expression)
+        {
+            return Unit.Value;
+        }
+
+        public Unit Visit(NumberLiteralExpression expression)
+        {
+            return Unit.Value;
+        }
+
+        public Unit Visit(BooleanLiteralExpression expression)
+        {
+            return Unit.Value;
+        }
+
+        public Unit Visit(StringLiteralExpression expression)
+        {
+            return Unit.Value;
+        }
+
+        public Unit Visit(EmptyExpression expression)
+        {
+            return Unit.Value;
         }
 
         internal enum DeclPhase

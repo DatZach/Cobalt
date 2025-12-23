@@ -8,11 +8,11 @@ namespace Compiler.Ast.Parselets.Statements
     {
         public Expression Parse(Parser parser, Token token)
         {
-            var functionExpression = parser.ParseStatement() as FunctionExpression;
+            var functionExpression = parser.ParseStatement() as FunctionDeclStatement;
             if (functionExpression == null)
                 parser.Messages.Add(Message.UnexpectedToken2, token, "function", token);
 
-            return new ExportExpression(token, functionExpression);
+            return new ExportStatement(token, functionExpression);
         }
     }
 }

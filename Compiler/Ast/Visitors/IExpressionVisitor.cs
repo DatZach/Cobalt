@@ -6,33 +6,35 @@ namespace Compiler.Ast.Visitors
     internal interface IExpressionVisitor<out T>
     {
         T Visit(ScriptExpression expression);
-        T Visit(ModuleExpression expression);
-        T Visit(TypeExpression expression);
-        T Visit(TupleDefinitionExpression expression);
-        T Visit(StructDefinitionExpression expression);
-        T Visit(VarExpression expression);
-        T Visit(ImportExpression expression);
-        T Visit(ExportExpression expression);
-        T Visit(ArtifactExpression expression);
-        T Visit(ReturnExpression expression);
-        T Visit(AheadOfTimeExpression expression);
-        T Visit(FatArrowExpression expression);
-
+        
+        T Visit(ImportStatement expression);
+        T Visit(ExportStatement expression);
+        T Visit(ArtifactStatement expression);
+        T Visit(ModuleStatement expression);
+        T Visit(TypeAliasStatement expression);
+        T Visit(TupleDeclStatement expression);
+        T Visit(StructDeclStatement expression);
+        T Visit(FunctionDeclStatement expression);
+        T Visit(VariableDeclStatement expression);
+        
         T Visit(IfStatement expression);
         T Visit(ForStatement expression);
         T Visit(ContinueStatement expression);
         T Visit(BreakStatement expression);
+        T Visit(ReturnStatement expression);
         
-        T Visit(FunctionExpression expression);
+        T Visit(BlockExpression expression);
+        T Visit(FatArrowStatement expression);
         T Visit(BinaryOperatorExpression expression);
         T Visit(PrefixOperatorExpression expression);
         T Visit(PostfixOperatorExpression expression);
-        T Visit(BlockExpression expression);
         T Visit(CallExpression expression);
-        T Visit(StructLiteralExpression expression);
         T Visit(IdentifierExpression expression);
+        T Visit(AheadOfTimeExpression expression);
         T Visit(LensExpression expression);
         T Visit(IndexerExpression expression);
+
+        T Visit(StructLiteralExpression expression);
         T Visit(NumberLiteralExpression expression);
         T Visit(BooleanLiteralExpression expression);
         T Visit(StringLiteralExpression expression);

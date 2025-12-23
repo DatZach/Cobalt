@@ -2,7 +2,7 @@
 using Compiler.Ast.Visitors;
 using Compiler.Lexer;
 
-namespace Compiler.Ast.Expressions.Statements
+namespace Compiler.Ast.Expressions
 {
     internal sealed class AheadOfTimeExpression : Expression
     {

@@ -4,7 +4,7 @@ using Compiler.Lexer;
 
 namespace Compiler.Ast.Expressions.Statements
 {
-    internal sealed class ArtifactExpression : Expression
+    internal sealed class ArtifactStatement : Expression
     {
         public string Container { get; } // pe, joe
 
@@ -14,7 +14,7 @@ namespace Compiler.Ast.Expressions.Statements
 
         public string? Filename { get; }
 
-        public ArtifactExpression(
+        public ArtifactStatement(
             Token token,
             string container,
             IReadOnlyList<string> containerParameters,

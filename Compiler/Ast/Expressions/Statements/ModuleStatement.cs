@@ -4,13 +4,13 @@ using System.Diagnostics;
 
 namespace Compiler.Ast.Expressions.Statements
 {
-    internal sealed class ModuleExpression : Expression
+    internal sealed class ModuleStatement : Expression
     {
         public string? Name { get; }
 
         public Expression? Block { get; }
 
-        public ModuleExpression(Token token, string? name, Expression? block)
+        public ModuleStatement(Token token, string? name, Expression? block)
             : base(token)
         {
             Name = name;

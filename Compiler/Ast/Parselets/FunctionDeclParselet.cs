@@ -5,7 +5,7 @@ using Compiler.CodeGeneration;
 
 namespace Compiler.Ast.Parselets
 {
-    internal sealed class FunctionParselet : IPrefixExpressionParselet
+    internal sealed class FunctionDeclParselet : IPrefixExpressionParselet
     {
         public Expression Parse(Parser parser, Token token)
         {
@@ -60,7 +60,7 @@ namespace Compiler.Ast.Parselets
                 body = parser.ParseBlock(true);
             else if ((fatArrowToken = parser.MatchAndTakeToken(TokenType.FatArrow)) != null)
             {
-                body = new ReturnExpression(
+                body = new ReturnStatement(
                     fatArrowToken,
                     parser.ParseStatement(false)
                 );
@@ -68,7 +68,7 @@ namespace Compiler.Ast.Parselets
             else
                 body = null;
 
-            return new FunctionExpression(
+            return new FunctionDeclStatement(
                 token,
                 name,
                 parameters,

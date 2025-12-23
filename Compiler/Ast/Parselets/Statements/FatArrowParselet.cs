@@ -9,7 +9,7 @@ namespace Compiler.Ast.Parselets.Statements
         public Expression Parse(Parser parser, Token token)
         {
             var expression = parser.ParseExpression();
-            return new FatArrowExpression(token, expression);
+            return new FatArrowStatement(token, expression);
         }
     }
 }

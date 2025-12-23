@@ -11,7 +11,7 @@ namespace Compiler.CodeGeneration
 {
     internal sealed class Compiler : IExpressionVisitor<Storage?>
     {
-        public List<ArtifactExpression> Artifacts { get; }
+        public List<ArtifactStatement> Artifacts { get; }
 
         public List<Import> Imports { get; }
 
@@ -43,7 +43,7 @@ namespace Compiler.CodeGeneration
 
         private Compiler(MessageCollection messages)
         {
-            Artifacts = new List<ArtifactExpression>();
+            Artifacts = new List<ArtifactStatement>();
             Imports = new List<Import>();
             Exports = new List<Export>();
             Modules = new List<Module>();
@@ -126,7 +126,25 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
-        public Storage? Visit(ModuleExpression expression)
+        public Storage? Visit(ImportStatement expression)
+        {
+            return null;
+        }
+        
+        public Storage? Visit(ExportStatement expression)
+        {
+            var function = expression.FunctionExpression.Accept(this);
+            var export = new Export { Function = function.Type.TagFunction };
+            Exports.Add(export);
+            return null;
+        }
+
+        public Storage? Visit(ArtifactStatement expression)
+        {
+            return null;
+        }
+
+        public Storage? Visit(ModuleStatement expression)
         {
             var module = FindModule(expression.Name);
 
@@ -160,13 +178,13 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
-        public Storage? Visit(TypeExpression expression)
+        public Storage? Visit(TypeAliasStatement expression)
         {
             // NOTE Type Alias added by the Lexer/Parselet
             return null;
         }
 
-        public Storage? Visit(TupleDefinitionExpression expression)
+        public Storage? Visit(TupleDeclStatement expression)
         {
             //CurrentModule.TupleTypes.Add(expression);
 
@@ -178,7 +196,7 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
-        public Storage? Visit(StructDefinitionExpression expression)
+        public Storage? Visit(StructDeclStatement expression)
         {
             //CurrentModule.StructTypes.Add(expression);
 
@@ -190,7 +208,60 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
-        public Storage? Visit(VarExpression expression)
+        public Storage? Visit(FunctionDeclStatement expression)
+        {
+            if (expression.Body == null)
+            {
+                Messages.Add(Message.MissingFunctionBody, expression);
+                return null;
+            }
+
+            //CallingConvention callingConvention;
+            //IReadOnlyList<Function.Parameter> parameters;
+            //if (CurrentContext is TupleDefinitionExpression)
+            //{
+            //    callingConvention = CallingConvention.ThisCall;
+            //    var lParameters = new List<Function.Parameter>(expression.Parameters);
+            //    lParameters.Insert(0, new Function.Parameter("this", new CobType(eCobType.Tuple, tag: CurrentContext), false));
+            //    parameters = lParameters;
+            //}
+            //else
+            //{
+            //    callingConvention = expression.CallingConvention;
+            //    parameters = expression.Parameters;
+            //}
+
+            //var function = CurrentModule.AllocateFunction(
+            //   expression.Name,
+            //    callingConvention,
+            //    parameters,
+            //    expression.ReturnType
+            //);
+
+            // TODO Make a clean API for this
+            var function = CurrentModule.Functions.First(x => x.Name == expression.Name);
+
+            functionStack.Push(function);
+            contextStack.Push(function);
+            
+            expression.Body.Accept(this);
+            
+            function.ReturnLabel.Mark();
+            function.Body.Emit(Opcode.Return); // TODO Error if not all paths return
+
+            contextStack.Pop();
+            functionStack.Pop();
+
+            //function.Body.HACK_Optmize();
+
+            return new Storage(
+                CurrentFunction,
+                new Operand(), //null, // TODO ???
+                new CobType(eCobType.Function, tag: function)
+            );
+        }
+
+        public Storage? Visit(VariableDeclStatement expression)
         {
             for (var i = 0; i < expression.Declarations.Count; ++i)
             {
@@ -255,149 +326,6 @@ namespace Compiler.CodeGeneration
             }
 
             return null;
-        }
-
-        public Storage? Visit(ImportExpression expression)
-        {
-            return null;
-        }
-        
-        public Storage? Visit(ExportExpression expression)
-        {
-            var function = expression.FunctionExpression.Accept(this);
-            var export = new Export { Function = function.Type.TagFunction };
-            Exports.Add(export);
-            return null;
-        }
-
-        public Storage? Visit(ArtifactExpression expression)
-        {
-            return null;
-        }
-
-        public Storage? Visit(FunctionExpression expression)
-        {
-            if (expression.Body == null)
-            {
-                Messages.Add(Message.MissingFunctionBody, expression);
-                return null;
-            }
-
-            //CallingConvention callingConvention;
-            //IReadOnlyList<Function.Parameter> parameters;
-            //if (CurrentContext is TupleDefinitionExpression)
-            //{
-            //    callingConvention = CallingConvention.ThisCall;
-            //    var lParameters = new List<Function.Parameter>(expression.Parameters);
-            //    lParameters.Insert(0, new Function.Parameter("this", new CobType(eCobType.Tuple, tag: CurrentContext), false));
-            //    parameters = lParameters;
-            //}
-            //else
-            //{
-            //    callingConvention = expression.CallingConvention;
-            //    parameters = expression.Parameters;
-            //}
-
-            //var function = CurrentModule.AllocateFunction(
-            //   expression.Name,
-            //    callingConvention,
-            //    parameters,
-            //    expression.ReturnType
-            //);
-
-            // TODO Make a clean API for this
-            var function = CurrentModule.Functions.First(x => x.Name == expression.Name);
-
-            functionStack.Push(function);
-            contextStack.Push(function);
-            
-            expression.Body.Accept(this);
-            
-            function.ReturnLabel.Mark();
-            function.Body.Emit(Opcode.Return); // TODO Error if not all paths return
-
-            contextStack.Pop();
-            functionStack.Pop();
-
-            //function.Body.HACK_Optmize();
-
-            return new Storage(
-                CurrentFunction,
-                new Operand(), //null, // TODO ???
-                new CobType(eCobType.Function, tag: function)
-            );
-        }
-
-        public Storage? Visit(ReturnExpression expression)
-        {
-            if (expression.Expression == null)
-                CurrentFunction.Body.Emit(Opcode.Return);
-            else
-            {
-                var rhs = expression.Expression.Accept(this);
-                if (CurrentFunction.ReturnType == eCobType.None)
-                    CurrentFunction.ReturnType = rhs.Type;
-                else if (CurrentFunction.ReturnType != rhs.Type)
-                    Messages.Add(Message.ReturnTypeMismatch, expression);
-                
-                CurrentFunction.Body.Emit(Opcode.Return, rhs.Operand);
-                rhs.Free();
-            }
-
-            return null;
-        }
-
-        public Storage? Visit(AheadOfTimeExpression expression)
-        {
-            var function = new Function(
-                "$aot_eval$",
-                CurrentModule,
-                CallingConvention.CCall,
-                Array.Empty<Function.Parameter>(),
-                CobType.None
-            );
-
-            functionStack.Push(function);
-            var evalStorage = expression.Expression.Accept(this);
-            if (evalStorage == null || evalStorage.Type == eCobType.None)
-                Messages.Add(Message.AotCannotUseVoid, expression);
-
-            function.ReturnType = evalStorage.Type;
-            CurrentFunction.Body.Emit(Opcode.Return, evalStorage.Operand);
-            evalStorage.Free();
-
-            function.ReturnLabel.Mark();
-            
-            functionStack.Pop();
-
-            using var vm = new VirtualMachine(this);
-            var result = vm.ExecuteFunction(function);
-
-            var reg = CurrentFunction.AllocateStorage(function.ReturnType);
-            // TODO EmitOI
-            CurrentFunction.Body.Emit(
-                Opcode.Move,
-                reg.Operand,
-                new Operand { Type = OperandType.ImmediateUnsigned, Size = -1, Value = result.IntValue } // TODO Not right
-            );
-            
-            return evalStorage;
-        }
-
-        public Storage? Visit(FatArrowExpression expression)
-        {
-            var value = expression.Expression.Accept(this);
-            if (CurrentModule.IsRoot && value != null && value.Type == eCobType.Function)
-            {
-                if (EntryFunction != null)
-                    Messages.Add(Message.CannotRedeclareEntryPoint, expression);
-                else
-                {
-                    EntryFunction = value.Type.TagFunction;
-                }
-            }
-
-            return value;
         }
 
         public Storage? Visit(IfStatement expression)
@@ -537,6 +465,57 @@ namespace Compiler.CodeGeneration
 
             return null;
         }
+
+        public Storage? Visit(ReturnStatement expression)
+        {
+            if (expression.Expression == null)
+                CurrentFunction.Body.Emit(Opcode.Return);
+            else
+            {
+                var rhs = expression.Expression.Accept(this);
+                if (CurrentFunction.ReturnType == eCobType.None)
+                    CurrentFunction.ReturnType = rhs.Type;
+                else if (CurrentFunction.ReturnType != rhs.Type)
+                    Messages.Add(Message.ReturnTypeMismatch, expression);
+                
+                CurrentFunction.Body.Emit(Opcode.Return, rhs.Operand);
+                rhs.Free();
+            }
+
+            return null;
+        }
+
+        public Storage? Visit(BlockExpression expression)
+        {
+            for (var i = 0; i < expression.Expressions.Count; i++)
+            {
+                var expr = expression.Expressions[i];
+                var retStorage = expr.Accept(this);
+                if (expr is FatArrowStatement)
+                    return retStorage;
+
+                retStorage?.Free();
+            }
+
+            return null;
+        }
+
+        public Storage? Visit(FatArrowStatement expression)
+        {
+            var value = expression.Expression.Accept(this);
+            if (CurrentModule.IsRoot && value != null && value.Type == eCobType.Function)
+            {
+                if (EntryFunction != null)
+                    Messages.Add(Message.CannotRedeclareEntryPoint, expression);
+                else
+                {
+                    EntryFunction = value.Type.TagFunction;
+                }
+            }
+
+            return value;
+        }
+
 
         public Storage? BinOpLHS { get; set; } // TODO Probably a hack tbh
         public Storage? AssignmentRHS { get; set; }
@@ -796,25 +775,10 @@ namespace Compiler.CodeGeneration
             throw new NotImplementedException();
         }
 
-        public Storage? Visit(BlockExpression expression)
-        {
-            for (var i = 0; i < expression.Expressions.Count; i++)
-            {
-                var expr = expression.Expressions[i];
-                var retStorage = expr.Accept(this);
-                if (expr is FatArrowExpression)
-                    return retStorage;
-
-                retStorage?.Free();
-            }
-
-            return null;
-        }
-
         public Storage? Visit(CallExpression expression)
         {
             // CAST OPERATOR
-            var castType = VisitCast(expression);
+            var castType = VisitCastExpression(expression);
             if (castType != null)
                 return castType;
 
@@ -822,7 +786,7 @@ namespace Compiler.CodeGeneration
             var functionStorage = expression.FunctionExpression.Accept(this);
             
             // TUPLE ALLOCATION OPERATOR
-            var tuple = VisitTupleAllocation(expression, functionStorage);
+            var tuple = VisitTupleLiteralExpression(expression, functionStorage);
             if (tuple != null)
                 return tuple;
 
@@ -892,8 +856,27 @@ namespace Compiler.CodeGeneration
 
             return retStorage;
         }
+        
+        public Storage? Visit(IdentifierExpression expression)
+        {
+            if (AssignmentRHS != null)
+            {
+                CurrentContext.SetIdentifier(this, expression);
 
-        private Storage? VisitCast(CallExpression expression)
+                //Messages.Add(Message.UndeclaredIdentifier, expression, expression.Value);
+                return null;
+            }
+            else
+            {
+                var storage = CurrentContext.GetIdentifier(this, expression);
+                if (storage == null)
+                    Messages.Add(Message.UndeclaredIdentifier, expression, expression.Value);
+
+                return storage;
+            }
+        }
+
+        private Storage? VisitCastExpression(CallExpression expression)
         {
             if (expression.FunctionExpression is not IdentifierExpression ie)
                 return null;
@@ -933,51 +916,41 @@ namespace Compiler.CodeGeneration
                 throw new NotImplementedException();
         }
 
-        private Storage? VisitTupleAllocation(CallExpression expression, Storage? functionStorage)
+        public Storage? Visit(AheadOfTimeExpression expression)
         {
-            if (functionStorage == null || functionStorage.Type != eCobType.Tuple
-            ||  functionStorage.Type.Tag is not TupleDefinitionExpression tde)
-                return null;
+            var function = new Function(
+                "$aot_eval$",
+                CurrentModule,
+                CallingConvention.CCall,
+                Array.Empty<Function.Parameter>(),
+                CobType.None
+            );
 
-            functionStorage.Free();
+            functionStack.Push(function);
+            var evalStorage = expression.Expression.Accept(this);
+            if (evalStorage == null || evalStorage.Type == eCobType.None)
+                Messages.Add(Message.AotCannotUseVoid, expression);
+
+            function.ReturnType = evalStorage.Type;
+            CurrentFunction.Body.Emit(Opcode.Return, evalStorage.Operand);
+            evalStorage.Free();
+
+            function.ReturnLabel.Mark();
             
-            // TODO Should be allocateable on a Register
-            var local = CurrentFunction.AllocateLocal(new CobVariable("$tuple", functionStorage.Type, false)
-            {
-                StructValue = tde.Fields.Select(x => new CobVariable(x.Name, x.Type, true)).ToArray()
-            });
+            functionStack.Pop();
 
-            for (var i = 0; i < expression.Arguments.Count; ++i)
-            {
-                var argStorage = expression.Arguments[i].Accept(this);
-                CurrentFunction.Body.Emit(
-                    Opcode.SetField,
-                    new Operand { Type = OperandType.Local, Value = local },
-                    new Operand { Type = OperandType.ImmediateUnsigned, Value = i },
-                    argStorage.Operand
-                );
-            }
+            using var vm = new VirtualMachine(this);
+            var result = vm.ExecuteFunction(function);
 
-            return CurrentFunction.AllocateStorage(functionStorage.Type, local);
-        }
-        
-        public Storage? Visit(IdentifierExpression expression)
-        {
-            if (AssignmentRHS != null)
-            {
-                CurrentContext.SetIdentifier(this, expression);
-
-                //Messages.Add(Message.UndeclaredIdentifier, expression, expression.Value);
-                return null;
-            }
-            else
-            {
-                var storage = CurrentContext.GetIdentifier(this, expression);
-                if (storage == null)
-                    Messages.Add(Message.UndeclaredIdentifier, expression, expression.Value);
-
-                return storage;
-            }
+            var reg = CurrentFunction.AllocateStorage(function.ReturnType);
+            // TODO EmitOI
+            CurrentFunction.Body.Emit(
+                Opcode.Move,
+                reg.Operand,
+                new Operand { Type = OperandType.ImmediateUnsigned, Size = -1, Value = result.IntValue } // TODO Not right
+            );
+            
+            return evalStorage;
         }
 
         public Storage? Visit(LensExpression expression)
@@ -1000,7 +973,7 @@ namespace Compiler.CodeGeneration
 
             if (source == null)
                 Messages.Add(Message.CannotIndexType, expression, "none");
-            else if (source.Type == eCobType.Struct && source.Type.Tag is StructDefinitionExpression sde
+            else if (source.Type == eCobType.Struct && source.Type.Tag is StructDeclStatement sde
             &&  sde.Indexer != null)
             {
                 sde.Indexer.Index = index;
@@ -1030,11 +1003,39 @@ namespace Compiler.CodeGeneration
             return storage;
         }
 
+        private Storage? VisitTupleLiteralExpression(CallExpression expression, Storage? functionStorage)
+        {
+            if (functionStorage == null || functionStorage.Type != eCobType.Tuple
+                                        ||  functionStorage.Type.Tag is not TupleDeclStatement tde)
+                return null;
+
+            functionStorage.Free();
+            
+            // TODO Should be allocateable on a Register
+            var local = CurrentFunction.AllocateLocal(new CobVariable("$tuple", functionStorage.Type, false)
+            {
+                StructValue = tde.Fields.Select(x => new CobVariable(x.Name, x.Type, true)).ToArray()
+            });
+
+            for (var i = 0; i < expression.Arguments.Count; ++i)
+            {
+                var argStorage = expression.Arguments[i].Accept(this);
+                CurrentFunction.Body.Emit(
+                    Opcode.SetField,
+                    new Operand { Type = OperandType.Local, Value = local },
+                    new Operand { Type = OperandType.ImmediateUnsigned, Value = i },
+                    argStorage.Operand
+                );
+            }
+
+            return CurrentFunction.AllocateStorage(functionStorage.Type, local);
+        }
+
         public Storage? Visit(StructLiteralExpression expression)
         {
             var structTypeStorage = expression.StructTypeExpression.Accept(this);
             if (structTypeStorage == null || structTypeStorage.Type != eCobType.Struct
-            ||  structTypeStorage.Type.Tag is not StructDefinitionExpression sde)
+            ||  structTypeStorage.Type.Tag is not StructDeclStatement sde)
             {
                 Messages.Add(Message.CannotInstantiateType, expression.StructTypeExpression, structTypeStorage?.Type.ToString() ?? "(null)");
                 return null;

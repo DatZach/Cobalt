@@ -5,7 +5,7 @@ using System.Diagnostics;
 
 namespace Compiler.Ast.Expressions
 {
-    internal sealed class FunctionExpression : Expression
+    internal sealed class FunctionDeclStatement : Expression
     {
         public string Name { get; }
 
@@ -21,7 +21,7 @@ namespace Compiler.Ast.Expressions
 
         public Expression? Body { get; }
 
-        public FunctionExpression(
+        public FunctionDeclStatement(
             Token token,
             string? name,
             IReadOnlyList<Function.Parameter> parameters,

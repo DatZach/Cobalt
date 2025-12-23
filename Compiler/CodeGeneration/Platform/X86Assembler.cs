@@ -23,7 +23,7 @@ namespace Compiler.CodeGeneration.Platform
 
         private Compiler compiler;
 
-        public override void Assemble(Compiler compiler, ArtifactExpression artifact, string outputFilename)
+        public override void Assemble(Compiler compiler, ArtifactStatement artifact, string outputFilename)
         {
             this.compiler = compiler;
 
@@ -32,7 +32,7 @@ namespace Compiler.CodeGeneration.Platform
             Assemble(buffer, outputFilename);
         }
 
-        private void EmitProgram(MachineCodeBuffer buffer, ArtifactExpression artifact, string outputFilename)
+        private void EmitProgram(MachineCodeBuffer buffer, ArtifactStatement artifact, string outputFilename)
         {
             var hasEntryPoint = compiler.EntryFunction != null;
             

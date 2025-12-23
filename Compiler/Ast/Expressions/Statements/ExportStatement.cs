@@ -4,16 +4,14 @@ using Compiler.Lexer;
 
 namespace Compiler.Ast.Expressions.Statements
 {
-    internal sealed class ReturnExpression : Expression
+    internal sealed class ExportStatement : Expression
     {
-        public Expression? Expression { get; }
+        public FunctionDeclStatement FunctionExpression { get; }
 
-        public override Token EndToken => Expression?.EndToken ?? Token;
-
-        public ReturnExpression(Token token, Expression? expression)
+        public ExportStatement(Token token, FunctionDeclStatement functionExpression)
             : base(token)
         {
-            Expression = expression;
+            FunctionExpression = functionExpression;
         }
 
         [DebuggerStepThrough]
