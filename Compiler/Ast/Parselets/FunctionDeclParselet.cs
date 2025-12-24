@@ -9,7 +9,7 @@ namespace Compiler.Ast.Parselets
     {
         public Expression Parse(Parser parser, Token token)
         {
-            IReadOnlyList<Function.Parameter> parameters;
+            IReadOnlyList<FunctionDeclStatement.Parameter> parameters;
 
             var name = parser.MatchAndTakeToken(TokenType.Identifier)?.Value;
 
@@ -17,7 +17,7 @@ namespace Compiler.Ast.Parselets
             if (!parser.Match(TokenType.RightParen))
             {
                 var hasSpread = false;
-                var lParameters = new List<Function.Parameter>(4);
+                var lParameters = new List<FunctionDeclStatement.Parameter>(4);
                 while (!parser.Match(TokenType.RightParen))
                 {
                     var isSpread = parser.MatchAndTakeToken(TokenType.Spread) != null;
@@ -32,13 +32,13 @@ namespace Compiler.Ast.Parselets
 
                     hasSpread = hasSpread || isSpread;
 
-                    lParameters.Add(new Function.Parameter(paramName.Value, paramType, isSpread));
+                    lParameters.Add(new FunctionDeclStatement.Parameter(paramName.Value, paramType, isSpread));
                 }
 
                 parameters = lParameters;
             }
             else
-                parameters = Array.Empty<Function.Parameter>();
+                parameters = Array.Empty<FunctionDeclStatement.Parameter>();
 
             parser.Take(TokenType.RightParen);
 

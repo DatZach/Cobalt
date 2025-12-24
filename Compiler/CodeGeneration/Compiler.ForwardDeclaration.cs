@@ -13,7 +13,7 @@ namespace Compiler.CodeGeneration
 
         private IContext CurrentContext => contextStack.Peek();
 
-        private Module? currentModule;
+        private Module currentModule;
 
         private readonly Compiler compiler;
         private readonly Stack<IContext> contextStack; // TODO IScopedContext or something (Struct, Module, Tuple, etc.)
@@ -21,24 +21,24 @@ namespace Compiler.CodeGeneration
         public ForwardDeclaration(Compiler compiler)
         {
             this.compiler = compiler;
+            currentModule = compiler.RootModule;
             contextStack = new Stack<IContext>(4);
         }
 
         public Unit Visit(ScriptExpression expression)
         {
-            currentModule = compiler.FindOrAllocateModule(null);
-            contextStack.Push(currentModule);
-
             for (var phase = DeclPhase.Begin; phase < DeclPhase.Complete; ++phase)
             {
+                currentModule = compiler.RootModule;
+                contextStack.Clear();
+                contextStack.Push(currentModule);
+
                 Phase = phase;
 
                 var expressions = expression.Expressions;
                 for (int i = 0; i < expressions.Count; ++i)
                     expressions[i].Accept(this);
             }
-
-            contextStack.Pop();
 
             return Unit.Value;
         }
@@ -132,7 +132,7 @@ namespace Compiler.CodeGeneration
                 function = currentModule.AllocateFunction(
                     expression.SymbolName,
                     expression.SymbolTypeSignature.CallingConvention,
-                    expression.SymbolTypeSignature.Parameters,
+                    expression.SymbolTypeSignature.Parameters.Select(x => new Function.Parameter(x.Name, CobType.FromString(x.TypeName), x.IsSpread)).ToList(),
                     expression.SymbolTypeSignature.ReturnType
                 );
             }
@@ -174,9 +174,9 @@ namespace Compiler.CodeGeneration
             var prevModule = currentModule;
 
             if (Phase == DeclPhase.Modules)
-                currentModule = compiler.FindOrAllocateModule(expression.Name);
+                currentModule = currentModule.FindOrAllocateModule(expression.Name);
             else if (Phase > DeclPhase.Modules)
-                currentModule = compiler.FindModule(expression.Name);
+                currentModule = currentModule.FindModule(expression.Name)!;
             else
                 return Unit.Value;
 
@@ -208,17 +208,29 @@ namespace Compiler.CodeGeneration
         {
             if (Phase == DeclPhase.Types)
             {
-                // TODO Is this actually a type alias? Shouldn't we resolve these from the TupleTypes field?
-                if (!CobType.TryAddAlias(expression.Name, new CobType(eCobType.Tuple, tag: expression)))
-                    compiler.Messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
+                // TODO AllocateTupleType
+                var tupleType = new TupleType(compiler, CurrentContext, expression.Name);
+                currentModule.TupleTypes.Add(tupleType);
 
-                currentModule.TupleTypes.Add(expression);
+                // TODO Is this actually a type alias? Shouldn't we resolve these from the TupleTypes field?
+                if (!CobType.TryAddAlias(expression.Name, new CobType(eCobType.Tuple, tag: tupleType)))
+                    compiler.Messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
             }
             else if (Phase > DeclPhase.Types)
             {
-                contextStack.Push(expression);
+                // TODO Better API FindTupleType
+                var tupleType = currentModule.TupleTypes.First(x => x.Name == expression.Name);
+                contextStack.Push(tupleType);
+                
                 for (var i = 0; i < expression.Functions.Count; ++i)
                     expression.Functions[i].Accept(this);
+
+                if (Phase == DeclPhase.Fields)
+                {
+                    foreach (var field in expression.Fields)
+                        tupleType.AllocateField(field.Name, CobType.FromString(field.TypeName), field.GetterExpression, field.SetterExpression);
+                }
+
                 contextStack.Pop();
             }
             
@@ -229,17 +241,39 @@ namespace Compiler.CodeGeneration
         {
             if (Phase == DeclPhase.Types)
             {
-                // TODO Is this actually a type alias? Shouldn't we resolve these from the StructTypes field?
-                if (!CobType.TryAddAlias(expression.Name, new CobType(eCobType.Struct, tag: expression)))
-                    compiler.Messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
+                // TODO AllocateStructType
+                var structType = new StructType(compiler, CurrentContext, expression.Name);
+                currentModule.StructTypes.Add(structType);
 
-                currentModule.StructTypes.Add(expression);
+                // TODO Is this actually a type alias? Shouldn't we resolve these from the StructTypes field?
+                if (!CobType.TryAddAlias(expression.Name, new CobType(eCobType.Struct, tag: structType)))
+                    compiler.Messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
             }
             else if (Phase > DeclPhase.Types)
             {
-                contextStack.Push(expression);
+                // TODO Better API FindStructType
+                var structType = currentModule.StructTypes.First(x => x.Name == expression.Name);
+                contextStack.Push(structType);
+
                 for (var i = 0; i < expression.Functions.Count; ++i)
                     expression.Functions[i].Accept(this);
+
+                if (Phase == DeclPhase.Fields)
+                {
+                    foreach (var field in expression.Fields)
+                        structType.AllocateField(field.Name, CobType.FromString(field.TypeName), field.GetterExpression, field.SetterExpression);
+
+                    if (expression.Indexer != null)
+                    {
+                        structType.AllocateIndexer(
+                            CobType.FromString(expression.Indexer.KeyTypeName),
+                            CobType.FromString(expression.Indexer.ReturnTypeName),
+                            expression.Indexer.GetterExpression,
+                            expression.Indexer.SetterExpression
+                        );
+                    }
+                }
+
                 contextStack.Pop();
             }
 
@@ -251,27 +285,34 @@ namespace Compiler.CodeGeneration
             if (Phase != DeclPhase.Functions)
                 return Unit.Value;
 
-            CallingConvention callingConvention;
-            IReadOnlyList<Function.Parameter> parameters;
-            if (CurrentContext is TupleDeclStatement)
+            // TODO Might be best to just add AllocateFunction on IContext
+            if (CurrentContext is TupleType tupleType)
             {
-                callingConvention = CallingConvention.ThisCall;
-                var lParameters = new List<Function.Parameter>(expression.Parameters);
-                lParameters.Insert(0, new Function.Parameter("this", new CobType(eCobType.Tuple, tag: CurrentContext), false));
-                parameters = lParameters;
+                tupleType.AllocateFunction(
+                    expression.Name,
+                    expression.CallingConvention,
+                    expression.Parameters.Select(x => new Function.Parameter(x.Name, CobType.FromString(x.TypeName), x.IsSpread)).ToList(),
+                    expression.ReturnType
+                );
+            }
+            else if (CurrentContext is StructType structType)
+            {
+                structType.AllocateFunction(
+                    expression.Name,
+                    expression.CallingConvention,
+                    expression.Parameters.Select(x => new Function.Parameter(x.Name, CobType.FromString(x.TypeName), x.IsSpread)).ToList(),
+                    expression.ReturnType
+                );
             }
             else
             {
-                callingConvention = expression.CallingConvention;
-                parameters = expression.Parameters;
+                currentModule.AllocateFunction(
+                    expression.Name,
+                    expression.CallingConvention,
+                    expression.Parameters.Select(x => new Function.Parameter(x.Name, CobType.FromString(x.TypeName), x.IsSpread)).ToList(),
+                    expression.ReturnType
+                );
             }
-
-            currentModule.AllocateFunction(
-                expression.Name,
-                callingConvention,
-                parameters,
-                expression.ReturnType
-            );
 
             return Unit.Value;
         }
@@ -284,12 +325,10 @@ namespace Compiler.CodeGeneration
             if (Phase != DeclPhase.Fields)
                 return Unit.Value;
 
+            var mutable = expression.Type == TokenType.Var;
             foreach (var decl in expression.Declarations)
             {
-                var mutable = expression.Type == TokenType.Var;
-                var variable = new CobVariable(decl.Name, decl.Type, mutable);
-                compiler.AllocateGlobal(variable);
-                currentModule.Variables[variable.Name] = variable; // TODO Weird?
+                currentModule.AllocateGlobal(decl.Name, decl.Type, mutable);
             }
 
             return Unit.Value;

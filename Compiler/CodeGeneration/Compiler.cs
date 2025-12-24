@@ -11,6 +11,8 @@ namespace Compiler.CodeGeneration
 {
     internal sealed class Compiler : IExpressionVisitor<Storage?>
     {
+        // TODO "Artifact" class which contains the resulting compiled code
+
         public List<ArtifactStatement> Artifacts { get; }
 
         public List<Import> Imports { get; }
@@ -19,12 +21,9 @@ namespace Compiler.CodeGeneration
 
         public List<Module> Modules { get; }
 
-        // TODO NOTE Globals/Functions are exposed here because we need to translate references to something
-        //      that the VM and CGs can index. Functions more-so as they're readonly. Might actually be able
-        //      to remove this field?
-        public List<CobVariable> Globals { get; } // TODO Rework?
+        public List<CobVariable> Globals { get; }
 
-        public List<Function> Functions { get; } // TODO Rework?
+        public List<Function> Functions { get; }
 
         public List<ScriptExpression> Scripts { get; }
 
@@ -33,15 +32,16 @@ namespace Compiler.CodeGeneration
         // TODO Possible to collapse contextStack and functionStack into 1?
         public Function? CurrentFunction => functionStack.Count == 0 ? null : functionStack.Peek();
 
-        public IContext ParentContext => contextStack.Skip(1).FirstOrDefault();
+        public IContext ParentContext => contextStack.Skip(1).FirstOrDefault(); // TODO Remove
 
         public IContext CurrentContext => contextStack.Peek();
+
+        public Module RootModule { get; }
 
         public Module CurrentModule { get; private set; } // TODO Make this private again
 
         public MessageCollection Messages { get; } // TODO Make this private again, somehow
 
-        //private readonly Module rootModule;
         private readonly Stack<Function> functionStack;
         private readonly Stack<IContext> contextStack; // TODO IScopedContext or something (Struct, Module, Tuple, etc.)
         private readonly Stack<LoopContext> loopStack;
@@ -59,19 +59,20 @@ namespace Compiler.CodeGeneration
             contextStack = new Stack<IContext>();
             loopStack = new Stack<LoopContext>();
 
+            RootModule = new Module(this, null, null);
+            Modules.Add(RootModule);
+
             this.Messages = messages ?? throw new ArgumentNullException(nameof(messages));
         }
 
         public Storage? Visit(ScriptExpression expression)
         {
-            var rootModule = FindModule(null);
-            CurrentModule = rootModule;
+            CurrentModule = RootModule;
 
-            contextStack.Push(rootModule);
+            contextStack.Push(RootModule);
             functionStack.Push(CurrentModule.InitializerFunction);
 
             var expressions = expression.Expressions;
-
             for (int i = 0; i < expressions.Count; ++i)
                 expressions[i].Accept(this);
 
@@ -79,7 +80,7 @@ namespace Compiler.CodeGeneration
 
             // TODO Needs to be unified with the copy-pasted code in ModuleExpression
             contextStack.Pop();
-            CurrentModule = contextStack.Count == 0 ? rootModule : contextStack.Peek() as Module ?? rootModule;
+            CurrentModule = contextStack.Count == 0 ? RootModule : contextStack.Peek() as Module ?? RootModule;
             
             functionStack.Pop();
 
@@ -106,14 +107,7 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(ModuleStatement expression)
         {
-            var module = FindModule(expression.Name);
-
-            // TODO Remove this rule and implement AllocateModule
-            //if (CurrentModule != rootModule && module != rootModule)
-            //{
-            //    Messages.Add(Message.CannotNestModules, expression);
-            //    return null;
-            //}
+            var module = CurrentModule.FindModule(expression.Name);
 
             var prevModule = CurrentModule;
             CurrentModule = module;
@@ -145,7 +139,10 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(TupleDeclStatement expression)
         {
-            contextStack.Push(expression);
+            // TODO CurrentContext?
+            //      Is it possible to get rid of CurrentModule entirely?
+            var tupleType = CurrentModule.FindTupleType(expression.Name)!;
+            contextStack.Push(tupleType);
             foreach (var functionExpression in expression.Functions)
                 functionExpression.Accept(this);
             contextStack.Pop();
@@ -155,7 +152,9 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(StructDeclStatement expression)
         {
-            contextStack.Push(expression);
+            // TODO CurrentContext?
+            var structType = CurrentModule.FindStructType(expression.Name)!;
+            contextStack.Push(structType);
             foreach (var functionExpression in expression.Functions)
                 functionExpression.Accept(this);
             contextStack.Pop();
@@ -172,7 +171,13 @@ namespace Compiler.CodeGeneration
             }
 
             // TODO Make a clean API for this
-            var function = CurrentModule.Functions.First(x => x.Name == expression.Name);
+            Function function;
+            if (CurrentContext is StructType structType)
+                function = structType.Functions.First(x => x.Name == expression.Name);
+            else if (CurrentContext is TupleType tupleType)
+                function = tupleType.Functions.First(x => x.Name == expression.Name);
+            else
+                function = CurrentModule.Functions.First(x => x.Name == expression.Name);
 
             functionStack.Push(function);
             contextStack.Push(function);
@@ -326,8 +331,7 @@ namespace Compiler.CodeGeneration
                 var range = boe.Right.Accept(this);
 
                 // TODO Should not find types like this...
-                var rootModule = FindModule(null);
-                var tdeRangeEnumerator = rootModule.TupleTypes.First(x => x.Name == "RangeEnumerator");
+                var tdeRangeEnumerator = RootModule.TupleTypes.First(x => x.Name == "RangeEnumerator");
                 var typeRangeTuple = new CobType(eCobType.Struct, tag: tdeRangeEnumerator);
                 var varEnumerator = CurrentFunction.AllocateStorage(typeRangeTuple);
 
@@ -418,15 +422,16 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(ReturnStatement expression)
         {
-            if (expression.Expression == null)
+            var rhs = expression.Expression?.Accept(this);
+
+            if (rhs == null)
                 CurrentFunction.Body.Emit(Opcode.Return);
             else
             {
-                var rhs = expression.Expression.Accept(this);
                 if (CurrentFunction.ReturnType == eCobType.None)
                     CurrentFunction.ReturnType = rhs.Type;
                 else if (CurrentFunction.ReturnType != rhs.Type)
-                    Messages.Add(Message.ReturnTypeMismatch, expression);
+                    Messages.Add(Message.ReturnTypeMismatch, expression, CurrentFunction.ReturnType, rhs.Type);
                 
                 CurrentFunction.Body.Emit(Opcode.Return, rhs.Operand);
                 rhs.Free();
@@ -581,8 +586,7 @@ namespace Compiler.CodeGeneration
             {
                 // TODO Should be allocateable on a Register
                 // TODO Should not discover this type like this...
-                var rootModule = FindModule(null);
-                var tdeRangeTuple = rootModule.TupleTypes.First(x => x.Name == "Range");
+                var tdeRangeTuple = RootModule.TupleTypes.First(x => x.Name == "Range");
                 var typeRangeTuple = new CobType(eCobType.Tuple, tag: tdeRangeTuple);
                 var local = CurrentFunction.AllocateLocal(new CobVariable("$tuple", typeRangeTuple, false)
                 {
@@ -815,20 +819,37 @@ namespace Compiler.CodeGeneration
         
         public Storage? Visit(IdentifierExpression expression)
         {
+            // TODO Refactor
             if (AssignmentRHS != null)
             {
-                CurrentContext.SetIdentifier(this, expression);
+                CobVariable? storage = null;
+                foreach (var scope in contextStack)
+                {
+                    storage = scope.SetIdentifier(this, expression);
+                    if (storage != null)
+                        break;
+                }
 
-                //Messages.Add(Message.UndeclaredIdentifier, expression, expression.Value);
+                if (storage == null)
+                    Messages.Add(Message.UndeclaredIdentifier, expression, expression.Value);
+                else if (!storage.IsVisibleTo(CurrentModule)) // TODO CurrentContext.Name...?
+                    Messages.Add(Message.CannotAccessPrivateSymbol, expression, expression.Value, CurrentModule.Name ?? "(root)");
+                else if (!storage.Mutable)
+                    Messages.Add(Message.IllegalAssignmentImmutable, expression);
+
                 return null;
             }
             else
             {
-                var storage = CurrentContext.GetIdentifier(this, expression);
-                if (storage == null)
-                    Messages.Add(Message.UndeclaredIdentifier, expression, expression.Value);
+                foreach (var scope in contextStack)
+                {
+                    var storage = scope.GetIdentifier(this, expression);
+                    if (storage != null)
+                        return storage;
+                }
 
-                return storage;
+                Messages.Add(Message.UndeclaredIdentifier, expression, expression.Value);
+                return null;
             }
         }
 
@@ -929,16 +950,16 @@ namespace Compiler.CodeGeneration
 
             if (source == null)
                 Messages.Add(Message.CannotIndexType, expression, "none");
-            else if (source.Type == eCobType.Struct && source.Type.Tag is StructDeclStatement sde
-            &&  sde.Indexer != null)
+            else if (source.Type == eCobType.Struct && source.Type.Tag is StructType structType
+            &&  structType.Indexer != null)
             {
-                sde.Indexer.Index = index;
+                structType.Indexer.Index = index;
                 BinOpLHS = source; // ???
-                contextStack.Push(sde.Indexer);
-                storage = sde.Indexer.GetterExpression.Accept(this);
+                contextStack.Push(structType.Indexer);
+                storage = structType.Indexer.GetterExpression.Accept(this);
                 contextStack.Pop();
                 BinOpLHS = null;
-                sde.Indexer.Index = null;
+                structType.Indexer.Index = null;
             }
             else if (source.Type == eCobType.Lens)
             {
@@ -962,15 +983,16 @@ namespace Compiler.CodeGeneration
         private Storage? VisitTupleLiteralExpression(CallExpression expression, Storage? functionStorage)
         {
             if (functionStorage == null || functionStorage.Type != eCobType.Tuple
-                                        ||  functionStorage.Type.Tag is not TupleDeclStatement tde)
+            ||  functionStorage.Type.Tag is not TupleType tde)
                 return null;
 
             functionStorage.Free();
             
             // TODO Should be allocateable on a Register
+            // TODO Is this really the best way to allocate a tuple?
             var local = CurrentFunction.AllocateLocal(new CobVariable("$tuple", functionStorage.Type, false)
             {
-                StructValue = tde.Fields.Select(x => new CobVariable(x.Name, x.Type, true)).ToArray()
+                StructValue = tde.Fields.Select(x => x.DeepClone()).ToArray()
             });
 
             for (var i = 0; i < expression.Arguments.Count; ++i)
@@ -991,7 +1013,7 @@ namespace Compiler.CodeGeneration
         {
             var structTypeStorage = expression.StructTypeExpression.Accept(this);
             if (structTypeStorage == null || structTypeStorage.Type != eCobType.Struct
-            ||  structTypeStorage.Type.Tag is not StructDeclStatement sde)
+            ||  structTypeStorage.Type.Tag is not StructType sde)
             {
                 Messages.Add(Message.CannotInstantiateType, expression.StructTypeExpression, structTypeStorage?.Type.ToString() ?? "(null)");
                 return null;
@@ -999,7 +1021,7 @@ namespace Compiler.CodeGeneration
             
             var local = CurrentFunction.AllocateLocal(new CobVariable("$struct", structTypeStorage.Type, false)
             {
-                StructValue = sde.Fields.Select(x => new CobVariable(x.Name, x.Type, true)).ToArray()
+                StructValue = sde.Fields.Select(x => x.DeepClone()).ToArray()
             });
 
             var storage = CurrentFunction.AllocateStorage(structTypeStorage.Type, local);
@@ -1078,41 +1100,6 @@ namespace Compiler.CodeGeneration
             return idx;
         }
 
-        public Module FindModule(string? name)
-        {
-            return Modules.First(x => x.Name == name);
-        }
-
-        public Module FindOrAllocateModule(string? name)
-        {
-            var module = Modules.FirstOrDefault(x => x.Name == name);
-            if (module != null)
-                return module;
-
-            module = new Module(this, name);
-            Modules.Add(module);
-
-            return module;
-        }
-
-        public bool IsSymbolVisible(CobVariable variable)
-        {
-            if (CurrentFunction != null && CurrentFunction.Module == CurrentModule)
-                return true;
-
-            return variable.Name.Length > 0 && char.IsUpper(variable.Name[0]);
-        }
-
-        public void ValidateVariableAccess(CobVariable? variable, IdentifierExpression expression)
-        {
-            if (variable == null)
-                Messages.Add(Message.UndeclaredIdentifier, expression, expression.Value);
-            else if (!IsSymbolVisible(variable))
-                Messages.Add(Message.CannotAccessPrivateSymbol, expression, expression.Value, CurrentModule.Name ?? "(root)");
-            else if (!variable.Mutable)
-                Messages.Add(Message.IllegalAssignmentImmutable, expression);
-        }
-
         public static Compiler Compile(ScriptExpression ast, MessageCollection messages)
         {
             try
@@ -1158,9 +1145,14 @@ namespace Compiler.CodeGeneration
 
     internal interface IContext
     {
+        string Name { get; }
+
+        IContext? Parent { get; }
+
+        // TODO Remove compiler field? Most contexts already have the compiler passed in ctor
         Storage? GetIdentifier(Compiler compiler, IdentifierExpression expression);
 
-        void SetIdentifier(Compiler compiler, IdentifierExpression expression);
+        CobVariable? SetIdentifier(Compiler compiler, IdentifierExpression expression);
     }
 
     internal sealed record LoopContext(string? Tag, Label Continue, Label Break);

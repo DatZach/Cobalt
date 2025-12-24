@@ -1,6 +1,5 @@
 ﻿using Compiler.Ast.Expressions;
 using Compiler.Ast.Expressions.Statements;
-using Compiler.CodeGeneration;
 using Compiler.Lexer;
 
 namespace Compiler.Ast.Parselets.Statements
@@ -27,11 +26,11 @@ namespace Compiler.Ast.Parselets.Statements
                     // Field decl
                     var fieldName = parser.Take(TokenType.Identifier);
                     parser.Take(TokenType.Colon);
-                    var fieldType = CobType.FromString(parser.ParseTypeName());
+                    var fieldTypeName = parser.ParseTypeName();
 
                     StructDeclParselet.ParseGetterSetters(parser, out var getterExpression, out var setterExpression);
 
-                    fields.Add(new FieldDefinition(fieldName.Value, fieldType, getterExpression, setterExpression));
+                    fields.Add(new FieldDefinition(fieldName.Value, fieldTypeName, getterExpression, setterExpression));
                 }
 
                 parser.MatchAndTakeToken(TokenType.Semicolon);

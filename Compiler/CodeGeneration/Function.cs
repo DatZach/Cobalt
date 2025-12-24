@@ -9,7 +9,7 @@ namespace Compiler.CodeGeneration
     {
         public string Name { get; }
 
-        public Module Module { get; }
+        public IContext? Parent { get; }
 
         public List<CobVariable> Locals { get; }
 
@@ -27,21 +27,21 @@ namespace Compiler.CodeGeneration
 
         public Label ReturnLabel { get; }
 
-        public string FullyQualifiedName => (Module.Name ?? "root") + '_' + Name;
+        public string FullyQualifiedName => (Parent?.Name ?? "root") + '_' + Name;
 
         private int freeRegisterIndex;
         private int registers;
 
         public Function(
             string name,
-            Module module,
+            IContext parent,
             CallingConvention callingConvention,
             IReadOnlyList<Parameter> parameters,
             CobType returnType
         )
         {
             Name = name ?? throw new ArgumentNullException(nameof(name));
-            Module = module ?? throw new ArgumentNullException(nameof(module));
+            Parent = parent ?? throw new ArgumentNullException(nameof(parent));
             Locals = new List<CobVariable>();
             ClobberedRegisters = 0;
             CallingConvention = callingConvention;
@@ -226,11 +226,12 @@ namespace Compiler.CodeGeneration
                 );
             }
 
+            return null;
             // Find in parent scope
-            return compiler.ParentContext.GetIdentifier(compiler, expression);
+            //return compiler.ParentContext.GetIdentifier(compiler, expression);
         }
 
-        public void SetIdentifier(Compiler compiler, IdentifierExpression expression)
+        public CobVariable? SetIdentifier(Compiler compiler, IdentifierExpression expression)
         {
             var value = expression.Value;
             int idx;
@@ -250,7 +251,7 @@ namespace Compiler.CodeGeneration
                     },
                     compiler.AssignmentRHS.Operand
                 );
-                return;
+                return parameter;
             }
 
             // LOCALS
@@ -258,7 +259,6 @@ namespace Compiler.CodeGeneration
             {
                 var local = Locals[idx];
 
-                compiler.ValidateVariableAccess(local, expression);
                 compiler.CurrentFunction.Body.Emit(
                     Opcode.Move,
                     new Operand
@@ -269,36 +269,19 @@ namespace Compiler.CodeGeneration
                     },
                     compiler.AssignmentRHS.Operand
                 );
-                return;
+                return local;
             }
 
-            // Parent Scope
-            compiler.ParentContext.SetIdentifier(compiler, expression);
+            return null;
         }
 
-        public sealed class Parameter
+        internal sealed record Parameter : CobVariable
         {
-            public string Name { get; }
-
-            private string? typeName;
-            public string TypeName => typeName ??= Type.ToString();
-
-            private CobType? type;
-            public CobType Type => type ??= CobType.FromString(TypeName);
-
             public bool IsSpread { get; }
 
-            public Parameter(string name, string typeName, bool isSpread)
-            {
-                Name = name;
-                this.typeName = typeName;
-                IsSpread = isSpread;
-            }
-
             public Parameter(string name, CobType type, bool isSpread)
+                : base(name, type, true)
             {
-                Name = name;
-                this.type = type;
                 IsSpread = isSpread;
             }
         }

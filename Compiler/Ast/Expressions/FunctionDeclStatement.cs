@@ -17,14 +17,14 @@ namespace Compiler.Ast.Expressions
 
         public CallingConvention CallingConvention { get; }
 
-        public IReadOnlyList<Function.Parameter> Parameters { get; }
+        public IReadOnlyList<Parameter> Parameters { get; }
 
         public Expression? Body { get; }
 
         public FunctionDeclStatement(
             Token token,
             string? name,
-            IReadOnlyList<Function.Parameter> parameters,
+            IReadOnlyList<Parameter> parameters,
             Expression? body,
             string? returnTypeName,
             CallingConvention callingConvention
@@ -44,5 +44,11 @@ namespace Compiler.Ast.Expressions
         {
             return visitor.Visit(this);
         }
+
+        public sealed record Parameter(
+            string Name,
+            string TypeName,
+            bool IsSpread
+        );
     }
 }

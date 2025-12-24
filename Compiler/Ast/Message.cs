@@ -243,8 +243,6 @@ namespace Compiler.Ast
 
         public static Def IllegalAssignmentImmutable { get; } = new(MessageType.Error, "Cannot assign to a 'const' identifier.");
 
-        public static Def CannotNestModules { get; } = new(MessageType.Error, "Modules may not be nested"); // TODO Not true!
-
         public static Def CannotRedeclareEntryPoint { get; } = new(MessageType.Error, "Multiple Entry Points may not be declared");
 
         public static Def MissingFunctionBody { get; } = new(MessageType.Error, "Missing function body");

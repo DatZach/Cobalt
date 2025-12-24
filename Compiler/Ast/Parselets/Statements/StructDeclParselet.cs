@@ -25,10 +25,10 @@ namespace Compiler.Ast.Parselets.Statements
                 else if (parser.Match(TokenType.LeftSquare)) // Indexer
                 {
                     parser.Take(TokenType.LeftSquare);
-                    var keyType = CobType.FromString(parser.ParseTypeName());
+                    var keyType = parser.ParseTypeName();
                     parser.Take(TokenType.RightSquare);
                     parser.Take(TokenType.Colon);
-                    var returnType = CobType.FromString(parser.ParseTypeName());
+                    var returnType = parser.ParseTypeName();
 
                     ParseGetterSetters(parser, out var getterExpression, out var setterExpression);
 
@@ -38,7 +38,7 @@ namespace Compiler.Ast.Parselets.Statements
                 {
                     var fieldName = parser.Take(TokenType.Identifier);
                     parser.Take(TokenType.Colon);
-                    var fieldType = CobType.FromString(parser.ParseTypeName());
+                    var fieldType = parser.ParseTypeName();
 
                     ParseGetterSetters(parser, out var getterExpression, out var setterExpression);
 

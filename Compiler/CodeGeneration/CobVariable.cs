@@ -1,9 +1,11 @@
-﻿using System.Text;
+﻿using System.Diagnostics;
+using System.Text;
 using Compiler.Ast.Expressions;
 
 namespace Compiler.CodeGeneration
 {
-    internal sealed record CobVariable
+    [DebuggerDisplay("Variable {Name}: {Type} = {Value}")]
+    internal record CobVariable
     {
         public string Name { get; }
 
@@ -48,16 +50,7 @@ namespace Compiler.CodeGeneration
             IntValue = intValue;
         }
 
-        public override string ToString()
-        {
-            string value;
-            if (Type == CobType.String)
-                value = '"' + Encoding.UTF8.GetString(BufferValue).Replace("\n", "^n") + '"';
-            else
-                value = Value?.ToString() ?? "(null)";
-
-            return $"{Name,-25}{Type} = {value}";
-        }
+        public virtual bool IsVisibleTo(IContext context) => true;
 
         public CobVariable DeepClone()
         {
@@ -97,6 +90,17 @@ namespace Compiler.CodeGeneration
                 return new CobVariable("$elem", CobType.U8, false, stringValue[(int)idx]);
 
             return null; // TODO Exception?
+        }
+
+        public override string ToString()
+        {
+            string value;
+            if (Type == CobType.String)
+                value = '"' + Encoding.UTF8.GetString(BufferValue).Replace("\n", "^n") + '"';
+            else
+                value = Value?.ToString() ?? "(null)";
+
+            return $"{Name,-25}{Type} = {value}";
         }
     }
 
@@ -330,6 +334,10 @@ namespace Compiler.CodeGeneration
     {
         public static readonly StringContext Instance = new ();
 
+        public string Name => "string";
+
+        public IContext? Parent => null;
+
         public Storage? GetIdentifier(Compiler compiler, IdentifierExpression expression)
         {
             if (expression.Value == "Length")
@@ -348,9 +356,9 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
-        public void SetIdentifier(Compiler compiler, IdentifierExpression expression)
+        public CobVariable? SetIdentifier(Compiler compiler, IdentifierExpression expression)
         {
-            
+            return null;
         }
     }
 }
