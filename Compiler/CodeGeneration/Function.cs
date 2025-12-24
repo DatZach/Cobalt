@@ -5,7 +5,7 @@ using System.Diagnostics;
 namespace Compiler.CodeGeneration
 {
     [DebuggerDisplay("Function '{FullyQualifiedName}'")]
-    internal sealed class Function : IContext
+    internal sealed class Function : IContext, ISymbol
     {
         public string Name { get; }
 
@@ -29,11 +29,14 @@ namespace Compiler.CodeGeneration
 
         public string FullyQualifiedName => (Parent?.Name ?? "root") + '_' + Name;
 
+        private readonly Compiler compiler;
+
         private int freeRegisterIndex;
         private int registers;
 
         public Function(
             string name,
+            Compiler compiler,
             IContext parent,
             CallingConvention callingConvention,
             IReadOnlyList<Parameter> parameters,
@@ -49,6 +52,8 @@ namespace Compiler.CodeGeneration
             ReturnType = returnType;
             Body = new InstructionBuffer();
             ReturnLabel = Body.AllocateLabel();
+
+            this.compiler = compiler;
 
             freeRegisterIndex = 0;
             registers = 0;
@@ -186,60 +191,61 @@ namespace Compiler.CodeGeneration
 
             return -1;
         }
-        
-        public Storage? GetIdentifier(Compiler compiler, IdentifierExpression expression)
+
+        public ISymbol? FindIdentifier(string name)
         {
-            var value = expression.Value;
-            int idx;
+            Parameter? parameter;
+            if ((parameter = Parameters.FirstOrDefault(x => x.Name == name)) != null)
+                return parameter;
 
-            // TODO AllocateStorage(Type, Value, Origin)..?
+            CobVariable? local;
+            if ((local = Locals.FirstOrDefault(x => x.Name == name)) != null)
+                return local;
 
-            // ARGUMENTS
-            if ((idx = FindParameter(value)) != -1)
+            return null;
+        }
+
+        public Storage? EmitGetIdentifier(ISymbol identifier)
+        {
+            if (identifier is Parameter parameter)
             {
-                var type = Parameters[idx];
+                var idx = FindParameter(parameter.Name); // TODO Bit odd to search on name again like this
                 return new Storage(
                     this,
                     new Operand
                     {
                         Type = OperandType.Argument,
                         Value = idx,
-                        Size = type.Type.Size
+                        Size = parameter.Type.Size
                     },
-                    type.Type
+                    parameter.Type
                 );
             }
 
-            // LOCALS
-            if ((idx = FindLocal(value)) != -1)
+            if (identifier is CobVariable variable)
             {
-                var type = Locals[idx];
+                var idx = Locals.IndexOf(variable);
                 return new Storage(
                     this,
                     new Operand
                     {
                         Type = OperandType.Local,
                         Value = idx,
-                        Size = type.Type.Size
+                        Size = variable.Type.Size
                     },
-                    type.Type
+                    variable.Type
                 );
             }
 
             return null;
-            // Find in parent scope
-            //return compiler.ParentContext.GetIdentifier(compiler, expression);
         }
 
-        public CobVariable? SetIdentifier(Compiler compiler, IdentifierExpression expression)
+        public bool EmitSetIdentifier(ISymbol identifier)
         {
-            var value = expression.Value;
-            int idx;
-
             // ARGUMENTS
-            if ((idx = FindParameter(value)) != -1)
+            if (identifier is Parameter parameter)
             {
-                var parameter = Parameters[idx];
+                var idx = FindParameter(parameter.Name);
 
                 compiler.CurrentFunction.Body.Emit(
                     Opcode.Move,
@@ -251,13 +257,13 @@ namespace Compiler.CodeGeneration
                     },
                     compiler.AssignmentRHS.Operand
                 );
-                return parameter;
+                return true;
             }
 
             // LOCALS
-            if ((idx = FindLocal(value)) != -1)
+            if (identifier is CobVariable local)
             {
-                var local = Locals[idx];
+                var idx = Locals.IndexOf(local);
 
                 compiler.CurrentFunction.Body.Emit(
                     Opcode.Move,
@@ -269,10 +275,10 @@ namespace Compiler.CodeGeneration
                     },
                     compiler.AssignmentRHS.Operand
                 );
-                return local;
+                return true;
             }
 
-            return null;
+            return false;
         }
 
         internal sealed record Parameter : CobVariable
@@ -285,6 +291,8 @@ namespace Compiler.CodeGeneration
                 IsSpread = isSpread;
             }
         }
+
+        public bool IsVisibleTo(IContext context) => Compiler.StandardIsSymbolVisibleHeuristic(context, Parent, Name);
     }
 
     internal enum CallingConvention

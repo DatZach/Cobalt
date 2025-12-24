@@ -2,7 +2,7 @@
 
 namespace Compiler.CodeGeneration
 {
-    internal sealed class StructType : IContext
+    internal sealed class StructType : IContext, ISymbol
     {
         public IContext? Parent { get; }
 
@@ -38,7 +38,7 @@ namespace Compiler.CodeGeneration
             parameters = lParameters;
 
             // TODO compiler.RootModule is wrong! Should parent to this context...
-            var function = new Function(name, this, callingConvention, parameters, returnType);
+            var function = new Function(name, compiler, this, callingConvention, parameters, returnType);
             Functions.Add(function);
             compiler.Functions.Add(function);
 
@@ -80,13 +80,24 @@ namespace Compiler.CodeGeneration
             return indexer;
         }
 
-        public Storage? GetIdentifier(CodeGeneration.Compiler compiler, IdentifierExpression expression)
+        public ISymbol? FindIdentifier(string name)
         {
-            // FIELD
-            int idx; // TODO THIS IS SO BAD
-            if ((idx = Fields.ToList().FindIndex(x => x.Name == expression.Value)) != -1)
+            CobField? field;
+            if ((field = Fields.FirstOrDefault(x => x.Name == name)) != null)
+                return field;
+
+            Function? function;
+            if ((function = Functions.FirstOrDefault(x => x.Name == name)) != null)
+                return function;
+
+            return null;
+        }
+
+        public Storage? EmitGetIdentifier(ISymbol identifier)
+        {
+            if (identifier is CobField field)
             {
-                var field = Fields[idx];
+                var idx = Fields.IndexOf(field);
                 var fieldType = field.Type;
                 
                 if (field.GetterExpression != null)
@@ -107,19 +118,9 @@ namespace Compiler.CodeGeneration
                 }
             }
 
-            // FUNCTION
-            //var function = Functions.FirstOrDefault(x => x.Name == expression.Value);
-            idx = compiler.Functions.FindIndex(x => x.Name == expression.Value); // TODO AllocateFunction + FindFunctionIndex()
-            if (idx != -1)
+            if (identifier is Function function)
             {
-                // TODO Implement
-                //if (!Compiler.IsSymbolVisible(global))
-                //{
-                //    Compiler.Messages.Add(Message.CannotAccessPrivateSymbol, expression, expression.Value, Compiler.CurrentModule.Name ?? "(root)");
-                //    return null;
-                //}
-
-                var function = compiler.Functions[idx];
+                var idx = compiler.Functions.IndexOf(function);
                 return new Storage(
                     null,
                     new Operand
@@ -134,14 +135,11 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
-        public CobVariable? SetIdentifier(CodeGeneration.Compiler compiler, IdentifierExpression expression)
+        public bool EmitSetIdentifier(ISymbol identifier)
         {
-            int idx;
-            if ((idx = Fields.FindIndex(x => x.Name == expression.Value)) != -1)
+            if (identifier is CobField field)
             {
-                var field = Fields[idx];
-                //compiler.ValidateVariableAccess(field, expression);
-                
+                var idx = Fields.IndexOf(field);
                 var @this = compiler.BinOpLHS == null ? Operand.This : compiler.BinOpLHS.Operand;
                 
                 compiler.CurrentFunction.Body.Emit(
@@ -150,18 +148,20 @@ namespace Compiler.CodeGeneration
                     new Operand { Type = OperandType.ImmediateUnsigned, Value = idx },
                     compiler.AssignmentRHS.Operand
                 );
-                return field;
+                return true;
             }
 
-            return null;
+            return false;
         }
+
+        public bool IsVisibleTo(IContext? context) => Compiler.StandardIsSymbolVisibleHeuristic(context, Parent, Name);
     }
 
     internal sealed class Indexer : IContext
     {
         public IContext? Parent { get; init;  }
 
-        public string Name { get; } = "indexer";
+        public string Name => "indexer";
 
         public CobType KeyType { get; init; }
 
@@ -172,6 +172,27 @@ namespace Compiler.CodeGeneration
         public Expression? SetterExpression { get; init; }
 
         public Storage? Index { get; set; }
+
+        public ISymbol? FindIdentifier(string name)
+        {
+            if (name == "key")
+                return new CobVariable("key", KeyType, false);
+
+            return null;
+        }
+
+        public Storage? EmitGetIdentifier(ISymbol identifier)
+        {
+            if (identifier is CobVariable variable && variable.Name == "key")
+                return Index;
+
+            return null;
+        }
+
+        public bool EmitSetIdentifier(ISymbol identifier)
+        {
+            return false;
+        }
 
         public Storage? GetIdentifier(CodeGeneration.Compiler compiler, IdentifierExpression expression)
         {

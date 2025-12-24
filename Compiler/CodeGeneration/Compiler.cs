@@ -6,6 +6,7 @@ using Compiler.Interpreter;
 using Compiler.Lexer;
 using System.Diagnostics;
 using System.Text;
+using System.Xml.Linq;
 
 namespace Compiler.CodeGeneration
 {
@@ -819,38 +820,40 @@ namespace Compiler.CodeGeneration
         
         public Storage? Visit(IdentifierExpression expression)
         {
-            // TODO Refactor
-            if (AssignmentRHS != null)
-            {
-                CobVariable? storage = null;
-                foreach (var scope in contextStack)
-                {
-                    storage = scope.SetIdentifier(this, expression);
-                    if (storage != null)
-                        break;
-                }
+            var inAssignment = AssignmentRHS != null;
 
-                if (storage == null)
-                    Messages.Add(Message.UndeclaredIdentifier, expression, expression.Value);
-                else if (!storage.IsVisibleTo(CurrentModule)) // TODO CurrentContext.Name...?
+            foreach (var scope in contextStack)
+            {
+                var target = scope.FindIdentifier(expression.Value);
+                if (target == null)
+                    continue;
+
+                // TODO How to handle Module = 1234;?
+                if (!target.IsVisibleTo(CurrentModule)) // TODO CurrentContext.Name...?
                     Messages.Add(Message.CannotAccessPrivateSymbol, expression, expression.Value, CurrentModule.Name ?? "(root)");
-                else if (!storage.Mutable)
+                else if (inAssignment && target is CobVariable variable && !variable.Mutable) // TODO Is this actually appropriate?
                     Messages.Add(Message.IllegalAssignmentImmutable, expression);
 
-                return null;
-            }
-            else
-            {
-                foreach (var scope in contextStack)
+                if (inAssignment)
                 {
-                    var storage = scope.GetIdentifier(this, expression);
-                    if (storage != null)
-                        return storage;
-                }
+                    var result = scope.EmitSetIdentifier(target);
+                    if (!result)
+                        Messages.Add(Message.IllegalAssignment, expression);
 
-                Messages.Add(Message.UndeclaredIdentifier, expression, expression.Value);
-                return null;
+                    return null;
+                }
+                else
+                {
+                    var result = scope.EmitGetIdentifier(target);
+                    if (result == null)
+                        Messages.Add(Message.IllegalAssignment, expression);
+
+                    return result;
+                }
             }
+
+            Messages.Add(Message.UndeclaredIdentifier, expression, expression.Value);
+            return null;
         }
 
         private Storage? VisitCastExpression(CallExpression expression)
@@ -897,6 +900,7 @@ namespace Compiler.CodeGeneration
         {
             var function = new Function(
                 "$aot_eval$",
+                this,
                 CurrentModule,
                 CallingConvention.CCall,
                 Array.Empty<Function.Parameter>(),
@@ -1100,6 +1104,17 @@ namespace Compiler.CodeGeneration
             return idx;
         }
 
+        public static bool StandardIsSymbolVisibleHeuristic(IContext? context, IContext? parent, string? name)
+        {
+            for (var ctx = context; ctx != null; ctx = ctx.Parent)
+            {
+                if (ctx == parent)
+                    return true;
+            }
+
+            return !string.IsNullOrEmpty(name) && char.IsUpper(name[0]);
+        }
+
         public static Compiler Compile(ScriptExpression ast, MessageCollection messages)
         {
             try
@@ -1107,6 +1122,9 @@ namespace Compiler.CodeGeneration
                 stopwatch.Start();
                 
                 var compiler = new Compiler(messages);
+
+                // HACKish Probably fine to initialize intrinsics in an "odd" way, but this does need more abstraction
+                StringContext.Instance.Compiler = compiler;
                 
                 var pass0 = new ForwardDeclaration(compiler);
                 ast.Accept(pass0);
@@ -1143,16 +1161,29 @@ namespace Compiler.CodeGeneration
         public Function Function { get; init; }
     }
 
+    // TODO Abstract Class
+    // TODO Should inherit ISymbol?
     internal interface IContext
     {
         string Name { get; }
 
         IContext? Parent { get; }
 
-        // TODO Remove compiler field? Most contexts already have the compiler passed in ctor
-        Storage? GetIdentifier(Compiler compiler, IdentifierExpression expression);
+        ISymbol? FindIdentifier(string name);
 
-        CobVariable? SetIdentifier(Compiler compiler, IdentifierExpression expression);
+        Storage? EmitGetIdentifier(ISymbol identifier);
+
+        bool EmitSetIdentifier(ISymbol identifier);
+
+        // TODO Remove compiler field? Most contexts already have the compiler passed in ctor
+        //Storage? GetIdentifier(Compiler compiler, IdentifierExpression expression);
+
+        //CobVariable? SetIdentifier(Compiler compiler, IdentifierExpression expression);
+    }
+
+    internal interface ISymbol
+    {
+        bool IsVisibleTo(IContext context);
     }
 
     internal sealed record LoopContext(string? Tag, Label Continue, Label Break);

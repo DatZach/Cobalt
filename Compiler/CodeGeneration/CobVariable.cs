@@ -1,11 +1,12 @@
-﻿using System.Diagnostics;
+﻿using Compiler.Ast.Expressions;
+using System.Diagnostics;
+using System.Linq.Expressions;
 using System.Text;
-using Compiler.Ast.Expressions;
 
 namespace Compiler.CodeGeneration
 {
     [DebuggerDisplay("Variable {Name}: {Type} = {Value}")]
-    internal record CobVariable
+    internal record CobVariable : ISymbol
     {
         public string Name { get; }
 
@@ -338,15 +339,26 @@ namespace Compiler.CodeGeneration
 
         public IContext? Parent => null;
 
-        public Storage? GetIdentifier(Compiler compiler, IdentifierExpression expression)
+        public Compiler Compiler { get; set; }
+
+        public ISymbol? FindIdentifier(string name)
         {
-            if (expression.Value == "Length")
+            // TODO Immutable Field!
+            if (name == "Length")
+                return new CobField(this, "Length", CobType.UInt, null, null);
+
+            return null;
+        }
+
+        public Storage? EmitGetIdentifier(ISymbol identifier)
+        {
+            if (identifier is CobField field && field.Name == "Length")
             {
-                var storage = compiler.CurrentFunction.AllocateStorage(CobType.U64);
-                compiler.CurrentFunction.Body.Emit(
+                var storage = Compiler.CurrentFunction.AllocateStorage(CobType.U64);
+                Compiler.CurrentFunction.Body.Emit(
                     Opcode.GetField,
                     storage.Operand,
-                    compiler.BinOpLHS.Operand,
+                    Compiler.BinOpLHS.Operand,
                     new Operand { Type = OperandType.ImmediateUnsigned, Value = 0 }
                 );
 
@@ -356,9 +368,9 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
-        public CobVariable? SetIdentifier(Compiler compiler, IdentifierExpression expression)
+        public bool EmitSetIdentifier(ISymbol identifier)
         {
-            return null;
+            return false;
         }
     }
 }

@@ -4,7 +4,7 @@ using System.Diagnostics;
 namespace Compiler.CodeGeneration
 {
     [DebuggerDisplay("Module '{Name}'")]
-    internal sealed class Module : IContext
+    internal sealed class Module : IContext, ISymbol
     {
         public string? Name { get; }
 
@@ -64,7 +64,7 @@ namespace Compiler.CodeGeneration
             IReadOnlyList<Function.Parameter> parameters,
             CobType returnType
         ) {
-            var function = new Function(name, this, callingConvention, parameters, returnType);
+            var function = new Function(name, compiler, this, callingConvention, parameters, returnType);
             Functions.Add(function);
             compiler.Functions.Add(function);
 
@@ -90,15 +90,41 @@ namespace Compiler.CodeGeneration
             Variables[variable.Name] = variable;
         }
 
-        public Storage? GetIdentifier(Compiler compiler, IdentifierExpression expression)
+        public ISymbol? FindIdentifier(string name)
         {
-            var value = expression.Value;
-
             // GLOBAL
-            int idx;
-            if (Variables.TryGetValue(value, out var global)
-            &&  (idx = compiler.FindGlobal(global)) != -1)
+            if (Variables.TryGetValue(name, out var global))
+                return global;
+
+            // FUNCTION
+            Function? function;
+            if ((function = Functions.FirstOrDefault(x => x.Name == name)) != null)
+                return function;
+
+            // MODULES
+            Module? module;
+            if ((module = FindModule(name)) != null)
+                return module;
+
+            // TUPLE TYPES
+            TupleType? tupleType;
+            if ((tupleType = FindTupleType(name)) != null)
+                return tupleType;
+
+            // TUPLE TYPES
+            StructType? structType;
+            if ((structType = FindStructType(name)) != null)
+                return structType;
+
+            return null;
+        }
+
+        public Storage? EmitGetIdentifier(ISymbol identifier)
+        {
+            // GLOBAL
+            if (identifier is CobVariable global)
             {
+                var idx = compiler.FindGlobal(global); // TODO Weird naming convention IndexOfGlobal is better
                 var type = compiler.Globals[idx];
                 return new Storage(
                     null,
@@ -114,17 +140,9 @@ namespace Compiler.CodeGeneration
 
             // TODO AllocateFunction + FindFunctionIndex()
             // FUNCTION
-            Function? function;
-            if ((function = Functions.FirstOrDefault(x => x.Name == expression.Value)) != null
-            &&  (idx = compiler.Functions.IndexOf(function)) != -1)
+            if (identifier is Function function)
             {
-                // TODO Implement
-                //if (!Compiler.IsSymbolVisible(global))
-                //{
-                //    Compiler.Messages.Add(Message.CannotAccessPrivateSymbol, expression, expression.Value, Compiler.CurrentModule.Name ?? "(root)");
-                //    return null;
-                //}
-
+                var idx = compiler.Functions.IndexOf(function);
                 return new Storage(
                     null,
                     new Operand
@@ -137,8 +155,7 @@ namespace Compiler.CodeGeneration
             }
 
             // MODULES
-            Module? module;
-            if ((module = FindModule(value)) != null)
+            if (identifier is Module module)
             {
                 return new Storage(
                     null,
@@ -148,8 +165,7 @@ namespace Compiler.CodeGeneration
             }
 
             // TUPLE TYPES
-            TupleType? tupleType;
-            if ((tupleType = FindTupleType(value)) != null)
+            if (identifier is TupleType tupleType)
             {
                 return new Storage(
                     null,
@@ -159,8 +175,7 @@ namespace Compiler.CodeGeneration
             }
 
             // TUPLE TYPES
-            StructType? structType;
-            if ((structType = FindStructType(value)) != null)
+            if (identifier is StructType structType)
             {
                 return new Storage(
                     null,
@@ -172,14 +187,11 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
-        public CobVariable? SetIdentifier(Compiler compiler, IdentifierExpression expression)
+        public bool EmitSetIdentifier(ISymbol identifier)
         {
-            var value = expression.Value;
-
-            int idx;
-            if (Variables.TryGetValue(value, out var global)
-            &&  (idx = compiler.FindGlobal(global)) != -1)
+            if (identifier is CobVariable global)
             {
+                var idx = compiler.FindGlobal(global);
                 compiler.CurrentFunction.Body.Emit(
                     Opcode.Move,
                     new Operand
@@ -190,10 +202,12 @@ namespace Compiler.CodeGeneration
                     },
                     compiler.AssignmentRHS.Operand
                 );
-                return global;
+                return true;
             }
 
-            return null;
+            return false;
         }
+
+        public bool IsVisibleTo(IContext? context) => Compiler.StandardIsSymbolVisibleHeuristic(context, Parent, Name);
     }
 }

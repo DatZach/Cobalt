@@ -1,9 +1,8 @@
 ﻿using Compiler.Ast.Expressions;
-using System.Text;
 
 namespace Compiler.CodeGeneration
 {
-    internal sealed class TupleType : IContext
+    internal sealed class TupleType : IContext, ISymbol
     {
         public IContext? Parent { get; }
 
@@ -37,7 +36,7 @@ namespace Compiler.CodeGeneration
             parameters = lParameters;
 
             // TODO compiler.RootModule is wrong! Should parent to this context...
-            var function = new Function(name, this, callingConvention, parameters, returnType);
+            var function = new Function(name, compiler, this, callingConvention, parameters, returnType);
             Functions.Add(function);
             compiler.Functions.Add(function);
 
@@ -62,15 +61,25 @@ namespace Compiler.CodeGeneration
             return Fields.FindIndex(x => x.Name == name);
         }
 
-        public Storage? GetIdentifier(CodeGeneration.Compiler compiler, IdentifierExpression expression)
+        public ISymbol? FindIdentifier(string name)
         {
-            // FIELD
-            int idx; // TODO THIS IS SO BAD
-            if ((idx = Fields.FindIndex(x => x.Name == expression.Value)) != -1)
+            CobField? field;
+            if ((field = Fields.FirstOrDefault(x => x.Name == name)) != null)
+                return field;
+
+            Function? function;
+            if ((function = Functions.FirstOrDefault(x => x.Name == name)) != null)
+                return function;
+
+            return null;
+        }
+
+        public Storage? EmitGetIdentifier(ISymbol identifier)
+        {
+            if (identifier is CobField field)
             {
-                var field = Fields[idx];
+                var idx = Fields.IndexOf(field);
                 var fieldType = field.Type;
-                
 
                 if (field.GetterExpression != null)
                 {
@@ -90,19 +99,9 @@ namespace Compiler.CodeGeneration
                 }
             }
 
-            // FUNCTION
-            //var function = Functions.FirstOrDefault(x => x.Name == expression.Value);
-            idx = compiler.Functions.FindIndex(x => x.Name == expression.Value); // TODO AllocateFunction + FindFunctionIndex()
-            if (idx != -1)
+            if (identifier is Function function)
             {
-                // TODO Implement
-                //if (!Compiler.IsSymbolVisible(global))
-                //{
-                //    Compiler.Messages.Add(Message.CannotAccessPrivateSymbol, expression, expression.Value, Compiler.CurrentModule.Name ?? "(root)");
-                //    return null;
-                //}
-
-                var function = compiler.Functions[idx];
+                var idx = compiler.Functions.IndexOf(function);
                 return new Storage(
                     null,
                     new Operand
@@ -115,17 +114,13 @@ namespace Compiler.CodeGeneration
             }
 
             return null;
-            //return compiler.CurrentModule.GetIdentifier(compiler, expression);
         }
 
-        public CobVariable? SetIdentifier(CodeGeneration.Compiler compiler, IdentifierExpression expression)
+        public bool EmitSetIdentifier(ISymbol identifier)
         {
-            int idx;
-            if ((idx = Fields.FindIndex(x => x.Name == expression.Value)) != -1)
+            if (identifier is CobField field)
             {
-                var field = Fields[idx];
-                //compiler.ValidateVariableAccess(field, expression);
-                
+                var idx = Fields.IndexOf(field);
                 var @this = compiler.BinOpLHS == null ? Operand.This : compiler.BinOpLHS.Operand;
                 
                 compiler.CurrentFunction.Body.Emit(
@@ -134,11 +129,13 @@ namespace Compiler.CodeGeneration
                     new Operand { Type = OperandType.ImmediateUnsigned, Value = idx },
                     compiler.AssignmentRHS.Operand
                 );
-                return field;
+                return true;
             }
 
-            return null;
+            return false;
         }
+
+        public bool IsVisibleTo(IContext context) => Compiler.StandardIsSymbolVisibleHeuristic(context, Parent, Name);
     }
 
     internal sealed record CobField : CobVariable
@@ -158,16 +155,7 @@ namespace Compiler.CodeGeneration
             SetterExpression = setterExpression;
         }
 
-        public override bool IsVisibleTo(IContext? context)
-        {
-            for (var ctx = context; ctx != null; ctx = ctx.Parent)
-            {
-                if (ctx == parent)
-                    return true;
-            }
-
-            return Name.Length > 0 && char.IsUpper(Name[0]);
-        }
+        public override bool IsVisibleTo(IContext? context) => Compiler.StandardIsSymbolVisibleHeuristic(context, parent, Name);
 
         public override string ToString()
         {
