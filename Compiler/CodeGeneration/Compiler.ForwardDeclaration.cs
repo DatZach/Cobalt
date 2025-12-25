@@ -11,12 +11,12 @@ namespace Compiler.CodeGeneration
     {
         public DeclPhase Phase { get; private set; }
 
+        private Module CurrentModule => contextStack.OfType<Module>().First();
+
         private IScopeContext CurrentContext => contextStack.Peek();
 
-        private Module currentModule;
-
+        private readonly Stack<IScopeContext> contextStack;
         private readonly Compiler compiler;
-        private readonly Stack<IScopeContext> contextStack; // TODO IScopedContext or something (Struct, Module, Tuple, etc.)
         private readonly MessageCollection messages;
 
         public ForwardDeclaration(Compiler compiler, MessageCollection messages)
@@ -24,7 +24,6 @@ namespace Compiler.CodeGeneration
             this.compiler = compiler;
             this.messages = messages;
 
-            currentModule = compiler.RootModule;
             contextStack = new Stack<IScopeContext>(4);
         }
 
@@ -32,9 +31,8 @@ namespace Compiler.CodeGeneration
         {
             for (var phase = DeclPhase.Begin; phase < DeclPhase.Complete; ++phase)
             {
-                currentModule = compiler.RootModule;
                 contextStack.Clear();
-                contextStack.Push(currentModule);
+                contextStack.Push(compiler.RootModule);
 
                 Phase = phase;
 
@@ -132,7 +130,7 @@ namespace Compiler.CodeGeneration
             Function? function;
             if (expression.SymbolTypeSignature != null)
             {
-                function = currentModule.AllocateFunction(
+                function = CurrentModule.AllocateFunction(
                     expression.SymbolName,
                     expression.SymbolTypeSignature.CallingConvention,
                     expression.SymbolTypeSignature.Parameters.Select(x => new Function.Parameter(x.Name, CobType.FromString(x.TypeName), x.IsSpread)).ToList(),
@@ -174,21 +172,19 @@ namespace Compiler.CodeGeneration
 
         public Unit Visit(ModuleStatement expression)
         {
-            var prevModule = currentModule;
-
+            Module module;
             if (Phase == DeclPhase.Modules)
-                currentModule = currentModule.FindOrAllocateModule(expression.Name);
+                module = CurrentModule.FindOrAllocateModule(expression.Name);
             else if (Phase > DeclPhase.Modules)
-                currentModule = currentModule.FindModule(expression.Name)!;
+                module = CurrentModule.FindModule(expression.Name)!;
             else
                 return Unit.Value;
 
-            contextStack.Push(currentModule);
+            contextStack.Push(module);
 
             if (expression.Block != null)
             {
                 expression.Block.Accept(this);
-                currentModule = prevModule;
                 contextStack.Pop();
             }
 
@@ -213,7 +209,7 @@ namespace Compiler.CodeGeneration
             {
                 // TODO AllocateTupleType
                 var tupleType = new TupleType(compiler, CurrentContext, expression.Name);
-                currentModule.TupleTypes.Add(tupleType);
+                CurrentModule.TupleTypes.Add(tupleType);
 
                 // TODO Is this actually a type alias? Shouldn't we resolve these from the TupleTypes field?
                 if (!CobType.TryAddAlias(expression.Name, new CobType(eCobType.Tuple, tag: tupleType)))
@@ -222,7 +218,7 @@ namespace Compiler.CodeGeneration
             else if (Phase > DeclPhase.Types)
             {
                 // TODO Better API FindTupleType
-                var tupleType = currentModule.TupleTypes.First(x => x.Name == expression.Name);
+                var tupleType = CurrentModule.TupleTypes.First(x => x.Name == expression.Name);
                 contextStack.Push(tupleType);
                 
                 for (var i = 0; i < expression.Functions.Count; ++i)
@@ -246,7 +242,7 @@ namespace Compiler.CodeGeneration
             {
                 // TODO AllocateStructType
                 var structType = new StructType(compiler, CurrentContext, expression.Name);
-                currentModule.StructTypes.Add(structType);
+                CurrentModule.StructTypes.Add(structType);
 
                 // TODO Is this actually a type alias? Shouldn't we resolve these from the StructTypes field?
                 if (!CobType.TryAddAlias(expression.Name, new CobType(eCobType.Struct, tag: structType)))
@@ -255,7 +251,7 @@ namespace Compiler.CodeGeneration
             else if (Phase > DeclPhase.Types)
             {
                 // TODO Better API FindStructType
-                var structType = currentModule.StructTypes.First(x => x.Name == expression.Name);
+                var structType = CurrentModule.StructTypes.First(x => x.Name == expression.Name);
                 contextStack.Push(structType);
 
                 for (var i = 0; i < expression.Functions.Count; ++i)
@@ -309,7 +305,7 @@ namespace Compiler.CodeGeneration
             }
             else
             {
-                currentModule.AllocateFunction(
+                CurrentModule.AllocateFunction(
                     expression.Name,
                     expression.CallingConvention,
                     expression.Parameters.Select(x => new Function.Parameter(x.Name, CobType.FromString(x.TypeName), x.IsSpread)).ToList(),
@@ -331,7 +327,7 @@ namespace Compiler.CodeGeneration
             var mutable = expression.Type == TokenType.Var;
             foreach (var decl in expression.Declarations)
             {
-                currentModule.AllocateGlobal(decl.Name, decl.Type, mutable);
+                CurrentModule.AllocateGlobal(decl.Name, decl.Type, mutable);
             }
 
             return Unit.Value;

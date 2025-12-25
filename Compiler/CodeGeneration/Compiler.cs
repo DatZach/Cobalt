@@ -48,12 +48,13 @@ namespace Compiler.CodeGeneration
             Exports = new List<Export>();
             Modules = new List<Module>();
             Globals = new List<CobVariable>();
-            Scripts = new List<ScriptExpression>();
             Functions = new List<Function>();
+            Scripts = new List<ScriptExpression>();
+            RootModule = new Module(this, null, null);
+
             contextStack = new Stack<IScopeContext>();
             loopStack = new Stack<LoopContext>();
 
-            RootModule = new Module(this, null, null);
             Modules.Add(RootModule);
 
             this.messages = messages;
@@ -121,8 +122,6 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(TupleDeclStatement expression)
         {
-            // TODO CurrentContext?
-            //      Is it possible to get rid of CurrentModule entirely?
             var tupleType = CurrentModule.FindTupleType(expression.Name)!;
             contextStack.Push(tupleType);
             foreach (var functionExpression in expression.Functions)
@@ -134,7 +133,6 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(StructDeclStatement expression)
         {
-            // TODO CurrentContext?
             var structType = CurrentModule.FindStructType(expression.Name)!;
             contextStack.Push(structType);
             foreach (var functionExpression in expression.Functions)
@@ -186,7 +184,7 @@ namespace Compiler.CodeGeneration
 
             return new Storage(
                 CurrentFunction,
-                new Operand(), //null, // TODO ???
+                Operand.None,
                 new CobType(eCobType.Function, tag: function)
             );
         }
@@ -222,35 +220,30 @@ namespace Compiler.CodeGeneration
                 
                 var variable = new CobVariable(decl.Name, type, mutable);
 
-                if (CurrentFunction != null)
+                if (CurrentFunction == CurrentModule.InitializerFunction) // Global Decl
                 {
-                    if (CurrentFunction == CurrentModule.InitializerFunction) // Global Decl
+                    var global = FindGlobal(CurrentModule.Variables[decl.Name]);
+                    if (rhs != null)
                     {
-                        var global = FindGlobal(CurrentModule.Variables[decl.Name]);
-                        if (rhs != null)
-                        {
-                            CurrentFunction.Body.Emit( // TODO Not right
-                                Opcode.Move,
-                                new Operand { Type = OperandType.Global, Value = global, Size = type.Size },
-                                rhs.Operand
-                            ); // TODO EmitLO
-                        }
-                    }
-                    else
-                    {
-                        var local = CurrentFunction.AllocateLocal(variable);
-                        if (rhs != null)
-                        {
-                            CurrentFunction.Body.Emit(
-                                Opcode.Move,
-                                new Operand { Type = OperandType.Local, Value = local, Size = type.Size },
-                                rhs.Operand
-                            ); // TODO EmitLO
-                        }
+                        CurrentFunction.Body.Emit(
+                            Opcode.Move,
+                            new Operand { Type = OperandType.Global, Value = global, Size = type.Size },
+                            rhs.Operand
+                        );
                     }
                 }
                 else
-                    throw new NotImplementedException(); // TODO Normal compile error? What does this mean??
+                {
+                    var local = CurrentFunction.AllocateLocal(variable);
+                    if (rhs != null)
+                    {
+                        CurrentFunction.Body.Emit(
+                            Opcode.Move,
+                            new Operand { Type = OperandType.Local, Value = local, Size = type.Size },
+                            rhs.Operand
+                        );
+                    }
+                }
 
                 rhs?.Free();
             }
@@ -308,7 +301,8 @@ namespace Compiler.CodeGeneration
                 var index = boe.Left.Accept(this);
                 var range = boe.Right.Accept(this);
 
-                // TODO Should not find types like this...
+                // TODO Should be abstracted behind an Intrinsics class
+                // TODO Should use the Trait `Enumerable` instead of assuming the enumerator type
                 var tdeRangeEnumerator = RootModule.TupleTypes.First(x => x.Name == "RangeEnumerator");
                 var typeRangeTuple = new CobType(eCobType.Struct, tag: tdeRangeEnumerator);
                 var varEnumerator = CurrentFunction.AllocateStorage(typeRangeTuple);
@@ -805,9 +799,9 @@ namespace Compiler.CodeGeneration
                 if (target == null)
                     continue;
 
-                if (!target.IsVisibleTo(CurrentModule)) // TODO CurrentContext.Name...?
-                    messages.Add(Message.CannotAccessPrivateSymbol, expression, expression.Value, CurrentModule.Name ?? "(root)");
-                else if (inAssignment && target is CobVariable variable && !variable.Mutable) // TODO Is this actually appropriate?
+                if (!target.IsVisibleTo(CurrentFunction))
+                    messages.Add(Message.CannotAccessPrivateSymbol, expression, expression.Value, CurrentFunction.Parent?.Name ?? "(root)");
+                else if (inAssignment && target is CobVariable variable && !variable.Mutable)
                     messages.Add(Message.IllegalAssignmentImmutable, expression);
 
                 if (inAssignment)
@@ -900,7 +894,6 @@ namespace Compiler.CodeGeneration
             var result = vm.ExecuteFunction(function);
 
             var reg = CurrentFunction.AllocateStorage(function.ReturnType);
-            // TODO EmitOI
             CurrentFunction.Body.Emit(
                 Opcode.Move,
                 reg.Operand,
