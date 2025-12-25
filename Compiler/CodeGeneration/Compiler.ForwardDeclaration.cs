@@ -11,18 +11,21 @@ namespace Compiler.CodeGeneration
     {
         public DeclPhase Phase { get; private set; }
 
-        private IContext CurrentContext => contextStack.Peek();
+        private IScopeContext CurrentContext => contextStack.Peek();
 
         private Module currentModule;
 
         private readonly Compiler compiler;
-        private readonly Stack<IContext> contextStack; // TODO IScopedContext or something (Struct, Module, Tuple, etc.)
+        private readonly Stack<IScopeContext> contextStack; // TODO IScopedContext or something (Struct, Module, Tuple, etc.)
+        private readonly MessageCollection messages;
 
-        public ForwardDeclaration(Compiler compiler)
+        public ForwardDeclaration(Compiler compiler, MessageCollection messages)
         {
             this.compiler = compiler;
+            this.messages = messages;
+
             currentModule = compiler.RootModule;
-            contextStack = new Stack<IContext>(4);
+            contextStack = new Stack<IScopeContext>(4);
         }
 
         public Unit Visit(ScriptExpression expression)
@@ -92,7 +95,7 @@ namespace Compiler.CodeGeneration
             }
 
             if (paths.Count == 0)
-                compiler.Messages.Add(Message.CannotFindImport, expression, expression.SourceFile);
+                messages.Add(Message.CannotFindImport, expression, expression.SourceFile);
             else foreach (var path in paths)
             {
                 // HACK Caching the FileSystem level does not mean the compiler has already seen this file per se
@@ -100,12 +103,12 @@ namespace Compiler.CodeGeneration
                     continue;
 
                 var source = FileSystem.ReadAllText(path);
-                var tokens = Tokenizer.Tokenize(source, path, compiler.Messages);
-                var ast = Parser.Parse(tokens, compiler.Messages);
+                var tokens = Tokenizer.Tokenize(source, path, messages);
+                var ast = Parser.Parse(tokens, messages);
 
                 // NOTE We perform a full forward declaration scan on any imported scripts meaning we incrementally
                 //      pass through the declphase as we find imports
-                var pass0 = new ForwardDeclaration(compiler);
+                var pass0 = new ForwardDeclaration(compiler, messages);
                 ast.Accept(pass0);
 
                 compiler.Scripts.Add(ast);
@@ -199,7 +202,7 @@ namespace Compiler.CodeGeneration
 
             var typeName = CobType.FromString(expression.TypeName);
             if (!CobType.TryAddAlias(expression.Name, typeName))
-                compiler.Messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
+                messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
 
             return Unit.Value;
         }
@@ -214,7 +217,7 @@ namespace Compiler.CodeGeneration
 
                 // TODO Is this actually a type alias? Shouldn't we resolve these from the TupleTypes field?
                 if (!CobType.TryAddAlias(expression.Name, new CobType(eCobType.Tuple, tag: tupleType)))
-                    compiler.Messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
+                    messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
             }
             else if (Phase > DeclPhase.Types)
             {
@@ -247,7 +250,7 @@ namespace Compiler.CodeGeneration
 
                 // TODO Is this actually a type alias? Shouldn't we resolve these from the StructTypes field?
                 if (!CobType.TryAddAlias(expression.Name, new CobType(eCobType.Struct, tag: structType)))
-                    compiler.Messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
+                    messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
             }
             else if (Phase > DeclPhase.Types)
             {

@@ -16,7 +16,8 @@ namespace Compiler.Ast.Parselets.Statements
 
             var @else = parser.MatchAndTakeToken(TokenType.Else) != null ? parser.ParseBlock() : null;
 
-            // TODO Disallow statements in naked blocks
+            if (Parser.IsStatementExpression(then))
+                parser.Messages.Add(Message.CannotNakedNestStatement, then);
 
             return new IfStatement(token, conditional, then, @else);
         }

@@ -1,4 +1,5 @@
-﻿using Compiler.Lexer;
+﻿using Compiler.Ast.Expressions;
+using Compiler.Lexer;
 using Compiler.Ast.Parselets;
 using Compiler.Ast.Parselets.Statements;
 
@@ -123,6 +124,14 @@ namespace Compiler.Ast
         private static void Register(TokenType type, IPrefixStatementParselet parselet)
         {
             StatementPrefixParselets.Add(type, parselet);
+        }
+
+        public static bool IsStatementExpression(Expression? expression)
+        {
+            if (expression == null)
+                return false;
+
+            return StatementPrefixParselets.ContainsKey(expression.Token.Type);
         }
     }
 }

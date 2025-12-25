@@ -49,10 +49,10 @@ namespace Compiler.Ast.Parselets
                 callingConvention = CallingConvention.CCall;
             else if (parser.MatchAndTakeToken(TokenType.StdCall) != null)
                 callingConvention = CallingConvention.StdCall;
-            //else if (parser.MatchAndTakeToken(TokenType.Naked) != null)
-            //    callingConvention = CallingConvention.Naked;
+            else if (parser.MatchAndTakeToken(TokenType.NakedCall) != null)
+                callingConvention = CallingConvention.NakedCall;
             else
-                callingConvention = CallingConvention.CCall; // TODO Don't hardcode
+                callingConvention = CallingConvention.Default;
 
             Token? fatArrowToken;
             Expression? body;

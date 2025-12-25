@@ -6,7 +6,6 @@ using Compiler.Interpreter;
 using Compiler.Lexer;
 using System.Diagnostics;
 using System.Text;
-using System.Xml.Linq;
 
 namespace Compiler.CodeGeneration
 {
@@ -28,24 +27,19 @@ namespace Compiler.CodeGeneration
 
         public List<ScriptExpression> Scripts { get; }
 
-        public Function? EntryFunction { get; private set; }
-
-        // TODO Possible to collapse contextStack and functionStack into 1?
-        public Function? CurrentFunction => functionStack.Count == 0 ? null : functionStack.Peek();
-
-        public IContext ParentContext => contextStack.Skip(1).FirstOrDefault(); // TODO Remove
-
-        public IContext CurrentContext => contextStack.Peek();
-
         public Module RootModule { get; }
 
-        public Module CurrentModule { get; private set; } // TODO Make this private again
+        public Function? EntryFunction { get; private set; }
 
-        public MessageCollection Messages { get; } // TODO Make this private again, somehow
+        public IScopeContext CurrentContext => contextStack.Peek();
 
-        private readonly Stack<Function> functionStack;
-        private readonly Stack<IContext> contextStack; // TODO IScopedContext or something (Struct, Module, Tuple, etc.)
+        public Module CurrentModule => contextStack.OfType<Module>().First();
+
+        public Function CurrentFunction => contextStack.OfType<Function>().First();
+
+        private readonly Stack<IScopeContext> contextStack;
         private readonly Stack<LoopContext> loopStack;
+        private readonly MessageCollection messages;
 
         private Compiler(MessageCollection messages)
         {
@@ -56,22 +50,19 @@ namespace Compiler.CodeGeneration
             Globals = new List<CobVariable>();
             Scripts = new List<ScriptExpression>();
             Functions = new List<Function>();
-            functionStack = new Stack<Function>();
-            contextStack = new Stack<IContext>();
+            contextStack = new Stack<IScopeContext>();
             loopStack = new Stack<LoopContext>();
 
             RootModule = new Module(this, null, null);
             Modules.Add(RootModule);
 
-            this.Messages = messages ?? throw new ArgumentNullException(nameof(messages));
+            this.messages = messages;
         }
 
         public Storage? Visit(ScriptExpression expression)
         {
-            CurrentModule = RootModule;
-
             contextStack.Push(RootModule);
-            functionStack.Push(CurrentModule.InitializerFunction);
+            contextStack.Push(RootModule.InitializerFunction);
 
             var expressions = expression.Expressions;
             for (int i = 0; i < expressions.Count; ++i)
@@ -79,11 +70,8 @@ namespace Compiler.CodeGeneration
 
             CurrentModule.InitializerFunction.Body.Emit(Opcode.Return);
 
-            // TODO Needs to be unified with the copy-pasted code in ModuleExpression
             contextStack.Pop();
-            CurrentModule = contextStack.Count == 0 ? RootModule : contextStack.Peek() as Module ?? RootModule;
-            
-            functionStack.Pop();
+            contextStack.Pop();
 
             return null;
         }
@@ -110,24 +98,17 @@ namespace Compiler.CodeGeneration
         {
             var module = CurrentModule.FindModule(expression.Name);
 
-            var prevModule = CurrentModule;
-            CurrentModule = module;
             contextStack.Push(module);
-
-            functionStack.Push(module.InitializerFunction);
+            contextStack.Push(module.InitializerFunction);
 
             if (expression.Block != null)
             {
-                var storage = expression.Block.Accept(this);
-                storage?.Free();
+                expression.Block.Accept(this)?.Free();
 
-                // TODO Needs to be unified with the copy-pasted code in ScriptExpression
+                CurrentFunction.Body.Emit(Opcode.Return);
+
                 contextStack.Pop();
-                CurrentModule = prevModule;
-
-                functionStack.Pop();
-
-                module.InitializerFunction.Body.Emit(Opcode.Return);
+                contextStack.Pop();
             }
 
             return null;
@@ -167,7 +148,7 @@ namespace Compiler.CodeGeneration
         {
             if (expression.Body == null)
             {
-                Messages.Add(Message.MissingFunctionBody, expression);
+                messages.Add(Message.MissingFunctionBody, expression);
                 return null;
             }
 
@@ -180,7 +161,6 @@ namespace Compiler.CodeGeneration
             else
                 function = CurrentModule.Functions.First(x => x.Name == expression.Name);
 
-            functionStack.Push(function);
             contextStack.Push(function);
 
             // TODO Temporary hack to call our initializer functions in the entry point
@@ -203,9 +183,6 @@ namespace Compiler.CodeGeneration
             function.Body.Emit(Opcode.Return); // TODO Error if not all paths return
 
             contextStack.Pop();
-            functionStack.Pop();
-
-            //function.Body.HACK_Optmize();
 
             return new Storage(
                 CurrentFunction,
@@ -227,9 +204,9 @@ namespace Compiler.CodeGeneration
                 {
                     rhs = decl.Initializer.Accept(this);
                     if (rhs == null)
-                        Messages.Add(Message.TypeMismatch, expression, "any", "none");
+                        messages.Add(Message.TypeMismatch, expression, "any", "none");
                     else if (type != null && !CobType.IsCastable(rhs.Type, type))
-                        Messages.Add(Message.TypeMismatch, expression, type, rhs.Type);
+                        messages.Add(Message.TypeMismatch, expression, type, rhs.Type);
                     else
                         type = rhs.Type;
                 }
@@ -239,7 +216,7 @@ namespace Compiler.CodeGeneration
                 if ((decl.Type == null && decl.Initializer == null)
                 ||  type == null)
                 {
-                    Messages.Add(Message.MalformedVarDeclaration, expression);
+                    messages.Add(Message.MalformedVarDeclaration, expression);
                     continue;
                 }
                 
@@ -289,7 +266,7 @@ namespace Compiler.CodeGeneration
 
             if (conditional == null || conditional.Type != CobType.Boolean)
             {
-                Messages.Add(Message.TypeMismatch, expression.Conditional, CobType.Boolean, conditional?.Type.ToString() ?? "none");
+                messages.Add(Message.TypeMismatch, expression.Conditional, CobType.Boolean, conditional?.Type.ToString() ?? "none");
                 return null;
             }
             else if (expression.Conditional is IdentifierExpression)
@@ -384,7 +361,7 @@ namespace Compiler.CodeGeneration
         {
             if (loopStack.Count == 0)
             {
-                Messages.Add(Message.CannotContinue, expression);
+                messages.Add(Message.CannotContinue, expression);
                 return null;
             }
 
@@ -397,7 +374,7 @@ namespace Compiler.CodeGeneration
         {
             if (loopStack.Count == 0)
             {
-                Messages.Add(Message.CannotBreak, expression);
+                messages.Add(Message.CannotBreak, expression);
                 return null;
             }
 
@@ -409,7 +386,7 @@ namespace Compiler.CodeGeneration
                 var context = loopStack.FirstOrDefault(x => x.Tag == expression.Label.Value);
                 if (context == null)
                 {
-                    Messages.Add(Message.CannotBreakNoLabel, expression, expression.Label.Value);
+                    messages.Add(Message.CannotBreakNoLabel, expression, expression.Label.Value);
                     return null;
                 }
 
@@ -432,7 +409,7 @@ namespace Compiler.CodeGeneration
                 if (CurrentFunction.ReturnType == eCobType.None)
                     CurrentFunction.ReturnType = rhs.Type;
                 else if (CurrentFunction.ReturnType != rhs.Type)
-                    Messages.Add(Message.ReturnTypeMismatch, expression, CurrentFunction.ReturnType, rhs.Type);
+                    messages.Add(Message.ReturnTypeMismatch, expression, CurrentFunction.ReturnType, rhs.Type);
                 
                 CurrentFunction.Body.Emit(Opcode.Return, rhs.Operand);
                 rhs.Free();
@@ -466,7 +443,7 @@ namespace Compiler.CodeGeneration
             if (CurrentModule.IsRoot && value != null && value.Type == eCobType.Function)
             {
                 if (EntryFunction != null)
-                    Messages.Add(Message.CannotRedeclareEntryPoint, expression);
+                    messages.Add(Message.CannotRedeclareEntryPoint, expression);
                 else
                 {
                     EntryFunction = value.Type.TagFunction;
@@ -558,7 +535,7 @@ namespace Compiler.CodeGeneration
                 AssignmentRHS = prevAsnSrc;
                 BinOpLHS = lhs;
 
-                if (lhs != null) contextStack.Push((IContext)lhs.Type.Tag);
+                if (lhs != null) contextStack.Push((IScopeContext)lhs.Type.Tag);
                 var rhs = expression.Right.Accept(this);
                 if (lhs != null) contextStack.Pop();
                 lhs?.Free();
@@ -754,7 +731,7 @@ namespace Compiler.CodeGeneration
             var function = functionStorage?.Type.TagFunction;
             if (function == null)
             {
-                Messages.Add(Message.CannotCallType, expression, functionStorage?.Type.ToString() ?? "(null)");
+                messages.Add(Message.CannotCallType, expression, functionStorage?.Type.ToString() ?? "(null)");
                 return null;
             }
 
@@ -773,7 +750,7 @@ namespace Compiler.CodeGeneration
             }
             var hasSpreadParameter = parameters.Count > 0 && parameters[^1].IsSpread;
             if (arguments.Count != parameters.Count && !hasSpreadParameter)
-                Messages.Add(Message.FunctionParameterCountMismatch, expression, parameters.Count, arguments.Count);
+                messages.Add(Message.FunctionParameterCountMismatch, expression, parameters.Count, arguments.Count);
             
             IReadOnlyList<Operand>? operandArguments;
             if (arguments.Count > 0)
@@ -789,7 +766,7 @@ namespace Compiler.CodeGeneration
                     ||  (paramType != null && !CobType.IsCastable(argStorage.Type, paramType.Type)))
                     {
                         aOperandArguments[i] = Operand.None;
-                        Messages.Add(Message.TypeMismatch, arguments[i], paramType?.Type, argStorage.Type);
+                        messages.Add(Message.TypeMismatch, arguments[i], paramType?.Type, argStorage.Type);
                         continue;
                     }
                     
@@ -824,35 +801,34 @@ namespace Compiler.CodeGeneration
 
             foreach (var scope in contextStack)
             {
-                var target = scope.FindIdentifier(expression.Value);
+                var target = scope.FindSymbol(expression.Value);
                 if (target == null)
                     continue;
 
-                // TODO How to handle Module = 1234;?
                 if (!target.IsVisibleTo(CurrentModule)) // TODO CurrentContext.Name...?
-                    Messages.Add(Message.CannotAccessPrivateSymbol, expression, expression.Value, CurrentModule.Name ?? "(root)");
+                    messages.Add(Message.CannotAccessPrivateSymbol, expression, expression.Value, CurrentModule.Name ?? "(root)");
                 else if (inAssignment && target is CobVariable variable && !variable.Mutable) // TODO Is this actually appropriate?
-                    Messages.Add(Message.IllegalAssignmentImmutable, expression);
+                    messages.Add(Message.IllegalAssignmentImmutable, expression);
 
                 if (inAssignment)
                 {
-                    var result = scope.EmitSetIdentifier(target);
+                    var result = scope.EmitSetForSymbol(target);
                     if (!result)
-                        Messages.Add(Message.IllegalAssignment, expression);
+                        messages.Add(Message.IllegalAssignment, expression);
 
                     return null;
                 }
                 else
                 {
-                    var result = scope.EmitGetIdentifier(target);
+                    var result = scope.EmitGetForSymbol(target);
                     if (result == null)
-                        Messages.Add(Message.IllegalAssignment, expression);
+                        messages.Add(Message.IllegalAssignment, expression);
 
                     return result;
                 }
             }
 
-            Messages.Add(Message.UndeclaredIdentifier, expression, expression.Value);
+            messages.Add(Message.UndeclaredIdentifier, expression, expression.Value);
             return null;
         }
 
@@ -870,7 +846,7 @@ namespace Compiler.CodeGeneration
             var arguments = expression.Arguments;
             if (arguments.Count != 1)
             {
-                Messages.Add(Message.FunctionParameterCountMismatch, expression, 1, arguments.Count);
+                messages.Add(Message.FunctionParameterCountMismatch, expression, 1, arguments.Count);
                 return null;
             }
 
@@ -907,10 +883,10 @@ namespace Compiler.CodeGeneration
                 CobType.None
             );
 
-            functionStack.Push(function);
+            contextStack.Push(function);
             var evalStorage = expression.Expression.Accept(this);
             if (evalStorage == null || evalStorage.Type == eCobType.None)
-                Messages.Add(Message.AotCannotUseVoid, expression);
+                messages.Add(Message.AotCannotUseVoid, expression);
 
             function.ReturnType = evalStorage.Type;
             CurrentFunction.Body.Emit(Opcode.Return, evalStorage.Operand);
@@ -918,7 +894,7 @@ namespace Compiler.CodeGeneration
 
             function.ReturnLabel.Mark();
             
-            functionStack.Pop();
+            contextStack.Pop();
 
             using var vm = new VirtualMachine(this);
             var result = vm.ExecuteFunction(function);
@@ -953,7 +929,7 @@ namespace Compiler.CodeGeneration
             var index = expression.Index.Accept(this);
 
             if (source == null)
-                Messages.Add(Message.CannotIndexType, expression, "none");
+                messages.Add(Message.CannotIndexType, expression, "none");
             else if (source.Type == eCobType.Struct && source.Type.Tag is StructType structType
             &&  structType.Indexer != null)
             {
@@ -976,7 +952,7 @@ namespace Compiler.CodeGeneration
                 );
             }
             else
-                Messages.Add(Message.CannotIndexType, expression, source.Type);
+                messages.Add(Message.CannotIndexType, expression, source.Type);
 
             index?.Free();
             source?.Free();
@@ -1019,7 +995,7 @@ namespace Compiler.CodeGeneration
             if (structTypeStorage == null || structTypeStorage.Type != eCobType.Struct
             ||  structTypeStorage.Type.Tag is not StructType sde)
             {
-                Messages.Add(Message.CannotInstantiateType, expression.StructTypeExpression, structTypeStorage?.Type.ToString() ?? "(null)");
+                messages.Add(Message.CannotInstantiateType, expression.StructTypeExpression, structTypeStorage?.Type.ToString() ?? "(null)");
                 return null;
             }
             
@@ -1068,7 +1044,6 @@ namespace Compiler.CodeGeneration
                 false
             ) { BufferValue = data });
             
-            // TODO AllocateStorage on Global "function"??
             return new Storage(
                 CurrentFunction,
                 new Operand
@@ -1104,7 +1079,7 @@ namespace Compiler.CodeGeneration
             return idx;
         }
 
-        public static bool StandardIsSymbolVisibleHeuristic(IContext? context, IContext? parent, string? name)
+        public static bool StandardIsSymbolVisibleHeuristic(IScopeContext? context, IScopeContext? parent, string? name)
         {
             for (var ctx = context; ctx != null; ctx = ctx.Parent)
             {
@@ -1126,7 +1101,7 @@ namespace Compiler.CodeGeneration
                 // HACKish Probably fine to initialize intrinsics in an "odd" way, but this does need more abstraction
                 StringContext.Instance.Compiler = compiler;
                 
-                var pass0 = new ForwardDeclaration(compiler);
+                var pass0 = new ForwardDeclaration(compiler, messages);
                 ast.Accept(pass0);
 
                 // NOTE We must compile all imported scripts before we compile this script; list is in import order
@@ -1161,29 +1136,22 @@ namespace Compiler.CodeGeneration
         public Function Function { get; init; }
     }
 
-    // TODO Abstract Class
-    // TODO Should inherit ISymbol?
-    internal interface IContext
+    internal interface IScopeContext
     {
         string Name { get; }
 
-        IContext? Parent { get; }
+        IScopeContext? Parent { get; }
 
-        ISymbol? FindIdentifier(string name);
+        ISymbol? FindSymbol(string name);
 
-        Storage? EmitGetIdentifier(ISymbol identifier);
+        Storage? EmitGetForSymbol(ISymbol symbol);
 
-        bool EmitSetIdentifier(ISymbol identifier);
-
-        // TODO Remove compiler field? Most contexts already have the compiler passed in ctor
-        //Storage? GetIdentifier(Compiler compiler, IdentifierExpression expression);
-
-        //CobVariable? SetIdentifier(Compiler compiler, IdentifierExpression expression);
+        bool EmitSetForSymbol(ISymbol symbol);
     }
 
     internal interface ISymbol
     {
-        bool IsVisibleTo(IContext context);
+        bool IsVisibleTo(IScopeContext context);
     }
 
     internal sealed record LoopContext(string? Tag, Label Continue, Label Break);

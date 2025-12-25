@@ -4,11 +4,11 @@ using System.Diagnostics;
 namespace Compiler.CodeGeneration
 {
     [DebuggerDisplay("Module '{Name}'")]
-    internal sealed class Module : IContext, ISymbol
+    internal sealed class Module : IScopeContext, ISymbol
     {
         public string? Name { get; }
 
-        public IContext? Parent { get; }
+        public IScopeContext? Parent { get; }
 
         public List<Module> Modules { get; } = new ();
 
@@ -26,7 +26,7 @@ namespace Compiler.CodeGeneration
 
         private readonly Compiler compiler;
 
-        public Module(Compiler compiler, IContext? parent, string? name)
+        public Module(Compiler compiler, IScopeContext? parent, string? name)
         {
             this.compiler = compiler;
             Parent = parent;
@@ -90,7 +90,7 @@ namespace Compiler.CodeGeneration
             Variables[variable.Name] = variable;
         }
 
-        public ISymbol? FindIdentifier(string name)
+        public ISymbol? FindSymbol(string name)
         {
             // GLOBAL
             if (Variables.TryGetValue(name, out var global))
@@ -119,10 +119,10 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
-        public Storage? EmitGetIdentifier(ISymbol identifier)
+        public Storage? EmitGetForSymbol(ISymbol symbol)
         {
             // GLOBAL
-            if (identifier is CobVariable global)
+            if (symbol is CobVariable global)
             {
                 var idx = compiler.FindGlobal(global); // TODO Weird naming convention IndexOfGlobal is better
                 var type = compiler.Globals[idx];
@@ -140,7 +140,7 @@ namespace Compiler.CodeGeneration
 
             // TODO AllocateFunction + FindFunctionIndex()
             // FUNCTION
-            if (identifier is Function function)
+            if (symbol is Function function)
             {
                 var idx = compiler.Functions.IndexOf(function);
                 return new Storage(
@@ -155,7 +155,7 @@ namespace Compiler.CodeGeneration
             }
 
             // MODULES
-            if (identifier is Module module)
+            if (symbol is Module module)
             {
                 return new Storage(
                     null,
@@ -165,7 +165,7 @@ namespace Compiler.CodeGeneration
             }
 
             // TUPLE TYPES
-            if (identifier is TupleType tupleType)
+            if (symbol is TupleType tupleType)
             {
                 return new Storage(
                     null,
@@ -175,7 +175,7 @@ namespace Compiler.CodeGeneration
             }
 
             // TUPLE TYPES
-            if (identifier is StructType structType)
+            if (symbol is StructType structType)
             {
                 return new Storage(
                     null,
@@ -187,9 +187,9 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
-        public bool EmitSetIdentifier(ISymbol identifier)
+        public bool EmitSetForSymbol(ISymbol symbol)
         {
-            if (identifier is CobVariable global)
+            if (symbol is CobVariable global)
             {
                 var idx = compiler.FindGlobal(global);
                 compiler.CurrentFunction.Body.Emit(
@@ -208,6 +208,6 @@ namespace Compiler.CodeGeneration
             return false;
         }
 
-        public bool IsVisibleTo(IContext? context) => Compiler.StandardIsSymbolVisibleHeuristic(context, Parent, Name);
+        public bool IsVisibleTo(IScopeContext? context) => Compiler.StandardIsSymbolVisibleHeuristic(context, Parent, Name);
     }
 }

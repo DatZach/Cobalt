@@ -5,11 +5,11 @@ using System.Diagnostics;
 namespace Compiler.CodeGeneration
 {
     [DebuggerDisplay("Function '{FullyQualifiedName}'")]
-    internal sealed class Function : IContext, ISymbol
+    internal sealed class Function : IScopeContext, ISymbol
     {
         public string Name { get; }
 
-        public IContext? Parent { get; }
+        public IScopeContext? Parent { get; }
 
         public List<CobVariable> Locals { get; }
 
@@ -37,7 +37,7 @@ namespace Compiler.CodeGeneration
         public Function(
             string name,
             Compiler compiler,
-            IContext parent,
+            IScopeContext parent,
             CallingConvention callingConvention,
             IReadOnlyList<Parameter> parameters,
             CobType returnType
@@ -192,7 +192,7 @@ namespace Compiler.CodeGeneration
             return -1;
         }
 
-        public ISymbol? FindIdentifier(string name)
+        public ISymbol? FindSymbol(string name)
         {
             Parameter? parameter;
             if ((parameter = Parameters.FirstOrDefault(x => x.Name == name)) != null)
@@ -205,9 +205,9 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
-        public Storage? EmitGetIdentifier(ISymbol identifier)
+        public Storage? EmitGetForSymbol(ISymbol symbol)
         {
-            if (identifier is Parameter parameter)
+            if (symbol is Parameter parameter)
             {
                 var idx = FindParameter(parameter.Name); // TODO Bit odd to search on name again like this
                 return new Storage(
@@ -222,7 +222,7 @@ namespace Compiler.CodeGeneration
                 );
             }
 
-            if (identifier is CobVariable variable)
+            if (symbol is CobVariable variable)
             {
                 var idx = Locals.IndexOf(variable);
                 return new Storage(
@@ -240,10 +240,10 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
-        public bool EmitSetIdentifier(ISymbol identifier)
+        public bool EmitSetForSymbol(ISymbol symbol)
         {
             // ARGUMENTS
-            if (identifier is Parameter parameter)
+            if (symbol is Parameter parameter)
             {
                 var idx = FindParameter(parameter.Name);
 
@@ -261,7 +261,7 @@ namespace Compiler.CodeGeneration
             }
 
             // LOCALS
-            if (identifier is CobVariable local)
+            if (symbol is CobVariable local)
             {
                 var idx = Locals.IndexOf(local);
 
@@ -292,7 +292,7 @@ namespace Compiler.CodeGeneration
             }
         }
 
-        public bool IsVisibleTo(IContext context) => Compiler.StandardIsSymbolVisibleHeuristic(context, Parent, Name);
+        public bool IsVisibleTo(IScopeContext context) => Compiler.StandardIsSymbolVisibleHeuristic(context, Parent, Name);
     }
 
     internal enum CallingConvention
@@ -300,7 +300,10 @@ namespace Compiler.CodeGeneration
         None,
         CCall,
         StdCall,
-        ThisCall
+        ThisCall,
+        NakedCall,
+
+        Default = CCall
     }
 
     internal sealed record Storage(Function Parent, Operand Operand, CobType Type)

@@ -88,8 +88,6 @@ namespace Compiler.Ast
             return new ScriptExpression(Take(), expressions);
         }
 
-        // TODO Not sure if this is actually the best place for this...
-        //      Imports CodeGeneration namespace
         public string ParseTypeName()
         {
             string typeName;

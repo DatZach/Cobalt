@@ -29,6 +29,9 @@ namespace Compiler.Ast.Parselets.Statements
 
             var body = parser.ParseBlock();
 
+            if (Parser.IsStatementExpression(body))
+                parser.Messages.Add(Message.CannotNakedNestStatement, body);
+
             return new ForStatement(token, conditional, expression, label, body);
         }
     }

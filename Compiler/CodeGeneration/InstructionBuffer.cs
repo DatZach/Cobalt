@@ -2,7 +2,7 @@
 {
     internal sealed class InstructionBuffer
     {
-        public List<Instruction> Instructions => instructions; // TODO Implement interface on base
+        public IReadOnlyList<Instruction> Instructions => instructions;
 
         public IReadOnlyList<Label> Labels => labels;
 
@@ -16,18 +16,7 @@
             labels = new List<Label>(4);
         }
 
-        // TODO Reimplement correctly later. This implementation does not update label offsets.
-        //public void HACK_Optmize()
-        //{
-        //    instructions.RemoveAll(x =>
-        //    {
-        //        return x.Opcode == Opcode.Move
-        //               && x.A.Type == x.B.Type
-        //               && x.A.Value == x.B.Value;
-        //    });
-        //}
-
-        public Label AllocateLabel() // TODO Should be moved to CurrentFunction, perhaps
+        public Label AllocateLabel()
         {
             var label = new Label(this, labels.Count);
             labels.Add(label);
@@ -116,7 +105,7 @@
 
     internal sealed class Label
     {
-        public int Index { get; } // TODO Better names
+        public int Index { get; }
 
         public int Location { get; private set; }
 

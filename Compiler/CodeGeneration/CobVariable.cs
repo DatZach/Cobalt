@@ -1,6 +1,4 @@
-﻿using Compiler.Ast.Expressions;
-using System.Diagnostics;
-using System.Linq.Expressions;
+﻿using System.Diagnostics;
 using System.Text;
 
 namespace Compiler.CodeGeneration
@@ -51,7 +49,7 @@ namespace Compiler.CodeGeneration
             IntValue = intValue;
         }
 
-        public virtual bool IsVisibleTo(IContext context) => true;
+        public virtual bool IsVisibleTo(IScopeContext context) => true;
 
         public CobVariable DeepClone()
         {
@@ -242,20 +240,23 @@ namespace Compiler.CodeGeneration
                     8 => typeof(sbyte),
                     16 => typeof(short),
                     32 => typeof(int),
-                    64 => typeof(long)
+                    64 => typeof(long),
+                    _ => throw new ArgumentOutOfRangeException()
                 },
                 eCobType.Unsigned => Size switch
                 {
                     8 => typeof(byte),
                     16 => typeof(ushort),
                     32 => typeof(uint),
-                    64 => typeof(ulong)
+                    64 => typeof(ulong),
+                    _ => throw new ArgumentOutOfRangeException()
                 },
                 eCobType.Float => Size switch
                 {
                     32 => typeof(float),
                     64 => typeof(double),
-                    128 => typeof(decimal)
+                    128 => typeof(decimal),
+                    _ => throw new ArgumentOutOfRangeException()
                 },
                 eCobType.Array => this == String ? typeof(string) : ElementType.ToManagedType().MakeArrayType(),
                 eCobType.Struct => throw new NotImplementedException(), // ???
@@ -331,17 +332,17 @@ namespace Compiler.CodeGeneration
         Module
     }
 
-    internal sealed class StringContext : IContext
+    internal sealed class StringContext : IScopeContext
     {
         public static readonly StringContext Instance = new ();
 
         public string Name => "string";
 
-        public IContext? Parent => null;
+        public IScopeContext? Parent => null;
 
         public Compiler Compiler { get; set; }
 
-        public ISymbol? FindIdentifier(string name)
+        public ISymbol? FindSymbol(string name)
         {
             // TODO Immutable Field!
             if (name == "Length")
@@ -350,9 +351,9 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
-        public Storage? EmitGetIdentifier(ISymbol identifier)
+        public Storage? EmitGetForSymbol(ISymbol symbol)
         {
-            if (identifier is CobField field && field.Name == "Length")
+            if (symbol is CobField field && field.Name == "Length")
             {
                 var storage = Compiler.CurrentFunction.AllocateStorage(CobType.U64);
                 Compiler.CurrentFunction.Body.Emit(
@@ -368,7 +369,7 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
-        public bool EmitSetIdentifier(ISymbol identifier)
+        public bool EmitSetForSymbol(ISymbol symbol)
         {
             return false;
         }

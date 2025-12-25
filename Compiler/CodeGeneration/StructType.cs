@@ -2,9 +2,9 @@
 
 namespace Compiler.CodeGeneration
 {
-    internal sealed class StructType : IContext, ISymbol
+    internal sealed class StructType : IScopeContext, ISymbol
     {
-        public IContext? Parent { get; }
+        public IScopeContext? Parent { get; }
 
         public string Name { get; }
 
@@ -16,7 +16,7 @@ namespace Compiler.CodeGeneration
 
         private readonly Compiler compiler;
 
-        public StructType(Compiler compiler, IContext? parent, string name)
+        public StructType(Compiler compiler, IScopeContext? parent, string name)
         {
             this.compiler = compiler;
             Parent = parent;
@@ -80,7 +80,7 @@ namespace Compiler.CodeGeneration
             return indexer;
         }
 
-        public ISymbol? FindIdentifier(string name)
+        public ISymbol? FindSymbol(string name)
         {
             CobField? field;
             if ((field = Fields.FirstOrDefault(x => x.Name == name)) != null)
@@ -93,9 +93,9 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
-        public Storage? EmitGetIdentifier(ISymbol identifier)
+        public Storage? EmitGetForSymbol(ISymbol symbol)
         {
-            if (identifier is CobField field)
+            if (symbol is CobField field)
             {
                 var idx = Fields.IndexOf(field);
                 var fieldType = field.Type;
@@ -118,7 +118,7 @@ namespace Compiler.CodeGeneration
                 }
             }
 
-            if (identifier is Function function)
+            if (symbol is Function function)
             {
                 var idx = compiler.Functions.IndexOf(function);
                 return new Storage(
@@ -135,9 +135,9 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
-        public bool EmitSetIdentifier(ISymbol identifier)
+        public bool EmitSetForSymbol(ISymbol symbol)
         {
-            if (identifier is CobField field)
+            if (symbol is CobField field)
             {
                 var idx = Fields.IndexOf(field);
                 var @this = compiler.BinOpLHS == null ? Operand.This : compiler.BinOpLHS.Operand;
@@ -154,12 +154,12 @@ namespace Compiler.CodeGeneration
             return false;
         }
 
-        public bool IsVisibleTo(IContext? context) => Compiler.StandardIsSymbolVisibleHeuristic(context, Parent, Name);
+        public bool IsVisibleTo(IScopeContext? context) => Compiler.StandardIsSymbolVisibleHeuristic(context, Parent, Name);
     }
 
-    internal sealed class Indexer : IContext
+    internal sealed class Indexer : IScopeContext
     {
-        public IContext? Parent { get; init;  }
+        public IScopeContext? Parent { get; init;  }
 
         public string Name => "indexer";
 
@@ -173,7 +173,7 @@ namespace Compiler.CodeGeneration
 
         public Storage? Index { get; set; }
 
-        public ISymbol? FindIdentifier(string name)
+        public ISymbol? FindSymbol(string name)
         {
             if (name == "key")
                 return new CobVariable("key", KeyType, false);
@@ -181,15 +181,15 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
-        public Storage? EmitGetIdentifier(ISymbol identifier)
+        public Storage? EmitGetForSymbol(ISymbol symbol)
         {
-            if (identifier is CobVariable variable && variable.Name == "key")
+            if (symbol is CobVariable variable && variable.Name == "key")
                 return Index;
 
             return null;
         }
 
-        public bool EmitSetIdentifier(ISymbol identifier)
+        public bool EmitSetForSymbol(ISymbol symbol)
         {
             return false;
         }

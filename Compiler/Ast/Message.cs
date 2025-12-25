@@ -263,6 +263,8 @@ namespace Compiler.Ast
 
         public static Def CannotBreakNoLabel { get; } = new(MessageType.Error, "No loop label '{0}' declared in scope to break from");
 
+        public static Def CannotNakedNestStatement { get; } = new(MessageType.Error, "Statements may not be nested in naked blocks.");
+
         public sealed record Def(
             MessageType Type,
             string Content,
