@@ -54,6 +54,7 @@
                 case OperandType.Local:
                 case OperandType.Global:
                 case OperandType.Function:
+                case OperandType.TupleType:
                     return Type.ToString()[..1].ToLowerInvariant()
                            + Value.ToString("G")
                            + "."
@@ -76,6 +77,7 @@
         GetElem,
         SetElem,
         Lens,
+        New,
 
         Call,
         Return,
@@ -125,6 +127,8 @@
         Local,
         Global,
         Label,
-        Function
+        Function,
+        TupleType,
+        StructType
     }
 }

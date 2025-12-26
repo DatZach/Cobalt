@@ -21,9 +21,13 @@ namespace Compiler.CodeGeneration
 
         public List<Module> Modules { get; }
 
-        public List<CobVariable> Globals { get; }
+        public List<TupleType> TupleTypes { get; }
+
+        public List<StructType> StructTypes { get; }
 
         public List<Function> Functions { get; }
+
+        public List<CobVariable> Globals { get; }
 
         public List<ScriptExpression> Scripts { get; }
 
@@ -47,8 +51,10 @@ namespace Compiler.CodeGeneration
             Imports = new List<Import>();
             Exports = new List<Export>();
             Modules = new List<Module>();
-            Globals = new List<CobVariable>();
+            TupleTypes = new List<TupleType>();
+            StructTypes = new List<StructType>();
             Functions = new List<Function>();
+            Globals = new List<CobVariable>();
             Scripts = new List<ScriptExpression>();
             RootModule = new Module(null, null, this);
 
@@ -218,8 +224,6 @@ namespace Compiler.CodeGeneration
                     continue;
                 }
                 
-                var variable = new CobVariable(decl.Name, type, mutable);
-
                 if (CurrentFunction == CurrentModule.InitializerFunction) // Global Decl
                 {
                     var global = CurrentModule.FindGlobal(decl.Name)!;
@@ -235,12 +239,13 @@ namespace Compiler.CodeGeneration
                 }
                 else
                 {
-                    var local = CurrentFunction.AllocateLocal(variable);
+                    var local = CurrentFunction.AllocateLocal(decl.Name, type, mutable);
+                    var idx = CurrentFunction.FindLocalIndex(local);
                     if (rhs != null)
                     {
                         CurrentFunction.Body.Emit(
                             Opcode.Move,
-                            new Operand { Type = OperandType.Local, Value = local, Size = type.Size },
+                            new Operand { Type = OperandType.Local, Value = idx, Size = type.Size },
                             rhs.Operand
                         );
                     }
@@ -308,7 +313,6 @@ namespace Compiler.CodeGeneration
                 var typeRangeTuple = new CobType(eCobType.Struct, tag: tdeRangeEnumerator);
                 var varEnumerator = CurrentFunction.AllocateStorage(typeRangeTuple);
 
-                // TODO Need to refactor TupleType to be a discrete class instead of the AST expression...
                 // TODO tdeRangeEnumerator.FindFunctionIndex("GetEnumerator");
                 CurrentFunction.Body.Emit(
                     Opcode.Call,
@@ -557,10 +561,12 @@ namespace Compiler.CodeGeneration
             else if (expression.Operator is TokenType.Range or TokenType.RangeInclusive
                                          or TokenType.RangeLength or TokenType.RangeTerminal)
             {
-                // TODO Should be allocateable on a Register
-                var variable = Intrinsics.Range.ToVariable();
-                var local = CurrentFunction.AllocateLocal(variable);
-                var c = CurrentFunction.AllocateStorage(variable.Type, local);
+                var type = Intrinsics.Range;
+                var typeIdx = TupleTypes.IndexOf(type);
+                var cobType = new CobType(eCobType.Tuple, tag: type);
+
+                var c = CurrentFunction.AllocateStorage(cobType);
+                CurrentFunction.Body.Emit(Opcode.New, c.Operand, new Operand { Type = OperandType.TupleType, Value = typeIdx });
 
                 var a = expression.Left.Accept(this);
                 var b = expression.Right.Accept(this);
@@ -866,8 +872,8 @@ namespace Compiler.CodeGeneration
         {
             var function = new Function(
                 "$aot_eval$",
-                this,
                 CurrentModule,
+                this,
                 CallingConvention.CCall,
                 Array.Empty<Function.Parameter>(),
                 CobType.None
@@ -957,21 +963,24 @@ namespace Compiler.CodeGeneration
 
             functionStorage.Free();
 
-            var variable = tupleType.ToVariable();
-            var local = CurrentFunction.AllocateLocal(variable); // TODO Should allocate on a Register
+            var typeIdx = TupleTypes.IndexOf(tupleType);
+            var cobType = new CobType(eCobType.Tuple, tag: tupleType);
+
+            var storage = CurrentFunction.AllocateStorage(cobType);
+            CurrentFunction.Body.Emit(Opcode.New, storage.Operand, new Operand { Type = OperandType.TupleType, Value = typeIdx });
 
             for (var i = 0; i < expression.Arguments.Count; ++i)
             {
                 var argStorage = expression.Arguments[i].Accept(this);
                 CurrentFunction.Body.Emit(
                     Opcode.SetField,
-                    new Operand { Type = OperandType.Local, Value = local },
+                    storage.Operand,
                     new Operand { Type = OperandType.ImmediateUnsigned, Value = i },
                     argStorage.Operand
                 );
             }
 
-            return CurrentFunction.AllocateStorage(functionStorage.Type, local);
+            return storage;
         }
 
         public Storage? Visit(StructLiteralExpression expression)
@@ -984,9 +993,11 @@ namespace Compiler.CodeGeneration
                 return null;
             }
 
-            var variable = structType.ToVariable();
-            var local = CurrentFunction.AllocateLocal(variable);
-            var storage = CurrentFunction.AllocateStorage(structTypeStorage.Type, local);
+            var typeIdx = StructTypes.IndexOf(structType);
+            var cobType = new CobType(eCobType.Struct, tag: structType);
+
+            var storage = CurrentFunction.AllocateStorage(cobType);
+            CurrentFunction.Body.Emit(Opcode.New, storage.Operand, new Operand { Type = OperandType.StructType, Value = typeIdx });
 
             if (expression.Assignments != null)
             {

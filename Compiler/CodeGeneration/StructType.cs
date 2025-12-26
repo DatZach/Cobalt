@@ -37,17 +37,14 @@ namespace Compiler.CodeGeneration
 
         public Function AllocateFunction(
             string name,
-            CallingConvention callingConvention,
             IReadOnlyList<Function.Parameter> parameters,
             CobType returnType
         ) {
-            // TODO Clean this up a little
-            callingConvention = CallingConvention.ThisCall;
-            var lParameters = new List<Function.Parameter>(parameters);
-            lParameters.Insert(0, new Function.Parameter("this", new CobType(eCobType.Struct, tag: this), false));
-            parameters = lParameters;
+            var lParameters = new List<Function.Parameter>();
+            lParameters.Add(new Function.Parameter("this", new CobType(eCobType.Struct, tag: this), false));
+            lParameters.AddRange(parameters);
 
-            var function = new Function(name, compiler, this, callingConvention, parameters, returnType);
+            var function = new Function(name, this, compiler, CallingConvention.ThisCall, lParameters, returnType);
             functions.Add(function);
             compiler.Functions.Add(function);
 

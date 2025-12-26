@@ -21,6 +21,7 @@ namespace Compiler.Interpreter
         
         public CobVariable? ExecuteFunction(Function function, IList<CobVariable>? parameters = null)
         {
+            var locals = new CobVariable[function.Locals.Count];
             var registers = new CobVariable[MaxRegisters];
 
             var instructions = function.Body.Instructions;
@@ -127,6 +128,20 @@ namespace Compiler.Interpreter
                                 Value = src.Value
                             }
                         );
+                        break;
+                    }
+                    case Opcode.New:
+                    {
+                        var type = ReadOperand(inst.B!).Type;
+                        CobVariable obj;
+                        if (type.Tag is TupleType tupleType)
+                            obj = tupleType.ToVariable();
+                        else if (type.Tag is StructType structType)
+                            obj = structType.ToVariable();
+                        else
+                            throw new InvalidOperationException($"Cannot allocate type {type.Tag?.GetType().Name}");
+
+                        WriteOperand(inst.A!, obj);
                         break;
                     }
                     case Opcode.BitShr:
@@ -371,7 +386,7 @@ namespace Compiler.Interpreter
                         registers[operand.Value] = value;
                         break;
                     case OperandType.Local:
-                        function.Locals[(int)operand.Value] = value;
+                        locals[(int)operand.Value] = value;
                         break;
                     case OperandType.Global:
                         compiler.Globals[(int)operand.Value] = value;
@@ -399,7 +414,7 @@ namespace Compiler.Interpreter
                     case OperandType.Argument:
                         return parameters[(int)operand.Value];
                     case OperandType.Local:
-                        return function.Locals[(int)operand.Value];
+                        return locals[(int)operand.Value];
                     case OperandType.Global:
                         return compiler.Globals[(int)operand.Value];
                     case OperandType.Function:
@@ -411,6 +426,12 @@ namespace Compiler.Interpreter
                         var type = new CobType(eCobType.Function, tag: function);
 
                         return new CobVariable("$func", type, false) { Value = function };
+                    }
+                    case OperandType.TupleType:
+                    {
+                        var tupleType = compiler.TupleTypes[(int)operand.Value];
+                        var type = new CobType(eCobType.Tuple, tag: tupleType);
+                        return new CobVariable("$tuple", type, false);
                     }
                     default:
                         throw new ArgumentOutOfRangeException();

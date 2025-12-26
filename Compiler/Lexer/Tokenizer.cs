@@ -79,7 +79,7 @@ namespace Compiler.Lexer
                 {
                     ident = TakeWhile(c => char.IsLetterOrDigit(c) || c == '_');
                     YieldToken(
-                        Keywords.TryGetValue(ident, out var keywordType) ? keywordType : TokenType.Identifier,
+                        Keywords.GetValueOrDefault(ident, TokenType.Identifier),
                         ident
                     );
                     continue;

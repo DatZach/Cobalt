@@ -269,6 +269,8 @@ namespace Compiler.Ast
 
         public static Def CannotDeclareSymbolHere { get; } = new(MessageType.Error, "Cannot declare a symbol of this type here");
 
+        public static Def IllegalCallingConvention { get; } = new(MessageType.Error, "The calling convention '{0}' is not legal here");
+
         public sealed record Def(
             MessageType Type,
             string Content,

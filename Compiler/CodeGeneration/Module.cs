@@ -62,6 +62,7 @@ namespace Compiler.CodeGeneration
         {
             var tupleType = new TupleType(name, this, compiler);
             tupleTypes.Add(tupleType);
+            compiler.TupleTypes.Add(tupleType);
 
             return tupleType;
         }
@@ -75,6 +76,7 @@ namespace Compiler.CodeGeneration
         {
             var structType = new StructType(name, this, compiler);
             structTypes.Add(structType);
+            compiler.StructTypes.Add(structType);
 
             return structType;
         }
@@ -90,7 +92,7 @@ namespace Compiler.CodeGeneration
             IReadOnlyList<Function.Parameter> parameters,
             CobType returnType
         ) {
-            var function = new Function(name, compiler, this, callingConvention, parameters, returnType);
+            var function = new Function(name, this, compiler, callingConvention, parameters, returnType);
             functions.Add(function);
             compiler.Functions.Add(function);
 

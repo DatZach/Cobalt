@@ -10,7 +10,7 @@ namespace Compiler.CodeGeneration
 
         public IScopeContext Parent { get; }
 
-        public List<CobVariable> Locals { get; }
+        public IReadOnlyList<CobVariable> Locals => locals;
 
         public uint ClobberedRegisters { get; private set; }
 
@@ -28,29 +28,30 @@ namespace Compiler.CodeGeneration
 
         public string FullyQualifiedName => Parent.Name + '_' + Name;
 
-        private readonly Compiler compiler;
-
         private int freeRegisterIndex;
         private int registers;
 
+        private readonly List<CobVariable> locals;
+        private readonly Compiler compiler;
+
         public Function(
             string name,
-            Compiler compiler,
             IScopeContext parent,
+            Compiler compiler,
             CallingConvention callingConvention,
             IReadOnlyList<Parameter> parameters,
             CobType returnType
-        )
-        {
+        ) {
             Name = name ?? throw new ArgumentNullException(nameof(name));
             Parent = parent ?? throw new ArgumentNullException(nameof(parent));
-            Locals = new List<CobVariable>();
             ClobberedRegisters = 0;
             CallingConvention = callingConvention;
             Parameters = parameters;
             ReturnType = returnType;
             Body = new InstructionBuffer();
             ReturnLabel = Body.AllocateLabel();
+
+            locals = new List<CobVariable>();
 
             this.compiler = compiler;
 
@@ -141,50 +142,37 @@ namespace Compiler.CodeGeneration
             registers &= ~(1 << register);
             freeRegisterIndex = register;
         }
-        
-        //public int PreserveRegister(int register)
-        //{
-        //    if (register < freeRegisterIndex)
-        //    {
-        //        Body.EmitR(Opcode.Stash, register);
-        //        return register;
-        //    }
 
-        //    return -1;
-        //}
-
-        //public void RestoreRegister(int register)
-        //{
-        //    if (register == -1)
-        //        return;
-
-        //    Body.EmitR(Opcode.Unstash, register);
-        //}
-
-        public int AllocateLocal(CobVariable variable)
+        public CobVariable AllocateLocal(string name, CobType type, bool mutable)
         {
-            if (variable == null) throw new ArgumentNullException(nameof(variable));
+            var local = new CobVariable(name, type, mutable);
+            locals.Add(local);
 
-            var idx = Locals.FindIndex(x => x.Name == variable.Name);
-            if (idx == -1)
-            {
-                idx = Locals.Count;
-                Locals.Add(variable);
-            }
-
-            return idx;
+            return local;
         }
 
-        public int FindLocal(string name)
+        // TODO Deprecate
+        public CobVariable AllocateLocal(CobVariable local)
         {
-            return Locals.FindIndex(x => x.Name == name);
+            locals.Add(local);
+            return local;
         }
 
-        public int FindParameter(string name)
+        public CobVariable? FindLocal(string name)
+        {
+            return locals.FirstOrDefault(x => x.Name == name);
+        }
+
+        public int FindLocalIndex(CobVariable local)
+        {
+            return locals.IndexOf(local);
+        }
+
+        public int FindParameterIndex(Parameter parameter)
         {
             for (int i = 0; i < Parameters.Count; ++i)
             {
-                if (Parameters[i].Name == name)
+                if (Parameters[i] == parameter)
                     return i;
             }
 
@@ -208,7 +196,7 @@ namespace Compiler.CodeGeneration
         {
             if (symbol is Parameter parameter)
             {
-                var idx = FindParameter(parameter.Name); // TODO Bit odd to search on name again like this
+                var idx = FindParameterIndex(parameter);
                 return new Storage(
                     this,
                     new Operand
@@ -223,7 +211,7 @@ namespace Compiler.CodeGeneration
 
             if (symbol is CobVariable variable)
             {
-                var idx = Locals.IndexOf(variable);
+                var idx = locals.IndexOf(variable);
                 return new Storage(
                     this,
                     new Operand
@@ -244,7 +232,7 @@ namespace Compiler.CodeGeneration
             // ARGUMENTS
             if (symbol is Parameter parameter)
             {
-                var idx = FindParameter(parameter.Name);
+                var idx = FindParameterIndex(parameter);
 
                 compiler.CurrentFunction.Body.Emit(
                     Opcode.Move,
@@ -262,7 +250,7 @@ namespace Compiler.CodeGeneration
             // LOCALS
             if (symbol is CobVariable local)
             {
-                var idx = Locals.IndexOf(local);
+                var idx = locals.IndexOf(local);
 
                 compiler.CurrentFunction.Body.Emit(
                     Opcode.Move,
@@ -280,6 +268,8 @@ namespace Compiler.CodeGeneration
             return false;
         }
 
+        public bool IsVisibleTo(IScopeContext context) => Compiler.IsSymbolVisible(context, Parent, Name);
+
         internal sealed record Parameter : CobVariable
         {
             public bool IsSpread { get; }
@@ -290,8 +280,6 @@ namespace Compiler.CodeGeneration
                 IsSpread = isSpread;
             }
         }
-
-        public bool IsVisibleTo(IScopeContext context) => Compiler.IsSymbolVisible(context, Parent, Name);
     }
 
     internal enum CallingConvention

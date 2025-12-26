@@ -269,32 +269,27 @@ namespace Compiler.CodeGeneration
             if (Phase != DeclPhase.Functions)
                 return Unit.Value;
 
+            var parameters = expression.Parameters.Select(x => new Function.Parameter(x.Name, CobType.FromString(x.TypeName), x.IsSpread)).ToList();
+
             if (CurrentContext is TupleType tupleType)
             {
-                tupleType.AllocateFunction(
-                    expression.Name,
-                    expression.CallingConvention,
-                    expression.Parameters.Select(x => new Function.Parameter(x.Name, CobType.FromString(x.TypeName), x.IsSpread)).ToList(),
-                    expression.ReturnType
-                );
+                if (expression.CallingConvention != CallingConvention.Default
+                &&  expression.CallingConvention != CallingConvention.ThisCall)
+                    messages.Add(Message.IllegalCallingConvention, expression, expression.CallingConvention);
+
+                tupleType.AllocateFunction(expression.Name, parameters, expression.ReturnType);
             }
             else if (CurrentContext is StructType structType)
             {
-                structType.AllocateFunction(
-                    expression.Name,
-                    expression.CallingConvention,
-                    expression.Parameters.Select(x => new Function.Parameter(x.Name, CobType.FromString(x.TypeName), x.IsSpread)).ToList(),
-                    expression.ReturnType
-                );
+                if (expression.CallingConvention != CallingConvention.Default
+                &&  expression.CallingConvention != CallingConvention.ThisCall)
+                    messages.Add(Message.IllegalCallingConvention, expression, expression.CallingConvention);
+
+                structType.AllocateFunction(expression.Name, parameters, expression.ReturnType);
             }
             else if (CurrentContext is Module module)
             {
-                module.AllocateFunction(
-                    expression.Name,
-                    expression.CallingConvention,
-                    expression.Parameters.Select(x => new Function.Parameter(x.Name, CobType.FromString(x.TypeName), x.IsSpread)).ToList(),
-                    expression.ReturnType
-                );
+                module.AllocateFunction(expression.Name, expression.CallingConvention, parameters, expression.ReturnType);
             }
             else
                 messages.Add(Message.CannotDeclareSymbolHere, expression);
