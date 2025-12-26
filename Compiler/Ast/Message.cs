@@ -207,6 +207,8 @@ namespace Compiler.Ast
         string Content
     )
     {
+        public static Def UncaughtException { get; } = new(MessageType.Error, "Fatal: {0}\n{1}");
+
         public static Def UnexpectedToken0 { get; } = new(MessageType.Error, "Unexpected token");
 
         public static Def UnexpectedToken1 { get; } = new(MessageType.Error, "Unexpected {0}");
@@ -264,6 +266,8 @@ namespace Compiler.Ast
         public static Def CannotBreakNoLabel { get; } = new(MessageType.Error, "No loop label '{0}' declared in scope to break from");
 
         public static Def CannotNakedNestStatement { get; } = new(MessageType.Error, "Statements may not be nested in naked blocks.");
+
+        public static Def CannotDeclareSymbolHere { get; } = new(MessageType.Error, "Cannot declare a symbol of this type here");
 
         public sealed record Def(
             MessageType Type,

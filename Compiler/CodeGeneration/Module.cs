@@ -5,31 +5,32 @@ namespace Compiler.CodeGeneration
     [DebuggerDisplay("Module '{Name}'")]
     internal sealed class Module : IScopeContext, ISymbol
     {
-        public string? Name { get; }
+        public string Name { get; }
 
         public IScopeContext? Parent { get; }
 
-        public List<Module> Modules { get; } = new ();
-
-        public List<Function> Functions { get; } = new (); // TODO Should this just be a name? An index to compiler.Functions?
-
-        public List<TupleType> TupleTypes { get; } = new ();
-
-        public List<StructType> StructTypes { get; } = new ();
-
-        public Dictionary<string, CobVariable> Variables { get; } = new (); // TODO Should this just be a name? An index to compiler.Functions? These are globals
-
         public Function InitializerFunction { get; }
-        
+
         public bool IsRoot => Parent == null;
 
+        private readonly List<Module> modules;
+        private readonly List<TupleType> tupleTypes;
+        private readonly List<StructType> structTypes;
+        private readonly List<Function> functions;
+        private readonly List<CobVariable> globals;
         private readonly Compiler compiler;
 
-        public Module(Compiler compiler, IScopeContext? parent, string? name)
+        public Module(string? name, IScopeContext? parent, Compiler compiler)
         {
-            this.compiler = compiler;
+            Name = name ?? "$Root";
             Parent = parent;
-            Name = name;
+            this.compiler = compiler;
+
+            modules = new List<Module>();
+            tupleTypes = new List<TupleType>();
+            structTypes = new List<StructType>();
+            functions = new List<Function>();
+            globals = new List<CobVariable>();
 
             InitializerFunction = AllocateFunction(
                 "$Initializer",
@@ -41,20 +42,46 @@ namespace Compiler.CodeGeneration
 
         public Module? FindModule(string? name)
         {
-            return Modules.FirstOrDefault(x => x.Name == name);
+            return modules.FirstOrDefault(x => x.Name == name);
         }
 
         public Module FindOrAllocateModule(string? name)
         {
-            var module = Modules.FirstOrDefault(x => x.Name == name);
+            var module = modules.FirstOrDefault(x => x.Name == name);
             if (module != null)
                 return module;
 
-            module = new Module(compiler, this, name);
-            Modules.Add(module);
+            module = new Module(name, this, compiler);
+            modules.Add(module);
             compiler.Modules.Add(module);
 
             return module;
+        }
+
+        public TupleType AllocateTupleType(string name)
+        {
+            var tupleType = new TupleType(name, this, compiler);
+            tupleTypes.Add(tupleType);
+
+            return tupleType;
+        }
+
+        public TupleType? FindTupleType(string name)
+        {
+            return tupleTypes.FirstOrDefault(x => x.Name == name);
+        }
+
+        public StructType AllocateStructType(string name)
+        {
+            var structType = new StructType(name, this, compiler);
+            structTypes.Add(structType);
+
+            return structType;
+        }
+
+        public StructType? FindStructType(string name)
+        {
+            return structTypes.FirstOrDefault(x => x.Name == name);
         }
 
         public Function AllocateFunction(
@@ -64,40 +91,43 @@ namespace Compiler.CodeGeneration
             CobType returnType
         ) {
             var function = new Function(name, compiler, this, callingConvention, parameters, returnType);
-            Functions.Add(function);
+            functions.Add(function);
             compiler.Functions.Add(function);
 
             return function;
         }
 
-        public TupleType? FindTupleType(string name)
+        public Function? FindFunction(string name)
         {
-            return TupleTypes.FirstOrDefault(x => x.Name == name);
+            return functions.FirstOrDefault(x => x.Name == name);
         }
 
-        public StructType? FindStructType(string name)
-        {
-            return StructTypes.FirstOrDefault(x => x.Name == name);
-        }
-
-        public void AllocateGlobal(string name, CobType type, bool mutable)
+        public CobVariable AllocateGlobal(string name, CobType type, bool mutable)
         {
             // TODO Bit of a hack this isn't really a field but we need the visiblity rules and maybe we actually
             //      want to allow for global module variables to be fields??
-            var variable = new CobField(this, name, type, null, null);
-            compiler.AllocateGlobal(variable);
-            Variables[variable.Name] = variable;
+            var global = new CobField(this, name, type, null, null);
+            globals.Add(global);
+            compiler.Globals.Add(global);
+
+            return global;
+        }
+
+        public CobVariable? FindGlobal(string name)
+        {
+            return globals.FirstOrDefault(x => x.Name == name);
         }
 
         public ISymbol? FindSymbol(string name)
         {
             // GLOBAL
-            if (Variables.TryGetValue(name, out var global))
+            CobVariable? global;
+            if ((global = FindGlobal(name)) != null)
                 return global;
 
             // FUNCTION
             Function? function;
-            if ((function = Functions.FirstOrDefault(x => x.Name == name)) != null)
+            if ((function = FindFunction(name)) != null)
                 return function;
 
             // MODULES
@@ -123,7 +153,7 @@ namespace Compiler.CodeGeneration
             // GLOBAL
             if (symbol is CobVariable global)
             {
-                var idx = compiler.FindGlobal(global); // TODO Weird naming convention IndexOfGlobal is better
+                var idx = compiler.Globals.IndexOf(global);
                 var type = compiler.Globals[idx];
                 return new Storage(
                     null,
@@ -137,7 +167,6 @@ namespace Compiler.CodeGeneration
                 );
             }
 
-            // TODO AllocateFunction + FindFunctionIndex()
             // FUNCTION
             if (symbol is Function function)
             {
@@ -190,7 +219,7 @@ namespace Compiler.CodeGeneration
         {
             if (symbol is CobVariable global)
             {
-                var idx = compiler.FindGlobal(global);
+                var idx = compiler.Globals.IndexOf(global);
                 compiler.CurrentFunction.Body.Emit(
                     Opcode.Move,
                     new Operand
@@ -207,6 +236,6 @@ namespace Compiler.CodeGeneration
             return false;
         }
 
-        public bool IsVisibleTo(IScopeContext? context) => Compiler.StandardIsSymbolVisibleHeuristic(context, Parent, Name);
+        public bool IsVisibleTo(IScopeContext? context) => Compiler.IsSymbolVisible(context, Parent, Name);
     }
 }

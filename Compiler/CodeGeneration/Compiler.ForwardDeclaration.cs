@@ -57,8 +57,6 @@ namespace Compiler.CodeGeneration
 
             // X import NativeLibrary SpecificIdentifier Type
 
-            // TODO Invoke initializer
-
             var isNativeImport = expression.SymbolName != null && expression.SymbolTypeSignature != null;
             if (!isNativeImport)
                 return VisitImportModule(expression);
@@ -110,12 +108,6 @@ namespace Compiler.CodeGeneration
                 ast.Accept(pass0);
 
                 compiler.Scripts.Add(ast);
-
-                //if (initializerFunction != null)
-                //{
-                //    CurrentFunction.Body.Emit(Opcode.Call, initializerFunction.Operand, Array.Empty<Operand>());
-                //    initializerFunction.Free();
-                //}
             }
 
             return Unit.Value;
@@ -207,18 +199,15 @@ namespace Compiler.CodeGeneration
         {
             if (Phase == DeclPhase.Types)
             {
-                // TODO AllocateTupleType
-                var tupleType = new TupleType(compiler, CurrentContext, expression.Name);
-                CurrentModule.TupleTypes.Add(tupleType);
+                var tupleType = CurrentModule.AllocateTupleType(expression.Name);
+                var cobType = new CobType(eCobType.Tuple, tag: tupleType);
 
-                // TODO Is this actually a type alias? Shouldn't we resolve these from the TupleTypes field?
-                if (!CobType.TryAddAlias(expression.Name, new CobType(eCobType.Tuple, tag: tupleType)))
+                if (!CobType.TryAddAlias(expression.Name, cobType))
                     messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
             }
             else if (Phase > DeclPhase.Types)
             {
-                // TODO Better API FindTupleType
-                var tupleType = CurrentModule.TupleTypes.First(x => x.Name == expression.Name);
+                var tupleType = CurrentModule.FindTupleType(expression.Name)!;
                 contextStack.Push(tupleType);
                 
                 for (var i = 0; i < expression.Functions.Count; ++i)
@@ -240,18 +229,14 @@ namespace Compiler.CodeGeneration
         {
             if (Phase == DeclPhase.Types)
             {
-                // TODO AllocateStructType
-                var structType = new StructType(compiler, CurrentContext, expression.Name);
-                CurrentModule.StructTypes.Add(structType);
-
-                // TODO Is this actually a type alias? Shouldn't we resolve these from the StructTypes field?
+                var structType = CurrentModule.AllocateStructType(expression.Name);
+                
                 if (!CobType.TryAddAlias(expression.Name, new CobType(eCobType.Struct, tag: structType)))
                     messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
             }
             else if (Phase > DeclPhase.Types)
             {
-                // TODO Better API FindStructType
-                var structType = CurrentModule.StructTypes.First(x => x.Name == expression.Name);
+                var structType = CurrentModule.FindStructType(expression.Name)!;
                 contextStack.Push(structType);
 
                 for (var i = 0; i < expression.Functions.Count; ++i)
@@ -284,7 +269,6 @@ namespace Compiler.CodeGeneration
             if (Phase != DeclPhase.Functions)
                 return Unit.Value;
 
-            // TODO Might be best to just add AllocateFunction on IContext
             if (CurrentContext is TupleType tupleType)
             {
                 tupleType.AllocateFunction(
@@ -303,15 +287,17 @@ namespace Compiler.CodeGeneration
                     expression.ReturnType
                 );
             }
-            else
+            else if (CurrentContext is Module module)
             {
-                CurrentModule.AllocateFunction(
+                module.AllocateFunction(
                     expression.Name,
                     expression.CallingConvention,
                     expression.Parameters.Select(x => new Function.Parameter(x.Name, CobType.FromString(x.TypeName), x.IsSpread)).ToList(),
                     expression.ReturnType
                 );
             }
+            else
+                messages.Add(Message.CannotDeclareSymbolHere, expression);
 
             return Unit.Value;
         }

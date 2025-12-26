@@ -50,7 +50,7 @@ namespace Compiler.CodeGeneration
             Globals = new List<CobVariable>();
             Functions = new List<Function>();
             Scripts = new List<ScriptExpression>();
-            RootModule = new Module(this, null, null);
+            RootModule = new Module(null, null, this);
 
             contextStack = new Stack<IScopeContext>();
             loopStack = new Stack<LoopContext>();
@@ -153,11 +153,11 @@ namespace Compiler.CodeGeneration
             // TODO Make a clean API for this
             Function function;
             if (CurrentContext is StructType structType)
-                function = structType.Functions.First(x => x.Name == expression.Name);
+                function = structType.FindFunction(expression.Name)!;
             else if (CurrentContext is TupleType tupleType)
-                function = tupleType.Functions.First(x => x.Name == expression.Name);
+                function = tupleType.FindFunction(expression.Name)!;
             else
-                function = CurrentModule.Functions.First(x => x.Name == expression.Name);
+                function = CurrentModule.FindFunction(expression.Name)!;
 
             contextStack.Push(function);
 
@@ -222,12 +222,13 @@ namespace Compiler.CodeGeneration
 
                 if (CurrentFunction == CurrentModule.InitializerFunction) // Global Decl
                 {
-                    var global = FindGlobal(CurrentModule.Variables[decl.Name]);
+                    var global = CurrentModule.FindGlobal(decl.Name)!;
+                    var idx = Globals.IndexOf(global);
                     if (rhs != null)
                     {
                         CurrentFunction.Body.Emit(
                             Opcode.Move,
-                            new Operand { Type = OperandType.Global, Value = global, Size = type.Size },
+                            new Operand { Type = OperandType.Global, Value = idx, Size = type.Size },
                             rhs.Operand
                         );
                     }
@@ -303,7 +304,7 @@ namespace Compiler.CodeGeneration
 
                 // TODO Should be abstracted behind an Intrinsics class
                 // TODO Should use the Trait `Enumerable` instead of assuming the enumerator type
-                var tdeRangeEnumerator = RootModule.TupleTypes.First(x => x.Name == "RangeEnumerator");
+                var tdeRangeEnumerator = RootModule.FindTupleType("RangeEnumerator");
                 var typeRangeTuple = new CobType(eCobType.Struct, tag: tdeRangeEnumerator);
                 var varEnumerator = CurrentFunction.AllocateStorage(typeRangeTuple);
 
@@ -557,14 +558,9 @@ namespace Compiler.CodeGeneration
                                          or TokenType.RangeLength or TokenType.RangeTerminal)
             {
                 // TODO Should be allocateable on a Register
-                // TODO Should not discover this type like this...
-                var tdeRangeTuple = RootModule.TupleTypes.First(x => x.Name == "Range");
-                var typeRangeTuple = new CobType(eCobType.Tuple, tag: tdeRangeTuple);
-                var local = CurrentFunction.AllocateLocal(new CobVariable("$tuple", typeRangeTuple, false)
-                {
-                    StructValue = tdeRangeTuple.Fields.Select(x => new CobVariable(x.Name, x.Type, true)).ToArray()
-                });
-                var c = CurrentFunction.AllocateStorage(typeRangeTuple, local);
+                var variable = Intrinsics.Range.ToVariable();
+                var local = CurrentFunction.AllocateLocal(variable);
+                var c = CurrentFunction.AllocateStorage(variable.Type, local);
 
                 var a = expression.Left.Accept(this);
                 var b = expression.Right.Accept(this);
@@ -800,7 +796,7 @@ namespace Compiler.CodeGeneration
                     continue;
 
                 if (!target.IsVisibleTo(CurrentFunction))
-                    messages.Add(Message.CannotAccessPrivateSymbol, expression, expression.Value, CurrentFunction.Parent?.Name ?? "(root)");
+                    messages.Add(Message.CannotAccessPrivateSymbol, expression, expression.Value, CurrentFunction.Parent.Name);
                 else if (inAssignment && target is CobVariable variable && !variable.Mutable)
                     messages.Add(Message.IllegalAssignmentImmutable, expression);
 
@@ -956,17 +952,13 @@ namespace Compiler.CodeGeneration
         private Storage? VisitTupleLiteralExpression(CallExpression expression, Storage? functionStorage)
         {
             if (functionStorage == null || functionStorage.Type != eCobType.Tuple
-            ||  functionStorage.Type.Tag is not TupleType tde)
+            ||  functionStorage.Type.Tag is not TupleType tupleType)
                 return null;
 
             functionStorage.Free();
-            
-            // TODO Should be allocateable on a Register
-            // TODO Is this really the best way to allocate a tuple?
-            var local = CurrentFunction.AllocateLocal(new CobVariable("$tuple", functionStorage.Type, false)
-            {
-                StructValue = tde.Fields.Select(x => x.DeepClone()).ToArray()
-            });
+
+            var variable = tupleType.ToVariable();
+            var local = CurrentFunction.AllocateLocal(variable); // TODO Should allocate on a Register
 
             for (var i = 0; i < expression.Arguments.Count; ++i)
             {
@@ -986,23 +978,20 @@ namespace Compiler.CodeGeneration
         {
             var structTypeStorage = expression.StructTypeExpression.Accept(this);
             if (structTypeStorage == null || structTypeStorage.Type != eCobType.Struct
-            ||  structTypeStorage.Type.Tag is not StructType sde)
+            ||  structTypeStorage.Type.Tag is not StructType structType)
             {
                 messages.Add(Message.CannotInstantiateType, expression.StructTypeExpression, structTypeStorage?.Type.ToString() ?? "(null)");
                 return null;
             }
-            
-            var local = CurrentFunction.AllocateLocal(new CobVariable("$struct", structTypeStorage.Type, false)
-            {
-                StructValue = sde.Fields.Select(x => x.DeepClone()).ToArray()
-            });
 
+            var variable = structType.ToVariable();
+            var local = CurrentFunction.AllocateLocal(variable);
             var storage = CurrentFunction.AllocateStorage(structTypeStorage.Type, local);
 
             if (expression.Assignments != null)
             {
                 BinOpLHS = storage;
-                contextStack.Push(sde);
+                contextStack.Push(structType);
                 for (var i = 0; i < expression.Assignments.Count; ++i)
                     expression.Assignments[i].Accept(this);
                 contextStack.Pop();
@@ -1030,20 +1019,18 @@ namespace Compiler.CodeGeneration
             var byteCount = Encoding.UTF8.GetByteCount(expression.Value);
             var data = new byte[byteCount + 1];
             Encoding.UTF8.GetBytes(expression.Value, 0, expression.Value.Length, data, 0);
-            
-            var global = AllocateGlobal(new CobVariable(
-                $"string{Globals.Count}",
-                CobType.String,
-                false
-            ) { BufferValue = data });
+
+            var global = CurrentModule.AllocateGlobal($"string{Globals.Count}", CobType.String, false);
+            global.BufferValue = data;
+
+            var idx = Globals.IndexOf(global);
             
             return new Storage(
                 CurrentFunction,
                 new Operand
                 {
                     Type = OperandType.Global,
-                    Value = global,
-                    Size = -1
+                    Value = idx
                 },
                 CobType.String
             );
@@ -1054,25 +1041,7 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
-        public int FindGlobal(CobVariable variable)
-        {
-            return Globals.FindIndex(x => x == variable);
-        }
-        
-        public int AllocateGlobal(CobVariable variable)
-        {
-            if (variable == null) throw new ArgumentNullException(nameof(variable));
-
-            if (FindGlobal(variable) != -1)
-                return -1;
-
-            var idx = Globals.Count;
-            Globals.Add(variable);
-
-            return idx;
-        }
-
-        public static bool StandardIsSymbolVisibleHeuristic(IScopeContext? context, IScopeContext? parent, string? name)
+        public static bool IsSymbolVisible(IScopeContext? context, IScopeContext? parent, string? name)
         {
             for (var ctx = context; ctx != null; ctx = ctx.Parent)
             {
@@ -1091,13 +1060,15 @@ namespace Compiler.CodeGeneration
                 
                 var compiler = new Compiler(messages);
 
-                // HACKish Probably fine to initialize intrinsics in an "odd" way, but this does need more abstraction
-                StringContext.Instance.Compiler = compiler;
-                
+                // PASS 0 - Forward Declarations
+                Intrinsics.InitializeForPass0(compiler);
                 var pass0 = new ForwardDeclaration(compiler, messages);
                 ast.Accept(pass0);
 
+
+                // PASS 1 - Compilation
                 // NOTE We must compile all imported scripts before we compile this script; list is in import order
+                Intrinsics.InitializeForPass1(compiler);
                 for (var i = 0; i < compiler.Scripts.Count; ++i)
                     compiler.Scripts[i].Accept(compiler);
                 

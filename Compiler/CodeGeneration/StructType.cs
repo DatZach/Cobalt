@@ -4,25 +4,35 @@ namespace Compiler.CodeGeneration
 {
     internal sealed class StructType : IScopeContext, ISymbol
     {
-        public IScopeContext? Parent { get; }
-
         public string Name { get; }
 
-        public List<CobField> Fields { get; }
-
-        public List<Function> Functions { get; }
+        public IScopeContext Parent { get; }
 
         public Indexer? Indexer { get; private set; }
 
+        private readonly List<Function> functions;
+        private readonly List<CobField> fields;
+
         private readonly Compiler compiler;
 
-        public StructType(Compiler compiler, IScopeContext? parent, string name)
+        public StructType(string name, IScopeContext parent, Compiler compiler)
         {
             this.compiler = compiler;
             Parent = parent;
             Name = name;
-            Fields = new List<CobField>(4);
-            Functions = new List<Function>();
+            fields = new List<CobField>(4);
+            functions = new List<Function>();
+        }
+
+        public CobVariable ToVariable()
+        {
+            var type = new CobType(eCobType.Tuple, tag: this);
+            var variable = new CobVariable("$struct", type, false)
+            {
+                StructValue = fields.Select(x => new CobVariable(x.Name, x.Type, true)).ToArray()
+            };
+
+            return variable;
         }
 
         public Function AllocateFunction(
@@ -37,30 +47,29 @@ namespace Compiler.CodeGeneration
             lParameters.Insert(0, new Function.Parameter("this", new CobType(eCobType.Struct, tag: this), false));
             parameters = lParameters;
 
-            // TODO compiler.RootModule is wrong! Should parent to this context...
             var function = new Function(name, compiler, this, callingConvention, parameters, returnType);
-            Functions.Add(function);
+            functions.Add(function);
             compiler.Functions.Add(function);
 
             return function;
         }
 
-        public int AllocateField(string name, CobType type, Expression? getterExpression, Expression? setterExpression)
+        public Function? FindFunction(string name)
         {
-            // TODO Probably shouldn't silently ignore name conflicts
-            var idx = Fields.FindIndex(x => x.Name == name);
-            if (idx == -1)
-            {
-                idx = Fields.Count;
-                Fields.Add(new CobField(this, name, type, getterExpression, setterExpression));
-            }
-
-            return idx;
+            return functions.FirstOrDefault(x => x.Name == name);
         }
 
-        public int FindField(string name)
+        public CobField AllocateField(string name, CobType type, Expression? getterExpression, Expression? setterExpression)
         {
-            return Fields.FindIndex(x => x.Name == name);
+            var field = new CobField(this, name, type, getterExpression, setterExpression);
+            fields.Add(field);
+
+            return field;
+        }
+
+        public CobField? FindField(string name)
+        {
+            return fields.FirstOrDefault(x => x.Name == name);
         }
 
         public Indexer AllocateIndexer(CobType keyType, CobType returnType, Expression? getterExpression, Expression? setterExpression)
@@ -80,14 +89,16 @@ namespace Compiler.CodeGeneration
             return indexer;
         }
 
+        public bool IsVisibleTo(IScopeContext? context) => Compiler.IsSymbolVisible(context, Parent, Name);
+
         public ISymbol? FindSymbol(string name)
         {
             CobField? field;
-            if ((field = Fields.FirstOrDefault(x => x.Name == name)) != null)
+            if ((field = fields.FirstOrDefault(x => x.Name == name)) != null)
                 return field;
 
             Function? function;
-            if ((function = Functions.FirstOrDefault(x => x.Name == name)) != null)
+            if ((function = functions.FirstOrDefault(x => x.Name == name)) != null)
                 return function;
 
             return null;
@@ -97,7 +108,7 @@ namespace Compiler.CodeGeneration
         {
             if (symbol is CobField field)
             {
-                var idx = Fields.IndexOf(field);
+                var idx = fields.IndexOf(field);
                 var fieldType = field.Type;
                 
                 if (field.GetterExpression != null)
@@ -139,7 +150,7 @@ namespace Compiler.CodeGeneration
         {
             if (symbol is CobField field)
             {
-                var idx = Fields.IndexOf(field);
+                var idx = fields.IndexOf(field);
                 var @this = compiler.BinOpLHS == null ? Operand.This : compiler.BinOpLHS.Operand;
                 
                 compiler.CurrentFunction.Body.Emit(
@@ -153,13 +164,11 @@ namespace Compiler.CodeGeneration
 
             return false;
         }
-
-        public bool IsVisibleTo(IScopeContext? context) => Compiler.StandardIsSymbolVisibleHeuristic(context, Parent, Name);
     }
 
     internal sealed class Indexer : IScopeContext
     {
-        public IScopeContext? Parent { get; init;  }
+        public IScopeContext Parent { get; init; }
 
         public string Name => "indexer";
 

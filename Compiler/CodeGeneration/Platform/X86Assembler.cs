@@ -87,93 +87,88 @@ namespace Compiler.CodeGeneration.Platform
                 });
             }
 
-            for (int l = 0; l < compiler.Modules.Count; ++l)
+            for (var i = 0; i < compiler.Functions.Count; i++)
             {
-                var module = compiler.Modules[l];
+                var f = compiler.Functions[i];
+                if (f.NativeImport != null)
+                    continue;
 
-                for (var i = 0; i < module.Functions.Count; i++)
+                // TODO Clean this up
+                callReserve = 0;
+                var instructions = f.Body.Instructions;
+                for (int j = 0; j < instructions.Count; ++j)
                 {
-                    var f = module.Functions[i];
-                    if (f.NativeImport != null)
+                    var inst = instructions[j];
+                    if (inst.Opcode == Opcode.Call)
+                        callReserve = Math.Max(callReserve, 4);
+                    else if (inst.Opcode == Opcode.Move && inst.A.Type == OperandType.Argument)
+                        callReserve = Math.Max(callReserve, (int)inst.A.Value);
+                }
+
+                callReserve *= 8;
+
+                localReserve = f.Locals.Count * 8; // TODO Not every local is 8 bytes large (tuples, structs, etc.)
+
+                nvrReserve = 0;
+                for (int j = 0; j < MaxRegisters; ++j)
+                {
+                    if ((f.ClobberedRegisters & (1u << j)) == 0)
                         continue;
 
-                    // TODO Clean this up
-                    callReserve = 0;
-                    var instructions = f.Body.Instructions;
-                    for (int j = 0; j < instructions.Count; ++j)
-                    {
-                        var inst = instructions[j];
-                        if (inst.Opcode == Opcode.Call)
-                            callReserve = Math.Max(callReserve, 4);
-                        else if (inst.Opcode == Opcode.Move && inst.A.Type == OperandType.Argument)
-                            callReserve = Math.Max(callReserve, (int)inst.A.Value);
-                    }
+                    var regName = GetIntegerRegisterName(j, BusWidth);
+                    if (nonVolatileRegisters.Contains(regName))
+                        nvrReserve += 8;
+                }
 
-                    callReserve *= 8;
+                stackSpace = callReserve + localReserve + nvrReserve;
+                while (stackSpace % 16 != 0) ++stackSpace; // TODO Write a better implementation lol
+                //stackSpace += 16 - (stackSpace & ~16);
 
-                    localReserve = f.Locals.Count * 8; // TODO Not every local is 8 bytes large (tuples, structs, etc.)
-
-                    nvrReserve = 0;
-                    for (int j = 0; j < MaxRegisters; ++j)
+                buffer.EmitLine(f.FullyQualifiedName + ":");
+                buffer.Indent();
+                if (f.CallingConvention != CallingConvention.None)
+                {
+                    if (stackSpace > 0)
+                        buffer.EmitLine($"sub rsp, {stackSpace}");
+                    for (int j = 0, k = 0; j < MaxRegisters; j++) // TODO Clean this up
                     {
                         if ((f.ClobberedRegisters & (1u << j)) == 0)
                             continue;
 
                         var regName = GetIntegerRegisterName(j, BusWidth);
                         if (nonVolatileRegisters.Contains(regName))
-                            nvrReserve += 8;
-                    }
-
-                    stackSpace = callReserve + localReserve + nvrReserve;
-                    while (stackSpace % 16 != 0) ++stackSpace; // TODO Write a better implementation lol
-                    //stackSpace += 16 - (stackSpace & ~16);
-
-                    buffer.EmitLine(f.FullyQualifiedName + ":");
-                    buffer.Indent();
-                    if (f.CallingConvention != CallingConvention.None)
-                    {
-                        if (stackSpace > 0)
-                            buffer.EmitLine($"sub rsp, {stackSpace}");
-                        for (int j = 0, k = 0; j < MaxRegisters; j++) // TODO Clean this up
                         {
-                            if ((f.ClobberedRegisters & (1u << j)) == 0)
-                                continue;
-
-                            var regName = GetIntegerRegisterName(j, BusWidth);
-                            if (nonVolatileRegisters.Contains(regName))
-                            {
-                                int nvrOffset = callReserve + localReserve + k * 8;
-                                buffer.EmitLine($"mov qword [rsp + {nvrOffset}], {GetIntegerRegisterName(j, BusWidth)}");
-                            }
+                            int nvrOffset = callReserve + localReserve + k * 8;
+                            buffer.EmitLine($"mov qword [rsp + {nvrOffset}], {GetIntegerRegisterName(j, BusWidth)}");
                         }
                     }
-
-                    currentFunction = f;
-                    EmitIntermediateInstructionBuffer(buffer, f.Body);
-
-                    buffer.EmitLine($"{GetLabelString(currentFunction.ReturnLabel)}:");
-                    if (f.CallingConvention != CallingConvention.None)
-                    {
-                        for (int j = 0, k = 0; j < MaxRegisters; j++) // TODO Clean this up
-                        {
-                            if ((f.ClobberedRegisters & (1u << j)) == 0)
-                                continue;
-
-                            var regName = GetIntegerRegisterName(j, BusWidth);
-                            if (nonVolatileRegisters.Contains(regName))
-                            {
-                                int nvrOffset = callReserve + localReserve + k * 8;
-                                buffer.EmitLine($"mov {GetIntegerRegisterName(j, BusWidth)}, qword [rsp + {nvrOffset}]");
-                            }
-                        }
-                        
-                        if (stackSpace > 0)
-                            buffer.EmitLine($"add rsp, {stackSpace}");
-                        buffer.EmitLine("ret");
-                    }
-
-                    buffer.Unindent();
                 }
+
+                currentFunction = f;
+                EmitIntermediateInstructionBuffer(buffer, f.Body);
+
+                buffer.EmitLine($"{GetLabelString(currentFunction.ReturnLabel)}:");
+                if (f.CallingConvention != CallingConvention.None)
+                {
+                    for (int j = 0, k = 0; j < MaxRegisters; j++) // TODO Clean this up
+                    {
+                        if ((f.ClobberedRegisters & (1u << j)) == 0)
+                            continue;
+
+                        var regName = GetIntegerRegisterName(j, BusWidth);
+                        if (nonVolatileRegisters.Contains(regName))
+                        {
+                            int nvrOffset = callReserve + localReserve + k * 8;
+                            buffer.EmitLine($"mov {GetIntegerRegisterName(j, BusWidth)}, qword [rsp + {nvrOffset}]");
+                        }
+                    }
+                    
+                    if (stackSpace > 0)
+                        buffer.EmitLine($"add rsp, {stackSpace}");
+                    buffer.EmitLine("ret");
+                }
+
+                buffer.Unindent();
             }
 
             // HACK TODO Reimplement as true .rdata

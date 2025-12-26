@@ -24,6 +24,9 @@ namespace Compiler
 
         public static string ReadAllText(string path)
         {
+            if (string.IsNullOrEmpty(path))
+                return "";
+
             if (Cache.TryGetValue(path, out var contents))
                 return contents;
 

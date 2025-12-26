@@ -30,15 +30,35 @@ namespace Compiler
 
             EstablishEnvironment();
 
-            swCompiler = Stopwatch.StartNew();
-
             var messages = new MessageCollection();
-            var source = PreambleSource + FileSystem.ReadAllText(Config.EntrySourceFilePath);
-            var tokens = Tokenizer.Tokenize(source, Config.EntrySourceFilePath, messages);
-            var ast = Parser.Parse(tokens, messages);
-            var compiler = CodeGeneration.Compiler.Compile(ast, messages);
+            CodeGeneration.Compiler? compiler;
 
-            if (messages.Count > 0)
+            swCompiler = Stopwatch.StartNew();
+            try
+            {
+                var source = PreambleSource + FileSystem.ReadAllText(Config.EntrySourceFilePath);
+                var tokens = Tokenizer.Tokenize(source, Config.EntrySourceFilePath, messages);
+                var ast = Parser.Parse(tokens, messages);
+                compiler = CodeGeneration.Compiler.Compile(ast, messages);
+            }
+            #if !DEBUG
+            catch (Exception ex)
+            {
+                messages.Add(Message.UncaughtException, Token.EndOfStream, Token.EndOfStream, ex.Message, ex.StackTrace);
+                compiler = null;
+            }
+            #endif
+            finally
+            {
+                swCompiler.Stop();
+            }
+
+            if (compiler == null)
+            {
+                messages.Print();
+                return;
+            }
+            else if (messages.Count > 0)
             {
                 messages.Print();
 
@@ -47,8 +67,6 @@ namespace Compiler
             }
 
             ArtifactFactory.Assemble(compiler);
-
-            swCompiler.Stop();
 
             PrintCompilerState(compiler);
             PrintCompilerStatistics();
@@ -119,30 +137,24 @@ namespace Compiler
 
             Console.WriteLine("Modules");
             foreach (var module in compiler.Modules)
+                Console.WriteLine($"\t{module.Name}");
+
+            Console.WriteLine("Functions");
+            foreach (var function in compiler.Functions)
             {
-                Console.WriteLine($"\t{module.Name ?? "(root)"}");
-                Console.WriteLine("\tFunctions");
-                foreach (var function in module.Functions)
+                Console.WriteLine($"\t{function.FullyQualifiedName} -> {function.ReturnType}; .locals = {function.Locals.Count}; .cconv = {function.CallingConvention}");
+                if (function.Body.Instructions.Count == 0)
+                    Console.WriteLine("\t\t(EMPTY)");
+                else for (var i = 0; i < function.Body.Instructions.Count; ++i)
                 {
-                    Console.WriteLine($"\t\t{function.Name} -> {function.ReturnType}; .locals = {function.Locals.Count}; .cconv = {function.CallingConvention}");
-                    //Console.WriteLine($"\t\t\t");
-                    //Console.WriteLine($"\t\t\t.cconv = {function.CallingConvention}");
-                    if (function.Body == null)
-                    {
-                        Console.WriteLine("\t\tBodyless");
-                        continue;
-                    }
+                    var inst = function.Body.Instructions[i];
+                    foreach (var label in function.Body.Labels.Where(x => x.Location == i))
+                        Console.WriteLine($"\t{label}:");
 
-                    for (var i = 0; i < function.Body.Instructions.Count; ++i)
-                    {
-                        var inst = function.Body.Instructions[i];
-                        // TODO Optimize to Dictionary before?
-                        foreach (var label in function.Body.Labels.Where(x => x.Location == i))
-                            Console.WriteLine($"\t\t{label}:"); // {function.FullyQualifiedName}_
-
-                        Console.WriteLine($"\t\t\t{inst}");
-                    }
+                    Console.WriteLine($"\t\t{inst}");
                 }
+
+                Console.WriteLine();
             }
 
             Console.WriteLine();

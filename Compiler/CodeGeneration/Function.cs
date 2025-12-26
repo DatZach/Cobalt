@@ -1,5 +1,4 @@
-﻿using Compiler.Ast.Expressions;
-using Compiler.Interpreter;
+﻿using Compiler.Interpreter;
 using System.Diagnostics;
 
 namespace Compiler.CodeGeneration
@@ -9,7 +8,7 @@ namespace Compiler.CodeGeneration
     {
         public string Name { get; }
 
-        public IScopeContext? Parent { get; }
+        public IScopeContext Parent { get; }
 
         public List<CobVariable> Locals { get; }
 
@@ -27,7 +26,7 @@ namespace Compiler.CodeGeneration
 
         public Label ReturnLabel { get; }
 
-        public string FullyQualifiedName => (Parent?.Name ?? "root") + '_' + Name;
+        public string FullyQualifiedName => Parent.Name + '_' + Name;
 
         private readonly Compiler compiler;
 
@@ -292,7 +291,7 @@ namespace Compiler.CodeGeneration
             }
         }
 
-        public bool IsVisibleTo(IScopeContext context) => Compiler.StandardIsSymbolVisibleHeuristic(context, Parent, Name);
+        public bool IsVisibleTo(IScopeContext context) => Compiler.IsSymbolVisible(context, Parent, Name);
     }
 
     internal enum CallingConvention
