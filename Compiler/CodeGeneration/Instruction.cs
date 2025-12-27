@@ -53,6 +53,7 @@
                 case OperandType.Global:
                 case OperandType.Function:
                 case OperandType.TupleType:
+                case OperandType.StructType:
                     return Type.ToString()[..1].ToLowerInvariant()
                            + Value.ToString("G");
                 case OperandType.Label:

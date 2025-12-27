@@ -1,6 +1,5 @@
 ﻿using Compiler.Ast.Expressions;
 using Compiler.Ast.Expressions.Statements;
-using Compiler.CodeGeneration;
 using Compiler.Lexer;
 
 namespace Compiler.Ast.Parselets.Statements
@@ -10,9 +9,19 @@ namespace Compiler.Ast.Parselets.Statements
         public Expression Parse(Parser parser, Token token)
         {
             var name = parser.Take(TokenType.Identifier);
+            var traits = new List<string>();
             var fields = new List<FieldDefinition>();
             var functions = new List<FunctionDeclStatement>();
             IndexerDefinition? indexerDefinition = null;
+
+            if (parser.MatchAndTakeToken(TokenType.Mixin) != null)
+            {
+                do
+                {
+                    var traitTypeName = parser.ParseTypeName();
+                    traits.Add(traitTypeName);
+                } while (parser.MatchAndTakeToken(TokenType.Comma) != null);
+            }
 
             parser.Take(TokenType.LeftBrace);
             while (parser.MatchAndTakeToken(TokenType.RightBrace) == null)
@@ -48,7 +57,7 @@ namespace Compiler.Ast.Parselets.Statements
                 parser.MatchAndTakeToken(TokenType.Semicolon);
             }
 
-            return new StructDeclStatement(token, name.Value, fields, functions, indexerDefinition);
+            return new StructDeclStatement(token, name.Value, traits, fields, functions, indexerDefinition);
         }
 
         public static void ParseGetterSetters(

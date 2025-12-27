@@ -1,5 +1,4 @@
 ﻿using Compiler.Ast.Visitors;
-using Compiler.CodeGeneration;
 using Compiler.Lexer;
 using System.Diagnostics;
 

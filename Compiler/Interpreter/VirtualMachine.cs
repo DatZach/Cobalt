@@ -434,6 +434,12 @@ namespace Compiler.Interpreter
                         var type = new CobType(eCobType.Tuple, tag: tupleType);
                         return new Variable("$tuple", type, false);
                     }
+                    case OperandType.StructType:
+                    {
+                        var structType = artifact.StructTypes[(int)operand.Value];
+                        var type = new CobType(eCobType.Struct, tag: structType);
+                        return new Variable("struct", type, false);
+                    }
                     default:
                         throw new ArgumentOutOfRangeException();
                 }

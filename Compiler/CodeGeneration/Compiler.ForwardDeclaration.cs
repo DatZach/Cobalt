@@ -224,6 +224,30 @@ namespace Compiler.CodeGeneration
             return Unit.Value;
         }
 
+        public Unit Visit(TraitStatement expression)
+        {
+            if (Phase == DeclPhase.Types)
+            {
+                var traitType = CurrentModule.AllocateTraitType(expression.Name);
+                var cobType = new CobType(eCobType.Trait, tag: traitType);
+
+                if (!CobType.TryAddAlias(expression.Name, cobType))
+                    messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
+            }
+            else if (Phase > DeclPhase.Types)
+            {
+                var traitType = CurrentModule.FindTraitType(expression.Name)!;
+                contextStack.Push(traitType);
+
+                for (var i = 0; i < expression.Functions.Count; ++i)
+                    expression.Functions[i].Accept(this);
+
+                contextStack.Pop();
+            }
+
+            return Unit.Value;
+        }
+
         public Unit Visit(TupleDeclStatement expression)
         {
             if (Phase == DeclPhase.Types)
@@ -259,6 +283,12 @@ namespace Compiler.CodeGeneration
             if (Phase == DeclPhase.Types)
             {
                 var structType = CurrentModule.AllocateStructType(expression.Name);
+
+                foreach (var traitTypeName in expression.TraitTypeNames)
+                {
+                    var traitType = CobType.FromString(traitTypeName);
+                    structType.AttachTrait((TraitType)traitType.Tag);
+                }
                 
                 if (!CobType.TryAddAlias(expression.Name, new CobType(eCobType.Struct, tag: structType)))
                     messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
@@ -300,7 +330,15 @@ namespace Compiler.CodeGeneration
 
             var parameters = expression.Parameters.Select(x => new Function.Parameter(x.Name, CobType.FromString(x.TypeName), x.IsSpread)).ToList();
 
-            if (CurrentContext is TupleType tupleType)
+            if (CurrentContext is TraitType traitType)
+            {
+                if (expression.CallingConvention != CallingConvention.Default
+                &&  expression.CallingConvention != CallingConvention.ThisCall)
+                    messages.Add(Message.IllegalCallingConvention, expression, expression.CallingConvention);
+
+                traitType.AllocateFunction(expression.Name, parameters, expression.ReturnType);
+            }
+            else if (CurrentContext is TupleType tupleType)
             {
                 if (expression.CallingConvention != CallingConvention.Default
                 &&  expression.CallingConvention != CallingConvention.ThisCall)

@@ -42,13 +42,13 @@ namespace Compiler
                 var ast = Parser.Parse(tokens, messages);
                 artifact = CodeGeneration.Compiler.Compile(ast, messages);
             }
-            #if !DEBUG
+            //#if !DEBUG
             catch (Exception ex)
             {
                 messages.Add(Message.UncaughtException, Token.EndOfStream, Token.EndOfStream, ex.Message, ex.StackTrace);
-                compiler = null;
+                artifact = null;
             }
-            #endif
+            //#endif
             finally
             {
                 swCompiler.Stop();

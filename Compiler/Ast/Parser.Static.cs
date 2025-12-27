@@ -94,6 +94,7 @@ namespace Compiler.Ast
             Register(TokenType.Artifact, new ArtifactParselet());
             Register(TokenType.Module, new ModuleParselet());
             Register(TokenType.Type, new TypeAliasParselet());
+            Register(TokenType.Trait, new TraitParselet());
             Register(TokenType.Tuple, new TupleDeclParselet());
             Register(TokenType.Struct, new StructDeclParselet());
             Register(TokenType.Const, new VariableDeclParselet());

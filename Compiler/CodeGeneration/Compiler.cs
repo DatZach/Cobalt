@@ -20,6 +20,8 @@ namespace Compiler.CodeGeneration
 
         public List<Module> Modules => artifact.Modules;
 
+        public List<TraitType> TraitTypes => artifact.TraitTypes;
+
         public List<TupleType> TupleTypes => artifact.TupleTypes;
 
         public List<StructType> StructTypes => artifact.StructTypes;
@@ -113,6 +115,11 @@ namespace Compiler.CodeGeneration
         }
 
         public Storage? Visit(TypeAliasStatement expression)
+        {
+            return null;
+        }
+
+        public Storage? Visit(TraitStatement expression)
         {
             return null;
         }
@@ -731,8 +738,9 @@ namespace Compiler.CodeGeneration
             var arguments = expression.Arguments;
             if (function.CallingConvention == CallingConvention.ThisCall)
             {
-                var lArguments = new List<Expression>(arguments);
-                lArguments.Insert(0, new IdentifierExpression(new Token(TokenType.Identifier, "range", "", 0, 0)));
+                var lArguments = new List<Expression>();
+                lArguments.Add(new IdentifierExpression(new Token(TokenType.Identifier, "$this", "", 0, 0)));
+                lArguments.AddRange(arguments);
                 arguments = lArguments;
             }
             var hasSpreadParameter = parameters.Count > 0 && parameters[^1].IsSpread;
@@ -746,7 +754,15 @@ namespace Compiler.CodeGeneration
                 for (int i = 0; i < arguments.Count; ++i)
                 {
                     var paramType = parameters.ElementAtOrDefault(i);
-                    var argStorage = arguments[i].Accept(this);
+                    var argument = arguments[i];
+                    Storage? argStorage;
+                    if (argument is IdentifierExpression argIdent && argIdent.Value == "$this")
+                    {
+                        var boe = (BinaryOperatorExpression)expression.FunctionExpression;
+                        argStorage = boe.Left.Accept(this);
+                    }
+                    else
+                        argStorage = argument.Accept(this);
 
                     if (paramType != null && paramType.IsSpread) paramType = null;
                     if (argStorage == null
@@ -856,6 +872,10 @@ namespace Compiler.CodeGeneration
                 return source;
                 // TODO Reimplement
                 //return source with { Type = dstType };
+            }
+            else if (srcType == eCobType.Struct && dstType == eCobType.Trait)
+            {
+                return source; // TODO ??
             }
             else
                 throw new NotImplementedException();
