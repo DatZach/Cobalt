@@ -59,52 +59,17 @@ namespace Compiler.CodeGeneration
             registers = 0;
         }
 
-        public Storage AllocateStorage(CobType type, long value)
+        //public Storage AllocateStorage(CobType type, Operand operand)
+        //{
+        //    return new Storage(operand, type, this);
+        //}
+
+        public Storage AllocateRegisterStorage(CobType type)
         {
-            // TODO Pool
-            var operandType = type.Type switch // TODO ???
-            {
-                eCobType.Signed => OperandType.ImmediateSigned,
-                eCobType.Unsigned => OperandType.ImmediateUnsigned,
-                eCobType.Float => OperandType.ImmediateFloat,
-                eCobType.Tuple => OperandType.Local, // ????
-                eCobType.Struct => OperandType.Local, // ????
-                _ => throw new NotSupportedException()
-            };
+            var register = AllocateRegister();
+            var operand = Operand._Register(register);
 
-            var operand = new Operand
-            {
-                Type = operandType,
-                Value = value,
-                Size = type.Size
-            };
-
-            return new Storage(this, operand, type);
-        }
-
-        public Storage AllocateStorage(CobType type)
-        {
-            // TODO Pool
-            var register = type.Type switch // TODO ???
-            {
-                eCobType.Signed => AllocateRegister(),
-                eCobType.Unsigned => AllocateRegister(),
-                eCobType.Float => AllocateRegister(),
-                eCobType.Array => AllocateRegister(), // ????????
-                eCobType.Lens => AllocateRegister(), // ??
-                eCobType.Tuple => AllocateRegister(),//AllocateLocal(new CobVariable("$tuple", type, true)),
-                eCobType.Struct => AllocateRegister(),
-                _ => throw new NotSupportedException()
-            };
-
-            var operand = new Operand
-            {
-                Type = OperandType.Register,
-                Value = register,
-                Size = type.Size
-            };
-
-            return new Storage(this, operand, type);
+            return new Storage(type, operand, this);
         }
 
         public void FreeStorage(Operand storage)
@@ -151,13 +116,6 @@ namespace Compiler.CodeGeneration
             return local;
         }
 
-        // TODO Deprecate
-        public CobVariable AllocateLocal(CobVariable local)
-        {
-            locals.Add(local);
-            return local;
-        }
-
         public CobVariable? FindLocal(string name)
         {
             return locals.FirstOrDefault(x => x.Name == name);
@@ -198,14 +156,8 @@ namespace Compiler.CodeGeneration
             {
                 var idx = FindParameterIndex(parameter);
                 return new Storage(
-                    this,
-                    new Operand
-                    {
-                        Type = OperandType.Argument,
-                        Value = idx,
-                        Size = parameter.Type.Size
-                    },
-                    parameter.Type
+                    parameter.Type,
+                    Operand.Argument(idx)
                 );
             }
 
@@ -213,14 +165,8 @@ namespace Compiler.CodeGeneration
             {
                 var idx = locals.IndexOf(variable);
                 return new Storage(
-                    this,
-                    new Operand
-                    {
-                        Type = OperandType.Local,
-                        Value = idx,
-                        Size = variable.Type.Size
-                    },
-                    variable.Type
+                    variable.Type,
+                    Operand.Local(idx)
                 );
             }
 
@@ -236,12 +182,7 @@ namespace Compiler.CodeGeneration
 
                 compiler.CurrentFunction.Body.Emit(
                     Opcode.Move,
-                    new Operand
-                    {
-                        Type = OperandType.Argument,
-                        Value = idx,
-                        Size = parameter.Type.Size
-                    },
+                    Operand.Argument(idx),
                     compiler.AssignmentRHS.Operand
                 );
                 return true;
@@ -254,12 +195,7 @@ namespace Compiler.CodeGeneration
 
                 compiler.CurrentFunction.Body.Emit(
                     Opcode.Move,
-                    new Operand
-                    {
-                        Type = OperandType.Local,
-                        Value = idx,
-                        Size = local.Type.Size
-                    },
+                    Operand.Local(idx),
                     compiler.AssignmentRHS.Operand
                 );
                 return true;
@@ -293,11 +229,30 @@ namespace Compiler.CodeGeneration
         Default = CCall
     }
 
-    internal sealed record Storage(Function Parent, Operand Operand, CobType Type)
+    internal sealed record Storage
     {
+        public CobType Type { get; }
+
+        public Operand Operand { get; }
+
+        private readonly Function? context;
+
+        public Storage(CobType type, Operand operand, Function? context)
+        {
+            Type = type;
+            Operand = operand;
+            this.context = context;
+        }
+
+        public Storage(CobType type, Operand operand)
+            : this(type, operand, null)
+        {
+
+        }
+
         public void Free()
         {
-            Parent?.FreeStorage(Operand);
+            context?.FreeStorage(Operand);
         }
     }
 }

@@ -174,7 +174,7 @@ namespace Compiler.CodeGeneration
                 {
                     CurrentFunction.Body.Emit(
                         Opcode.Call,
-                        new Operand { Type = OperandType.Function, Value = Functions.FindIndex(x => x.FullyQualifiedName == module.InitializerFunction.FullyQualifiedName) },
+                        Operand.Function(Functions.FindIndex(x => x.FullyQualifiedName == module.InitializerFunction.FullyQualifiedName)),
                         Operand.R0,
                         Array.Empty<Operand>()
                     );
@@ -189,9 +189,8 @@ namespace Compiler.CodeGeneration
             contextStack.Pop();
 
             return new Storage(
-                CurrentFunction,
-                Operand.None,
-                new CobType(eCobType.Function, tag: function)
+                new CobType(eCobType.Function, tag: function),
+                Operand.None
             );
         }
 
@@ -232,7 +231,7 @@ namespace Compiler.CodeGeneration
                     {
                         CurrentFunction.Body.Emit(
                             Opcode.Move,
-                            new Operand { Type = OperandType.Global, Value = idx, Size = type.Size },
+                            Operand.Global(idx),
                             rhs.Operand
                         );
                     }
@@ -245,7 +244,7 @@ namespace Compiler.CodeGeneration
                     {
                         CurrentFunction.Body.Emit(
                             Opcode.Move,
-                            new Operand { Type = OperandType.Local, Value = idx, Size = type.Size },
+                            Operand.Local(idx),
                             rhs.Operand
                         );
                     }
@@ -270,8 +269,8 @@ namespace Compiler.CodeGeneration
             }
             else if (expression.Conditional is IdentifierExpression)
             {
-                var c = CurrentFunction.AllocateStorage(CobType.Boolean);
-                CurrentFunction.Body.Emit(Opcode.CmpEQ, c.Operand, conditional.Operand, new Operand { Type = OperandType.ImmediateUnsigned, Value = 1 });
+                var c = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
+                CurrentFunction.Body.Emit(Opcode.CmpEQ, c.Operand, conditional.Operand, Operand.ImmediateUnsigned(1));
                 conditional.Free();
                 conditional = c;
             }
@@ -311,12 +310,12 @@ namespace Compiler.CodeGeneration
                 // TODO Should use the Trait `Enumerable` instead of assuming the enumerator type
                 var tdeRangeEnumerator = RootModule.FindTupleType("RangeEnumerator");
                 var typeRangeTuple = new CobType(eCobType.Struct, tag: tdeRangeEnumerator);
-                var varEnumerator = CurrentFunction.AllocateStorage(typeRangeTuple);
+                var varEnumerator = CurrentFunction.AllocateRegisterStorage(typeRangeTuple);
 
                 // TODO tdeRangeEnumerator.FindFunctionIndex("GetEnumerator");
                 CurrentFunction.Body.Emit(
                     Opcode.Call,
-                    new Operand { Type = OperandType.Function, Value = Functions.FindIndex(x => x.Name == "GetEnumerator") },
+                    Operand.Function(Functions.FindIndex(x => x.Name == "GetEnumerator")),
                     varEnumerator.Operand,
                     new[] { range.Operand }
                 );
@@ -325,16 +324,16 @@ namespace Compiler.CodeGeneration
                 startLabel.Mark();
 
                 // TODO tdeRangeEnumerator.FindFunctionIndex("MoveNext");
-                var moveNextResultStorage = CurrentFunction.AllocateStorage(CobType.Boolean);
+                var moveNextResultStorage = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
                 CurrentFunction.Body.Emit(
                     Opcode.Call,
-                    new Operand { Type = OperandType.Function, Value = Functions.FindIndex(x => x.Name == "MoveNext") },
+                    Operand.Function(Functions.FindIndex(x => x.Name == "MoveNext")),
                     moveNextResultStorage.Operand,
                     new[] { varEnumerator.Operand }
                 );
 
                 CurrentFunction.Body.Emit(Opcode.JmpF, moveNextResultStorage.Operand, endLabel);
-                CurrentFunction.Body.Emit(Opcode.GetField, index.Operand, varEnumerator.Operand, new Operand { Type = OperandType.ImmediateUnsigned, Value = 0 });
+                CurrentFunction.Body.Emit(Opcode.GetField, index.Operand, varEnumerator.Operand, Operand.ImmediateUnsigned(0));
             }
             else if (expression.Conditional != null)
             {
@@ -546,11 +545,11 @@ namespace Compiler.CodeGeneration
             {
                 var a = expression.Left.Accept(this);
                 var b = expression.Right.Accept(this);
-                var c = CurrentFunction.AllocateStorage(a.Type);
+                var c = CurrentFunction.AllocateRegisterStorage(a.Type);
 
-                int shlValue = b.Type.Size;
+                var shlValue = b.Type.Size;
 
-                CurrentFunction.Body.Emit(Opcode.BitShl, c.Operand, a.Operand, new Operand { Type = OperandType.ImmediateUnsigned, Value = shlValue });
+                CurrentFunction.Body.Emit(Opcode.BitShl, c.Operand, a.Operand, Operand.ImmediateUnsigned(shlValue));
                 CurrentFunction.Body.Emit(Opcode.BitOr, c.Operand, a.Operand, b.Operand);
                 
                 b.Free();
@@ -565,41 +564,42 @@ namespace Compiler.CodeGeneration
                 var typeIdx = TupleTypes.IndexOf(type);
                 var cobType = new CobType(eCobType.Tuple, tag: type);
 
-                var c = CurrentFunction.AllocateStorage(cobType);
-                CurrentFunction.Body.Emit(Opcode.New, c.Operand, new Operand { Type = OperandType.TupleType, Value = typeIdx });
+                var c = CurrentFunction.AllocateRegisterStorage(cobType);
+                CurrentFunction.Body.Emit(Opcode.New, c.Operand, Operand.TupleType(typeIdx));
 
                 var a = expression.Left.Accept(this);
                 var b = expression.Right.Accept(this);
 
                 if (expression.Left is EmptyExpression)
-                    a = CurrentFunction.AllocateStorage(b.Type, 0);
+                    a = new Storage(b.Type, Operand.ImmediateUnsigned(0));
                 else if (expression.Right is EmptyExpression)
-                    b = CurrentFunction.AllocateStorage(a.Type, ~0);
+                    b = new Storage(a.Type, Operand.ImmediateUnsigned(~0));
 
                 if (expression.Operator == TokenType.Range)
                 {
-                    var d = CurrentFunction.AllocateStorage(b.Type);
-                    CurrentFunction.Body.Emit(Opcode.Sub, d.Operand, b.Operand, new Operand { Type = OperandType.ImmediateUnsigned, Value = 1 });
+                    var d = CurrentFunction.AllocateRegisterStorage(b.Type);
+                    CurrentFunction.Body.Emit(Opcode.Sub, d.Operand, b.Operand, Operand.ImmediateUnsigned(1));
                     b.Free();
                     b = d;
                 }
                 else if (expression.Operator == TokenType.RangeLength)
                 {
-                    var d = CurrentFunction.AllocateStorage(b.Type);
+                    var d = CurrentFunction.AllocateRegisterStorage(b.Type);
                     CurrentFunction.Body.Emit(Opcode.Add, d.Operand, a.Operand, b.Operand);
                     b.Free();
                     b = d;
                 }
                 else if (expression.Operator == TokenType.RangeTerminal)
                 {
-                    var d = CurrentFunction.AllocateStorage(b.Type);
+                    var d = CurrentFunction.AllocateRegisterStorage(b.Type);
                     CurrentFunction.Body.Emit(Opcode.BitNot, d.Operand, b.Operand);
                     b.Free();
                     b = d;
                 }
 
-                CurrentFunction.Body.Emit(Opcode.SetField, c.Operand, new Operand { Type = OperandType.ImmediateUnsigned, Value = 0 }, a.Operand);
-                CurrentFunction.Body.Emit(Opcode.SetField, c.Operand, new Operand { Type = OperandType.ImmediateUnsigned, Value = 1 }, b.Operand);
+                // TODO type.FindFieldIndex("Start"), etc.
+                CurrentFunction.Body.Emit(Opcode.SetField, c.Operand, Operand.ImmediateUnsigned(0), a.Operand);
+                CurrentFunction.Body.Emit(Opcode.SetField, c.Operand, Operand.ImmediateUnsigned(1), b.Operand);
 
                 b.Free();
                 a.Free();
@@ -610,7 +610,7 @@ namespace Compiler.CodeGeneration
             {
                 var a = expression.Left.Accept(this);
                 var b = expression.Right.Accept(this);
-                var c = CurrentFunction.AllocateStorage(CobType.Boolean);
+                var c = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
 
                 CurrentFunction.Body.Emit(cndOpcode, c.Operand, a.Operand, b.Operand);
 
@@ -623,7 +623,7 @@ namespace Compiler.CodeGeneration
             {
                 var a = expression.Left.Accept(this);
                 var b = expression.Right.Accept(this);
-                var c = CurrentFunction.AllocateStorage(CobType.Boolean);
+                var c = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
 
                 CurrentFunction.Body.Emit(cmpOpcode, c.Operand, a.Operand, b.Operand);
 
@@ -636,7 +636,7 @@ namespace Compiler.CodeGeneration
             {
                 var a = expression.Left.Accept(this);
                 var b = expression.Right.Accept(this);
-                var c = CurrentFunction.AllocateStorage(a.Type);
+                var c = CurrentFunction.AllocateRegisterStorage(a.Type);
                 
                 CurrentFunction.Body.Emit(artOpcode, c.Operand, a.Operand, b.Operand);
                 
@@ -680,7 +680,7 @@ namespace Compiler.CodeGeneration
         public Storage? Visit(PrefixOperatorExpression expression)
         {
             var right = expression.Right.Accept(this);
-            var c = CurrentFunction.AllocateStorage(right.Type);
+            var c = CurrentFunction.AllocateRegisterStorage(right.Type);
 
             // TODO Support rhs logical !
             if (expression.Operator == TokenType.Not && conditionalStack != 0) // Logical !
@@ -732,7 +732,7 @@ namespace Compiler.CodeGeneration
             }
 
             var retStorage = function.ReturnType != eCobType.None
-                           ? CurrentFunction.AllocateStorage(function.ReturnType)
+                           ? CurrentFunction.AllocateRegisterStorage(function.ReturnType)
                            : null;
 
             // ARGUMENTS
@@ -862,7 +862,9 @@ namespace Compiler.CodeGeneration
             ||  srcType == eCobType.Signed
             ||  srcType == eCobType.Float)
             {
-                return source with { Type = dstType };
+                return source;
+                // TODO Reimplement
+                //return source with { Type = dstType };
             }
             else
                 throw new NotImplementedException();
@@ -895,11 +897,11 @@ namespace Compiler.CodeGeneration
             using var vm = new VirtualMachine(this);
             var result = vm.ExecuteFunction(function);
 
-            var reg = CurrentFunction.AllocateStorage(function.ReturnType);
+            var reg = CurrentFunction.AllocateRegisterStorage(function.ReturnType);
             CurrentFunction.Body.Emit(
                 Opcode.Move,
                 reg.Operand,
-                new Operand { Type = OperandType.ImmediateUnsigned, Size = -1, Value = result.IntValue } // TODO Not right
+                Operand.ImmediateSigned(result.IntValue) // TODO Not right
             );
             
             return evalStorage;
@@ -909,7 +911,7 @@ namespace Compiler.CodeGeneration
         {
             var target = expression.Expression.Accept(this);
 
-            var storage = CurrentFunction.AllocateStorage(new CobType(eCobType.Lens, elementType: expression.ElementType));
+            var storage = CurrentFunction.AllocateRegisterStorage(new CobType(eCobType.Lens, elementType: expression.ElementType));
             CurrentFunction.Body.Emit(Opcode.Lens, storage.Operand, target.Operand);
             target.Free();
 
@@ -938,7 +940,7 @@ namespace Compiler.CodeGeneration
             }
             else if (source.Type == eCobType.Lens)
             {
-                storage = CurrentFunction.AllocateStorage(source.Type.ElementType);
+                storage = CurrentFunction.AllocateRegisterStorage(source.Type.ElementType);
                 CurrentFunction.Body.Emit(
                     Opcode.GetElem,
                     storage.Operand,
@@ -966,8 +968,8 @@ namespace Compiler.CodeGeneration
             var typeIdx = TupleTypes.IndexOf(tupleType);
             var cobType = new CobType(eCobType.Tuple, tag: tupleType);
 
-            var storage = CurrentFunction.AllocateStorage(cobType);
-            CurrentFunction.Body.Emit(Opcode.New, storage.Operand, new Operand { Type = OperandType.TupleType, Value = typeIdx });
+            var storage = CurrentFunction.AllocateRegisterStorage(cobType);
+            CurrentFunction.Body.Emit(Opcode.New, storage.Operand, Operand.TupleType(typeIdx));
 
             for (var i = 0; i < expression.Arguments.Count; ++i)
             {
@@ -975,7 +977,7 @@ namespace Compiler.CodeGeneration
                 CurrentFunction.Body.Emit(
                     Opcode.SetField,
                     storage.Operand,
-                    new Operand { Type = OperandType.ImmediateUnsigned, Value = i },
+                    Operand.ImmediateUnsigned(i),
                     argStorage.Operand
                 );
             }
@@ -996,8 +998,8 @@ namespace Compiler.CodeGeneration
             var typeIdx = StructTypes.IndexOf(structType);
             var cobType = new CobType(eCobType.Struct, tag: structType);
 
-            var storage = CurrentFunction.AllocateStorage(cobType);
-            CurrentFunction.Body.Emit(Opcode.New, storage.Operand, new Operand { Type = OperandType.StructType, Value = typeIdx });
+            var storage = CurrentFunction.AllocateRegisterStorage(cobType);
+            CurrentFunction.Body.Emit(Opcode.New, storage.Operand, Operand.StructType(typeIdx));
 
             if (expression.Assignments != null)
             {
@@ -1014,15 +1016,18 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(NumberLiteralExpression expression)
         {
-            return CurrentFunction.AllocateStorage(
+            return new Storage(
                 new CobType(expression.Type, expression.BitSize),
-                expression.LongValue
+                Operand.ImmediateSigned(expression.LongValue)
             );
         }
 
         public Storage? Visit(BooleanLiteralExpression expression)
         {
-            return CurrentFunction.AllocateStorage(CobType.Boolean, expression.Value ? 1 : 0);
+            return new Storage(
+                CobType.Boolean,
+                Operand.ImmediateUnsigned(expression.Value ? 1 : 0)
+            );
         }
 
         public Storage? Visit(StringLiteralExpression expression)
@@ -1037,13 +1042,8 @@ namespace Compiler.CodeGeneration
             var idx = Globals.IndexOf(global);
             
             return new Storage(
-                CurrentFunction,
-                new Operand
-                {
-                    Type = OperandType.Global,
-                    Value = idx
-                },
-                CobType.String
+                CobType.String,
+                Operand.Global(idx)
             );
         }
 

@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Reflection.Emit;
 
 namespace Compiler.CodeGeneration
 {
@@ -158,14 +159,8 @@ namespace Compiler.CodeGeneration
                 var idx = compiler.Globals.IndexOf(global);
                 var type = compiler.Globals[idx];
                 return new Storage(
-                    null,
-                    new Operand
-                    {
-                        Type = OperandType.Global,
-                        Value = idx,
-                        Size = type.Type.Size
-                    },
-                    type.Type
+                    type.Type,
+                    Operand.Global(idx)
                 );
             }
 
@@ -174,13 +169,8 @@ namespace Compiler.CodeGeneration
             {
                 var idx = compiler.Functions.IndexOf(function);
                 return new Storage(
-                    null,
-                    new Operand
-                    {
-                        Type = OperandType.Function,
-                        Value = idx
-                    },
-                    new CobType(eCobType.Function, tag: compiler.Functions[idx])
+                    new CobType(eCobType.Function, tag: compiler.Functions[idx]),
+                    Operand.Function(idx)
                 );
             }
 
@@ -188,9 +178,8 @@ namespace Compiler.CodeGeneration
             if (symbol is Module module)
             {
                 return new Storage(
-                    null,
-                    Operand.None,
-                    new CobType(eCobType.Module, tag: module)
+                    new CobType(eCobType.Module, tag: module),
+                    Operand.None
                 );
             }
 
@@ -198,9 +187,8 @@ namespace Compiler.CodeGeneration
             if (symbol is TupleType tupleType)
             {
                 return new Storage(
-                    null,
-                    Operand.None,
-                    new CobType(eCobType.Tuple, tag: tupleType)
+                    new CobType(eCobType.Tuple, tag: tupleType),
+                    Operand.None
                 );
             }
 
@@ -208,9 +196,8 @@ namespace Compiler.CodeGeneration
             if (symbol is StructType structType)
             {
                 return new Storage(
-                    null,
-                    Operand.None,
-                    new CobType(eCobType.Struct, tag: structType)
+                    new CobType(eCobType.Struct, tag: structType),
+                    Operand.None
                 );
             }
 
@@ -224,12 +211,7 @@ namespace Compiler.CodeGeneration
                 var idx = compiler.Globals.IndexOf(global);
                 compiler.CurrentFunction.Body.Emit(
                     Opcode.Move,
-                    new Operand
-                    {
-                        Type = OperandType.Global,
-                        Value = idx,
-                        Size = global.Type.Size
-                    },
+                    Operand.Global(idx),
                     compiler.AssignmentRHS.Operand
                 );
                 return true;

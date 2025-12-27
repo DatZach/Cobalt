@@ -88,7 +88,7 @@
             instructions.Add(new Instruction
             {
                 Opcode = opcode,
-                A = new Operand { Type = OperandType.Label, Size = -1, Value = label.Index }
+                A = Operand.Label(label.Index)
             });
         }
 
@@ -98,7 +98,7 @@
             {
                 Opcode = opcode,
                 A = oprA,
-                B = new Operand { Type = OperandType.Label, Size = -1, Value = label.Index }
+                B = Operand.Label(label.Index)
             });
         }
     }

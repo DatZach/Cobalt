@@ -333,11 +333,7 @@ namespace Compiler.CodeGeneration.Platform
                             for (int j = inst.D!.Count - 1; j >= 0; --j)
                             {
                                 var operand = inst.D[j];
-                                EmitMove(
-                                    buffer,
-                                    new Operand { Type = OperandType.Argument, Value = j, Size = BusWidth },
-                                    operand
-                                );
+                                EmitMove(buffer, Operand.Argument(j), operand);
                             }
                         }
 
@@ -537,8 +533,8 @@ namespace Compiler.CodeGeneration.Platform
         {
             var aType = GetOperandDataType(a);
             var bType = GetOperandDataType(b);
-            var aSize = a.Size == -1 ? BusWidth : a.Size;
-            var bSize = b.Size == -1 ? BusWidth : b.Size;
+            var aSize = aType.Size; // TODO a.Size == -1 ? BusWidth : a.Size;
+            var bSize = bType.Size; // TODO b.Size == -1 ? BusWidth : b.Size;
 
             var aIsMemory = (a.Type is OperandType.Local or OperandType.Global or OperandType.ImmediateFloat)
                          || (a.Type == OperandType.Argument && a.Value >= parameterRegisters.Length);
@@ -614,7 +610,7 @@ namespace Compiler.CodeGeneration.Platform
                     {
                         bSize = Math.Min(aSize, bSize);
                         //aScratchSize = bSize;
-                        bOperandString = GetOperandString(b with { Size = bSize });
+                        bOperandString = GetOperandString(b); // TODO with { Size = bSize });
                     }
 
                     if (aSize == 64 && bSize < 64)
@@ -638,7 +634,7 @@ namespace Compiler.CodeGeneration.Platform
                     {
                         bSize = Math.Min(aSize, bSize);
                         bScratchSize = bSize;
-                        bOperandString = GetOperandString(b with { Size = bSize });
+                        bOperandString = GetOperandString(b); // TODO with { Size = bSize });
                     }
 
                     if (aSize == 64 && bSize < 64)
@@ -651,7 +647,7 @@ namespace Compiler.CodeGeneration.Platform
                         //{
                         aSize = 32;
                         aScratchSize = aSize;
-                        aOperandString = GetOperandString(a with { Size = aSize });
+                        aOperandString = GetOperandString(a); // TODO with { Size = aSize });
                         //}
                     }
 
@@ -736,11 +732,11 @@ namespace Compiler.CodeGeneration.Platform
             switch (operand.Type)
             {
                 case OperandType.ImmediateSigned:
-                    return new CobType(eCobType.Signed, operand.Size);
+                    return new CobType(eCobType.Signed, BusWidth); // TODO operand.Size);
                 case OperandType.ImmediateUnsigned:
-                    return new CobType(eCobType.Unsigned, operand.Size);
+                    return new CobType(eCobType.Unsigned, BusWidth); // TODO operand.Size);
                 case OperandType.ImmediateFloat:
-                    return new CobType(eCobType.Float, operand.Size);
+                    return new CobType(eCobType.Float, BusWidth); // TODO operand.Size);
                 case OperandType.Register:
                     return registerTypes[operand.Value]; //new CobType(eCobType.Unsigned, operand.Size);
                 case OperandType.Argument:
@@ -805,7 +801,7 @@ namespace Compiler.CodeGeneration.Platform
                     if (type == eCobType.Float)
                         return GetFloatRegisterName((int)operand.Value);
                     else
-                        return GetIntegerRegisterName((int)operand.Value, operand.Size);
+                        return GetIntegerRegisterName((int)operand.Value, BusWidth); // TODO operand.Size);
                 }
                 case OperandType.Argument:
                 {
@@ -817,13 +813,13 @@ namespace Compiler.CodeGeneration.Platform
                         if (type == eCobType.Float)
                             return GetFloatRegisterName((int)operand.Value);
                         else
-                            return GetIntegerRegisterName(parameterRegisters[(int)operand.Value], operand.Size);
+                            return GetIntegerRegisterName(parameterRegisters[(int)operand.Value], BusWidth); // TODO operand.Size);
                     }
 
-                    return $"{GetWidthName(operand.Size)} [rsp + {stackSpace + operand.Value * 8}]"; // + 8 ?
+                    return $"{GetWidthName(BusWidth /* TODO operand.Size */)} [rsp + {stackSpace + operand.Value * 8}]"; // + 8 ?
                 }
                 case OperandType.Local:
-                    return $"{GetWidthName(operand.Size)} [rsp + {callReserve + operand.Value * 8}]";
+                    return $"{GetWidthName(BusWidth /* TODO operand.Size */)} [rsp + {callReserve + operand.Value * 8}]";
                 case OperandType.Global:
                 {
                     var global = compiler.Globals[(int)operand.Value];

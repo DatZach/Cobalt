@@ -95,12 +95,12 @@ namespace Compiler.CodeGeneration
                 else
                 {
                     var @this = compiler.BinOpLHS == null ? Operand.This : compiler.BinOpLHS.Operand;
-                    var storage = compiler.CurrentFunction.AllocateStorage(fieldType);
+                    var storage = compiler.CurrentFunction.AllocateRegisterStorage(fieldType);
                     compiler.CurrentFunction.Body.Emit(
                         Opcode.GetField,
                         storage.Operand,
                         @this,
-                        new Operand { Type = OperandType.ImmediateUnsigned, Value = idx }
+                        Operand.ImmediateUnsigned(idx)
                     );
                     return storage;
                 }
@@ -110,13 +110,8 @@ namespace Compiler.CodeGeneration
             {
                 var idx = compiler.Functions.IndexOf(function);
                 return new Storage(
-                    null,
-                    new Operand
-                    {
-                        Type = OperandType.Function,
-                        Value = idx
-                    },
-                    new CobType(eCobType.Function, tag: function)
+                    new CobType(eCobType.Function, tag: function),
+                    Operand.Function(idx)
                 );
             }
 
@@ -133,7 +128,7 @@ namespace Compiler.CodeGeneration
                 compiler.CurrentFunction.Body.Emit(
                     Opcode.SetField,
                     @this,
-                    new Operand { Type = OperandType.ImmediateUnsigned, Value = idx },
+                    Operand.ImmediateUnsigned(idx),
                     compiler.AssignmentRHS.Operand
                 );
                 return true;

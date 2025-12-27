@@ -157,12 +157,6 @@ namespace Compiler.CodeGeneration
             return HashCode.Combine((int)Type, Size, ElementType, Tag);
         }
 
-        //public static bool operator ==(CobType left, CobType right)
-        //{
-        //    return left.Type == right.Type && left.Size == right.Size;
-        //}
-
-        // TODO Needed?
         public static bool operator ==(CobType left, eCobType right)
         {
             return EqualsType(left, right);
@@ -355,12 +349,12 @@ namespace Compiler.CodeGeneration
         {
             if (symbol is CobField field && field.Name == "Length")
             {
-                var storage = Compiler.CurrentFunction.AllocateStorage(CobType.U64);
+                var storage = Compiler.CurrentFunction.AllocateRegisterStorage(CobType.U64);
                 Compiler.CurrentFunction.Body.Emit(
                     Opcode.GetField,
                     storage.Operand,
                     Compiler.BinOpLHS.Operand,
-                    new Operand { Type = OperandType.ImmediateUnsigned, Value = 0 }
+                    Operand.ImmediateUnsigned(0)
                 );
 
                 return storage;
