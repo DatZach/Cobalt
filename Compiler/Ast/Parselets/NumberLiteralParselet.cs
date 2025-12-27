@@ -2,6 +2,7 @@
 using Compiler.Ast.Expressions;
 using System.Globalization;
 using Compiler.CodeGeneration;
+using Compiler.CodeGeneration.Artifacts;
 
 namespace Compiler.Ast.Parselets
 {

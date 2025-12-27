@@ -2,6 +2,7 @@
 using Compiler.Ast.Expressions;
 using Compiler.Ast.Expressions.Statements;
 using Compiler.Ast.Visitors;
+using Compiler.CodeGeneration.Artifacts;
 using Compiler.Lexer;
 using Compiler.Utility;
 
@@ -157,7 +158,35 @@ namespace Compiler.CodeGeneration
             if (Phase != DeclPhase.Modules)
                 return Unit.Value;
 
-            compiler.Artifacts.Add(expression);
+            var containerParameters = new Dictionary<string, Variable>();
+            if (expression.ContainerParameters != null)
+            {
+                foreach (var containerParameter in expression.ContainerParameters)
+                {
+                    if (containerParameter.Operator != TokenType.Assign)
+                    {
+                        messages.Add(Message.UnexpectedToken2, expression, TokenType.Assign, containerParameter.Operator);
+                        continue;
+                    }
+
+                    if (containerParameter.Left is not IdentifierExpression lhs)
+                    {
+                        messages.Add(Message.UnexpectedToken2, expression, TokenType.Identifier, containerParameter.Left);
+                        continue;
+                    }
+
+                    var rhs = new Variable(lhs.Value, CobType.None);
+                    containerParameters.Add(lhs.Value, rhs);
+                }
+            }
+
+            compiler.ArtifactDirectives.Add(new ArtifactDirective
+            {
+                Container = expression.Container,
+                Architecture = expression.Architecture,
+                Filename = expression.Filename,
+                ContainerConfiguration = containerParameters
+            });
 
             return Unit.Value;
         }

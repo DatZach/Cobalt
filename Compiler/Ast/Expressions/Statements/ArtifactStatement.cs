@@ -8,25 +8,25 @@ namespace Compiler.Ast.Expressions.Statements
     {
         public string Container { get; } // pe, joe
 
-        public IReadOnlyList<string> ContainerParameters { get; } // +gui, +console
-
-        public string Platform { get; } // x86, x86_64, cobalt
+        public string Architecture { get; } // x86, x86_64, cobalt
 
         public string? Filename { get; }
+
+        public IReadOnlyList<BinaryOperatorExpression>? ContainerParameters { get; }
 
         public ArtifactStatement(
             Token token,
             string container,
-            IReadOnlyList<string> containerParameters,
-            string platform,
-            string? filename
+            string architecture,
+            string? filename,
+            IReadOnlyList<BinaryOperatorExpression>? containerParameters
         )
             : base(token)
         {
             Container = container;
-            ContainerParameters = containerParameters;
-            Platform = platform;
+            Architecture = architecture;
             Filename = filename;
+            ContainerParameters = containerParameters;
         }
 
         [DebuggerStepThrough]

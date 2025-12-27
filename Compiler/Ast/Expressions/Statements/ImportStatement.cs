@@ -2,6 +2,7 @@
 using Compiler.Ast.Visitors;
 using System.Diagnostics;
 using Compiler.CodeGeneration;
+using Compiler.CodeGeneration.Artifacts;
 
 namespace Compiler.Ast.Expressions.Statements
 {

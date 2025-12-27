@@ -1,7 +1,7 @@
 ﻿using System.Data;
 using System.Diagnostics;
 using System.Text;
-using Compiler.Ast.Expressions.Statements;
+using Compiler.CodeGeneration.Artifacts;
 
 namespace Compiler.CodeGeneration.Platform
 {
@@ -11,7 +11,7 @@ namespace Compiler.CodeGeneration.Platform
 
         private const int BusWidth = 64;
 
-        public override IReadOnlyList<string> SupportedPlatforms => new[] { "x86_64" };
+        public override IReadOnlyList<string> SupportedArchitectures => new[] { "x86_64" };
 
         public override string DefaultExtension => "exe";
 
@@ -21,28 +21,28 @@ namespace Compiler.CodeGeneration.Platform
         private readonly CobType[] argumentTypes = new CobType[32];
         private CobType[] localTypes = null;
 
-        private Compiler compiler;
+        private Artifact artifact;
 
-        public override void Assemble(Compiler compiler, ArtifactStatement artifact, string outputFilename)
+        public override void Assemble(Artifact artifact, ArtifactDirective directive, string outputFilename)
         {
-            this.compiler = compiler;
+            this.artifact = artifact;
 
             var buffer = new MachineCodeBuffer();
-            EmitProgram(buffer, artifact, outputFilename);
+            EmitProgram(buffer, directive, outputFilename);
             Assemble(buffer, outputFilename);
         }
 
-        private void EmitProgram(MachineCodeBuffer buffer, ArtifactStatement artifact, string outputFilename)
+        private void EmitProgram(MachineCodeBuffer buffer, ArtifactDirective directive, string outputFilename)
         {
-            var hasEntryPoint = compiler.EntryFunction != null;
+            var hasEntryPoint = artifact.EntryFunction != null;
             
             // Preamble
             buffer.Emit("format ");
-            buffer.Emit(artifact.Container);
+            buffer.Emit(directive.Container);
             buffer.Emit("64 ");
-            if (artifact.ContainerParameters.Count > 0)
-                buffer.Emit(string.Join(' ', artifact.ContainerParameters));
-            else
+            //if (directive.ContainerParameters.Count > 0)
+            //    buffer.Emit(string.Join(' ', directive.ContainerParameters));
+            //else
                 buffer.Emit("console");
             buffer.EmitLine("");
             if (hasEntryPoint) buffer.EmitLine("entry EntryPoint");
@@ -59,7 +59,7 @@ namespace Compiler.CodeGeneration.Platform
                 buffer.EmitLine("    sub     rsp, 32");
                 buffer.EmitLine("    mov     rcx, __UnhandledExceptionHandler");
                 buffer.EmitLine("    call    [SetUnhandledExceptionFilter]");
-                buffer.EmitLine("    call    " + compiler.EntryFunction!.FullyQualifiedName);
+                buffer.EmitLine("    call    " + artifact.EntryFunction!.FullyQualifiedName);
                 buffer.EmitLine("    xor     rcx, rcx");
                 buffer.EmitLine("    call    [ExitProcess]");
                 buffer.EmitLine("    add     rsp, 32");
@@ -75,21 +75,21 @@ namespace Compiler.CodeGeneration.Platform
                 buffer.EmitLine("    add     rsp, 32");
                 buffer.EmitLine("    ret");
 
-                compiler.Imports.Add(new Import
+                artifact.Imports.Add(new Import
                 {
                     Library = "kernel32",
                     SymbolName = "SetUnhandledExceptionFilter"
                 });
-                compiler.Imports.Add(new Import
+                artifact.Imports.Add(new Import
                 {
                     Library = "kernel32",
                     SymbolName = "ExitProcess"
                 });
             }
 
-            for (var i = 0; i < compiler.Functions.Count; i++)
+            for (var i = 0; i < artifact.Functions.Count; i++)
             {
-                var f = compiler.Functions[i];
+                var f = artifact.Functions[i];
                 if (f.NativeImport != null)
                     continue;
 
@@ -175,9 +175,9 @@ namespace Compiler.CodeGeneration.Platform
             // Readonly Data
             //buffer.EmitLine("section '.rdata' data readable");
             buffer.EmitLine("section '.data' data readable writeable");
-            for (var i = 0; i < compiler.Globals.Count; i++)
+            for (var i = 0; i < artifact.Globals.Count; i++)
             {
-                var global = compiler.Globals[i];
+                var global = artifact.Globals[i];
                 switch (global.Type.Type)
                 {
                     case eCobType.Signed:
@@ -243,7 +243,7 @@ namespace Compiler.CodeGeneration.Platform
             // Imports
             buffer.EmitLine("section '.idata' data readable import");
 
-            var libraries = compiler.Imports.Where(x => x.SymbolName != null)
+            var libraries = artifact.Imports.Where(x => x.SymbolName != null)
                                             .Select(x => x.Library)
                                             .Distinct()
                                             .ToList();
@@ -269,9 +269,9 @@ namespace Compiler.CodeGeneration.Platform
             foreach (var library in libraries)
             {
                 buffer.Emit($"import {library}");
-                for (var i = 0; i < compiler.Imports.Count; i++)
+                for (var i = 0; i < artifact.Imports.Count; i++)
                 {
-                    var import = compiler.Imports[i];
+                    var import = artifact.Imports[i];
                     if (import.Library != library || import.SymbolName == null)
                         continue;
 
@@ -283,17 +283,17 @@ namespace Compiler.CodeGeneration.Platform
             }
             
             // Exports
-            if ((!hasEntryPoint && compiler.Exports.Count > 0)
-            ||  (hasEntryPoint && compiler.Exports.Count > 1))
+            if ((!hasEntryPoint && artifact.Exports.Count > 0)
+            ||  (hasEntryPoint && artifact.Exports.Count > 1))
             {
                 buffer.EmitLine("section '.edata' export data readable");
                 buffer.EmitLine($"export '{outputFilename}', \\");
 
                 int i = 0;
-                foreach (var export in compiler.Exports)
+                foreach (var export in artifact.Exports)
                 {
                     buffer.Emit($"    {export.Function.Name}, '{export.Function.FullyQualifiedName}'");
-                    if (i++ != compiler.Exports.Count - 1)
+                    if (i++ != artifact.Exports.Count - 1)
                         buffer.EmitLine(", \\");
                 }
 
@@ -744,7 +744,7 @@ namespace Compiler.CodeGeneration.Platform
                 case OperandType.Local:
                     return localTypes[operand.Value];
                 case OperandType.Global:
-                    return compiler.Globals[(int)operand.Value].Type;
+                    return artifact.Globals[(int)operand.Value].Type;
                 default:
                     return CobType.None;
             }
@@ -822,7 +822,7 @@ namespace Compiler.CodeGeneration.Platform
                     return $"{GetWidthName(BusWidth /* TODO operand.Size */)} [rsp + {callReserve + operand.Value * 8}]";
                 case OperandType.Global:
                 {
-                    var global = compiler.Globals[(int)operand.Value];
+                    var global = artifact.Globals[(int)operand.Value];
                     if (global.Type == eCobType.Function)
                     {
                         if (global.Type.TagFunction.NativeImport != null)

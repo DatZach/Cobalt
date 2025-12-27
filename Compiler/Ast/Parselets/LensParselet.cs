@@ -1,5 +1,6 @@
 ﻿using Compiler.Ast.Expressions;
 using Compiler.CodeGeneration;
+using Compiler.CodeGeneration.Artifacts;
 using Compiler.Lexer;
 
 namespace Compiler.Ast.Parselets

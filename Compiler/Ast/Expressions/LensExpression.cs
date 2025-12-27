@@ -2,6 +2,7 @@
 using Compiler.CodeGeneration;
 using Compiler.Lexer;
 using System.Diagnostics;
+using Compiler.CodeGeneration.Artifacts;
 
 namespace Compiler.Ast.Expressions
 {

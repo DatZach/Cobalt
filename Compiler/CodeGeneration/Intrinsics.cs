@@ -1,4 +1,6 @@
-﻿namespace Compiler.CodeGeneration
+﻿using Compiler.CodeGeneration.Artifacts;
+
+namespace Compiler.CodeGeneration
 {
     internal static class Intrinsics
     {

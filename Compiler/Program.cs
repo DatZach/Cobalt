@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using Compiler.Ast;
 using Compiler.CodeGeneration;
+using Compiler.CodeGeneration.Artifacts;
 using Compiler.Interpreter;
 using Compiler.Lexer;
 
@@ -31,7 +32,7 @@ namespace Compiler
             EstablishEnvironment();
 
             var messages = new MessageCollection();
-            CodeGeneration.Compiler? compiler;
+            Artifact? artifact;
 
             swCompiler = Stopwatch.StartNew();
             try
@@ -39,7 +40,7 @@ namespace Compiler
                 var source = PreambleSource + FileSystem.ReadAllText(Config.EntrySourceFilePath);
                 var tokens = Tokenizer.Tokenize(source, Config.EntrySourceFilePath, messages);
                 var ast = Parser.Parse(tokens, messages);
-                compiler = CodeGeneration.Compiler.Compile(ast, messages);
+                artifact = CodeGeneration.Compiler.Compile(ast, messages);
             }
             #if !DEBUG
             catch (Exception ex)
@@ -53,7 +54,7 @@ namespace Compiler
                 swCompiler.Stop();
             }
 
-            if (compiler == null)
+            if (artifact == null)
             {
                 messages.Print();
                 return;
@@ -66,22 +67,22 @@ namespace Compiler
                     return;
             }
 
-            ArtifactFactory.Assemble(compiler);
+            ArtifactFactory.Assemble(artifact);
 
-            PrintCompilerState(compiler);
+            PrintCompilerState(artifact);
             PrintCompilerStatistics();
             
-            if (compiler.Artifacts.Count == 0)
+            if (artifact.ArtifactDirectives.Count == 0)
             {
                 swRuntime = Stopwatch.StartNew();
-                using var vm = new VirtualMachine(compiler);
-                if (compiler.EntryFunction == null)
+                using var vm = new VirtualMachine(artifact);
+                if (artifact.EntryFunction == null)
                 {
                     Console.WriteLine("Aborting. No artifact specified, and no Main function exported.");
                     return;
                 }
 
-                vm.ExecuteFunction(compiler.EntryFunction);
+                vm.ExecuteFunction(artifact.EntryFunction);
                 swRuntime.Stop();
 
                 PrintRuntimeStatistics();
@@ -97,50 +98,50 @@ namespace Compiler
             PreambleSource = Config.PreambleSource ?? $"import Library;{Environment.NewLine}{Environment.NewLine}";
         }
 
-        private static void PrintCompilerState(CodeGeneration.Compiler compiler)
+        private static void PrintCompilerState(Artifact artifact)
         {
             if (!Config.AssemblyVerboseOutput)
                 return;
 
             Console.WriteLine("Artifacts");
-            foreach (var artifact in compiler.Artifacts)
-                Console.WriteLine($"\t{artifact}");
+            foreach (var directive in artifact.ArtifactDirectives)
+                Console.WriteLine($"\t{directive}");
             Console.WriteLine();
 
             Console.WriteLine("Imports");
-            foreach (var import in compiler.Imports)
+            foreach (var import in artifact.Imports)
                 Console.WriteLine($"\t{import.Library} {import.SymbolName}");
             Console.WriteLine();
 
             Console.WriteLine("Exports");
-            foreach (var export in compiler.Exports)
+            foreach (var export in artifact.Exports)
                 Console.WriteLine($"\t{export}");
             Console.WriteLine();
 
             Console.WriteLine("Functions");
-            for (var i = 0; i < compiler.Functions.Count; ++i)
+            for (var i = 0; i < artifact.Functions.Count; ++i)
             {
-                var function = compiler.Functions[i];
+                var function = artifact.Functions[i];
                 Console.WriteLine($"\t{i}\t{function.FullyQualifiedName}");
             }
 
             Console.WriteLine();
 
             Console.WriteLine("Globals");
-            for (var i = 0; i < compiler.Globals.Count; i++)
+            for (var i = 0; i < artifact.Globals.Count; i++)
             {
-                var global = compiler.Globals[i];
+                var global = artifact.Globals[i];
                 Console.WriteLine($"\t{i}\t{global}");
             }
 
             Console.WriteLine();
 
             Console.WriteLine("Modules");
-            foreach (var module in compiler.Modules)
+            foreach (var module in artifact.Modules)
                 Console.WriteLine($"\t{module.Name}");
 
             Console.WriteLine("Functions");
-            foreach (var function in compiler.Functions)
+            foreach (var function in artifact.Functions)
             {
                 Console.WriteLine($"\t{function.FullyQualifiedName} -> {function.ReturnType}; .locals = {function.Locals.Count}; .cconv = {function.CallingConvention}");
                 if (function.Body.Instructions.Count == 0)

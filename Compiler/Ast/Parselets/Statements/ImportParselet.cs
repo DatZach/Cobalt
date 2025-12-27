@@ -3,6 +3,7 @@ using Compiler.Lexer;
 using Compiler.Ast.Expressions;
 using Compiler.Ast.Expressions.Statements;
 using Compiler.CodeGeneration;
+using Compiler.CodeGeneration.Artifacts;
 
 namespace Compiler.Ast.Parselets.Statements
 {

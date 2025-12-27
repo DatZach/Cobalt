@@ -6,34 +6,31 @@ using Compiler.Interpreter;
 using Compiler.Lexer;
 using System.Diagnostics;
 using System.Text;
+using Compiler.CodeGeneration.Artifacts;
 
 namespace Compiler.CodeGeneration
 {
     internal sealed class Compiler : IExpressionVisitor<Storage?>
     {
-        // TODO "Artifact" class which contains the resulting compiled code
+        public List<ArtifactDirective> ArtifactDirectives => artifact.ArtifactDirectives;
 
-        public List<ArtifactStatement> Artifacts { get; }
+        public List<Import> Imports => artifact.Imports;
 
-        public List<Import> Imports { get; }
+        public List<Export> Exports => artifact.Exports;
 
-        public List<Export> Exports { get; }
+        public List<Module> Modules => artifact.Modules;
 
-        public List<Module> Modules { get; }
+        public List<TupleType> TupleTypes => artifact.TupleTypes;
 
-        public List<TupleType> TupleTypes { get; }
+        public List<StructType> StructTypes => artifact.StructTypes;
 
-        public List<StructType> StructTypes { get; }
+        public List<Function> Functions => artifact.Functions;
 
-        public List<Function> Functions { get; }
-
-        public List<CobVariable> Globals { get; }
+        public List<Variable> Globals => artifact.Globals;
 
         public List<ScriptExpression> Scripts { get; }
 
         public Module RootModule { get; }
-
-        public Function? EntryFunction { get; private set; }
 
         public IScopeContext CurrentContext => contextStack.Peek();
 
@@ -43,18 +40,14 @@ namespace Compiler.CodeGeneration
 
         private readonly Stack<IScopeContext> contextStack;
         private readonly Stack<LoopContext> loopStack;
+        private readonly Artifact artifact;
         private readonly MessageCollection messages;
 
-        private Compiler(MessageCollection messages)
+        private Compiler(Artifact artifact, MessageCollection messages)
         {
-            Artifacts = new List<ArtifactStatement>();
-            Imports = new List<Import>();
-            Exports = new List<Export>();
-            Modules = new List<Module>();
-            TupleTypes = new List<TupleType>();
-            StructTypes = new List<StructType>();
-            Functions = new List<Function>();
-            Globals = new List<CobVariable>();
+            this.artifact = artifact;
+            this.messages = messages;
+
             Scripts = new List<ScriptExpression>();
             RootModule = new Module(null, null, this);
 
@@ -62,8 +55,6 @@ namespace Compiler.CodeGeneration
             loopStack = new Stack<LoopContext>();
 
             Modules.Add(RootModule);
-
-            this.messages = messages;
         }
 
         public Storage? Visit(ScriptExpression expression)
@@ -440,11 +431,11 @@ namespace Compiler.CodeGeneration
             var value = expression.Expression.Accept(this);
             if (CurrentModule.IsRoot && value != null && value.Type == eCobType.Function)
             {
-                if (EntryFunction != null)
+                if (artifact.EntryFunction != null)
                     messages.Add(Message.CannotRedeclareEntryPoint, expression);
                 else
                 {
-                    EntryFunction = value.Type.TagFunction;
+                    artifact.EntryFunction = value.Type.TagFunction;
                 }
             }
 
@@ -803,7 +794,7 @@ namespace Compiler.CodeGeneration
 
                 if (!target.IsVisibleTo(CurrentFunction))
                     messages.Add(Message.CannotAccessPrivateSymbol, expression, expression.Value, CurrentFunction.Parent.Name);
-                else if (inAssignment && target is CobVariable variable && !variable.Mutable)
+                else if (inAssignment && target is Variable variable && !variable.Mutable)
                     messages.Add(Message.IllegalAssignmentImmutable, expression);
 
                 if (inAssignment)
@@ -894,7 +885,7 @@ namespace Compiler.CodeGeneration
             
             contextStack.Pop();
 
-            using var vm = new VirtualMachine(this);
+            using var vm = new VirtualMachine(artifact);
             var result = vm.ExecuteFunction(function);
 
             var reg = CurrentFunction.AllocateRegisterStorage(function.ReturnType);
@@ -1063,13 +1054,14 @@ namespace Compiler.CodeGeneration
             return !string.IsNullOrEmpty(name) && char.IsUpper(name[0]);
         }
 
-        public static Compiler Compile(ScriptExpression ast, MessageCollection messages)
+        public static Artifact Compile(ScriptExpression ast, MessageCollection messages)
         {
             try
             {
                 stopwatch.Start();
-                
-                var compiler = new Compiler(messages);
+
+                var artifact = new Artifact();
+                var compiler = new Compiler(artifact, messages);
 
                 // PASS 0 - Forward Declarations
                 Intrinsics.InitializeForPass0(compiler);
@@ -1085,7 +1077,7 @@ namespace Compiler.CodeGeneration
                 
                 ast.Accept(compiler);
                 
-                return compiler;
+                return artifact;
             }
             finally
             {

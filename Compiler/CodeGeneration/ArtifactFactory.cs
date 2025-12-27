@@ -1,15 +1,15 @@
 ﻿using System.Diagnostics;
-using Compiler.Ast.Expressions.Statements;
+using Compiler.CodeGeneration.Artifacts;
 
 namespace Compiler.CodeGeneration
 {
     internal static class ArtifactFactory
     {
-        private static readonly Dictionary<string, ArtifactAssembler> platforms;
+        private static readonly Dictionary<string, ArtifactAssembler> architectures;
 
         static ArtifactFactory()
         {
-            platforms = new Dictionary<string, ArtifactAssembler>();
+            architectures = new Dictionary<string, ArtifactAssembler>();
 
             var asm = typeof(ArtifactFactory).Assembly;
 
@@ -18,26 +18,26 @@ namespace Compiler.CodeGeneration
             foreach (var type in types)
             {
                 var assembler = (ArtifactAssembler)Activator.CreateInstance(type);
-                foreach (var platform in assembler.SupportedPlatforms)
-                    platforms.Add(platform, assembler);
+                foreach (var architecture in assembler.SupportedArchitectures)
+                    architectures.Add(architecture, assembler);
             }
         }
 
-        public static void Assemble(Compiler compiler)
+        public static void Assemble(Artifact artifact)
         {
             try
             {
                 stopwatch.Start();
-                foreach (var artifact in compiler.Artifacts)
+                foreach (var directive in artifact.ArtifactDirectives)
                 {
-                    if (!platforms.TryGetValue(artifact.Platform, out var platform))
-                        throw new Exception($"Unsupported artifact platform '{artifact.Platform}'");
+                    if (!architectures.TryGetValue(directive.Architecture, out var architecture))
+                        throw new Exception($"Unsupported artifact architecture '{directive.Architecture}'");
 
-                    var outputFilename = artifact.Filename != null
-                                       ? Path.Combine(Program.SourceDirectory, artifact.Filename)
-                                       : Path.ChangeExtension(Program.Config.EntrySourceFilePath, platform.DefaultExtension);
+                    var outputFilename = directive.Filename != null
+                                       ? Path.Combine(Program.SourceDirectory, directive.Filename)
+                                       : Path.ChangeExtension(Program.Config.EntrySourceFilePath, architecture.DefaultExtension);
 
-                    platform.Assemble(compiler, artifact, outputFilename);
+                    architecture.Assemble(artifact, directive, outputFilename);
                 }
             }
             finally
@@ -52,10 +52,10 @@ namespace Compiler.CodeGeneration
 
     internal abstract class ArtifactAssembler
     {
-        public abstract IReadOnlyList<string> SupportedPlatforms { get; }
+        public abstract IReadOnlyList<string> SupportedArchitectures { get; }
 
         public abstract string DefaultExtension { get; }
         
-        public abstract void Assemble(Compiler compiler, ArtifactStatement artifact, string outputFilename);
+        public abstract void Assemble(Artifact artifact, ArtifactDirective directive, string outputFilename);
     }
 }

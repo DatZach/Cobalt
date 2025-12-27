@@ -1,7 +1,8 @@
 ﻿using System.Numerics;
-using Compiler.CodeGeneration;
 using System.Reflection;
 using System.Text;
+using Compiler.CodeGeneration;
+using Compiler.CodeGeneration.Artifacts;
 
 namespace Compiler.Interpreter
 {
@@ -10,19 +11,19 @@ namespace Compiler.Interpreter
         public const int MaxRegisters = 32;
 
         private readonly NativeLibrariesProxy nativeLibrariesProxy;
-        private readonly CodeGeneration.Compiler compiler;
+        private readonly Artifact artifact;
 
-        public VirtualMachine(CodeGeneration.Compiler compiler)
+        public VirtualMachine(Artifact artifact)
         {
-            this.compiler = compiler ?? throw new ArgumentNullException(nameof(compiler));
+            this.artifact = artifact ?? throw new ArgumentNullException(nameof(artifact));
             
-            nativeLibrariesProxy = NativeLibrariesProxy.FromCompiler(compiler);
+            nativeLibrariesProxy = NativeLibrariesProxy.FromArtifact(artifact);
         }
         
-        public CobVariable? ExecuteFunction(Function function, IList<CobVariable>? parameters = null)
+        public Variable? ExecuteFunction(Function function, IList<Variable>? parameters = null)
         {
-            var locals = new CobVariable[function.Locals.Count];
-            var registers = new CobVariable[MaxRegisters];
+            var locals = new Variable[function.Locals.Count];
+            var registers = new Variable[MaxRegisters];
 
             var instructions = function.Body.Instructions;
             for (int ip = 0; ip < instructions.Count; ++ip)
@@ -36,10 +37,10 @@ namespace Compiler.Interpreter
                     {
                         var callee = ReadOperand(inst.A!).Type.TagFunction!;
 
-                        IList<CobVariable>? calleeParameters;
+                        IList<Variable>? calleeParameters;
                         if (callee.Parameters.Count > 0)
                         {
-                            var aCalleeParameters = new CobVariable[callee.Parameters.Count];
+                            var aCalleeParameters = new Variable[callee.Parameters.Count];
                             for (int j = 0; j < aCalleeParameters.Length; ++j)
                             {
                                 var aCalleeParameter = ReadOperand(inst.D![j]);
@@ -75,14 +76,14 @@ namespace Compiler.Interpreter
                     }
                     case Opcode.GetField:
                     {
-                        CobVariable? fieldValue;
+                        Variable? fieldValue;
                         var obj = ReadOperand(inst.B!);
                         var fieldIdx = inst.C!.Value;
                         if (fieldIdx == 0)
                         {
                             // TODO Strings are actually Structs, when implemented in the language this hack can be fixed
                             if (obj.Value is byte[])
-                                fieldValue = new CobVariable("$imm", CobType.U64, false, obj.BufferValue.Length);
+                                fieldValue = new Variable("$imm", CobType.U64, false, obj.BufferValue.Length);
                             else
                                 fieldValue = obj.StructValue[0];
                         }
@@ -102,7 +103,7 @@ namespace Compiler.Interpreter
                     }
                     case Opcode.GetElem:
                     {
-                        CobVariable? elemValue;
+                        Variable? elemValue;
                         var arr = ReadOperand(inst.B!);
                         var idx = ReadOperand(inst.C!);
                         elemValue = arr.ElementAt(idx.IntValue);
@@ -119,7 +120,7 @@ namespace Compiler.Interpreter
                         var src = ReadOperand(inst.B!);
                         WriteOperand(
                             inst.A!,
-                            new CobVariable(
+                            new Variable(
                                 "$lens",
                                 new CobType(eCobType.Lens, elementType: CobType.U8), // TODO Get the correct value!
                                 true
@@ -133,7 +134,7 @@ namespace Compiler.Interpreter
                     case Opcode.New:
                     {
                         var type = ReadOperand(inst.B!).Type;
-                        CobVariable obj;
+                        Variable obj;
                         if (type.Tag is TupleType tupleType)
                             obj = tupleType.ToVariable();
                         else if (type.Tag is StructType structType)
@@ -373,7 +374,7 @@ namespace Compiler.Interpreter
 
             throw new InvalidOperationException("End of buffer without a ret instruction");
 
-            void WriteOperand(Operand operand, CobVariable value)
+            void WriteOperand(Operand operand, Variable value)
             {
                 switch (operand.Type)
                 {
@@ -389,7 +390,7 @@ namespace Compiler.Interpreter
                         locals[(int)operand.Value] = value;
                         break;
                     case OperandType.Global:
-                        compiler.Globals[(int)operand.Value] = value;
+                        artifact.Globals[(int)operand.Value] = value;
                         break;
                     case OperandType.Argument:
                         parameters[(int)operand.Value] = value;
@@ -399,16 +400,16 @@ namespace Compiler.Interpreter
                 }
             }
             
-            CobVariable ReadOperand(Operand operand)
+            Variable ReadOperand(Operand operand)
             {
                 switch (operand.Type)
                 {
                     case OperandType.ImmediateSigned:
-                        return new CobVariable("$imm", CobType.Int, false, operand.Value);
+                        return new Variable("$imm", CobType.Int, false, operand.Value);
                     case OperandType.ImmediateUnsigned:
-                        return new CobVariable("$imm", CobType.UInt, false, operand.Value);
+                        return new Variable("$imm", CobType.UInt, false, operand.Value);
                     case OperandType.ImmediateFloat:
-                        return new CobVariable("$imm", CobType.Float, false, operand.Value);
+                        return new Variable("$imm", CobType.Float, false, operand.Value);
                     case OperandType.Register:
                         return registers[operand.Value];
                     case OperandType.Argument:
@@ -416,22 +417,22 @@ namespace Compiler.Interpreter
                     case OperandType.Local:
                         return locals[(int)operand.Value];
                     case OperandType.Global:
-                        return compiler.Globals[(int)operand.Value];
+                        return artifact.Globals[(int)operand.Value];
                     case OperandType.Function:
                     {
                         //var modIdx = (int)((operand.Value & 0x0FFFFFFF_00000000) >> 32);
                         //var fnIdx  = (int)( operand.Value & 0x00000000_FFFFFFFF);
                         //var function = compiler.Modules[modIdx].Functions[fnIdx];
-                        var function = compiler.Functions[(int)operand.Value];
+                        var function = artifact.Functions[(int)operand.Value];
                         var type = new CobType(eCobType.Function, tag: function);
 
-                        return new CobVariable("$func", type, false) { Value = function };
+                        return new Variable("$func", type, false) { Value = function };
                     }
                     case OperandType.TupleType:
                     {
-                        var tupleType = compiler.TupleTypes[(int)operand.Value];
+                        var tupleType = artifact.TupleTypes[(int)operand.Value];
                         var type = new CobType(eCobType.Tuple, tag: tupleType);
-                        return new CobVariable("$tuple", type, false);
+                        return new Variable("$tuple", type, false);
                     }
                     default:
                         throw new ArgumentOutOfRangeException();
@@ -446,7 +447,7 @@ namespace Compiler.Interpreter
 
         public sealed class NativeLibrariesProxy : IDisposable
         {
-            public delegate int NativeWrapperDelegate(CobVariable[]? variables);
+            public delegate int NativeWrapperDelegate(Variable[]? variables);
 
             private readonly Dictionary<string, NativeLibraryProxy> proxies;
 
@@ -455,7 +456,7 @@ namespace Compiler.Interpreter
                 this.proxies = proxies;
             }
 
-            public CobVariable? Invoke(Import native, IList<CobVariable>? parameters)
+            public Variable? Invoke(Import native, IList<Variable>? parameters)
             {
                 if (native.Function == null)
                     return null;
@@ -474,14 +475,14 @@ namespace Compiler.Interpreter
                 else
                     result = methodDelegate(parameters?.ToArray());
 
-                return new CobVariable("$imm", CobType.U64, false, result); // TODO Proxy more types than integers
+                return new Variable("$imm", CobType.U64, false, result); // TODO Proxy more types than integers
             }
 
-            public static NativeLibrariesProxy FromCompiler(CodeGeneration.Compiler compiler)
+            public static NativeLibrariesProxy FromArtifact(Artifact artifact)
             {
                 var proxies = new Dictionary<string, NativeLibraryProxy>();
 
-                foreach (var import in compiler.Imports)
+                foreach (var import in artifact.Imports)
                 {
                     if (!proxies.TryGetValue(import.Library, out var proxy))
                     {
@@ -495,7 +496,7 @@ namespace Compiler.Interpreter
                     var method = new System.Reflection.Emit.DynamicMethod(
                         $"dynm_{import.SymbolName}",
                         typeof(int),
-                        new [] { typeof(CobVariable[]) },
+                        new [] { typeof(Variable[]) },
                         typeof(NativeLibrariesProxy).Module
                     );
 
@@ -509,11 +510,11 @@ namespace Compiler.Interpreter
                         il.Emit(System.Reflection.Emit.OpCodes.Ldelem_Ref);
                         if (import.Function.Parameters[i].Type == CobType.String)
                         {
-                            il.Emit(System.Reflection.Emit.OpCodes.Callvirt, typeof(CobVariable).GetProperty(nameof(CobVariable.BufferValue))!.GetGetMethod()!);
+                            il.Emit(System.Reflection.Emit.OpCodes.Callvirt, typeof(Variable).GetProperty(nameof(Variable.BufferValue))!.GetGetMethod()!);
                             il.Emit(System.Reflection.Emit.OpCodes.Call, typeof(NativeLibrariesProxy).GetMethod(nameof(NativeLibrariesProxy.GetString))!);
                         }
                         else
-                            il.Emit(System.Reflection.Emit.OpCodes.Callvirt, typeof(CobVariable).GetProperty(nameof(CobVariable.IntValue))!.GetGetMethod()!);
+                            il.Emit(System.Reflection.Emit.OpCodes.Callvirt, typeof(Variable).GetProperty(nameof(Variable.IntValue))!.GetGetMethod()!);
                     }
 
                     il.Emit(System.Reflection.Emit.OpCodes.Ldc_I8, address.ToInt64());
@@ -559,9 +560,9 @@ namespace Compiler.Interpreter
 
     internal static class CobVariableExtensions
     {
-        public static CobVariable ToCobVariable(this long value)
+        public static Variable ToCobVariable(this long value)
         {
-            return new CobVariable("$imm", CobType.U64, false, value);
+            return new Variable("$imm", CobType.U64, false, value);
         }
     }
 }
