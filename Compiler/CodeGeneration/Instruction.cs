@@ -90,6 +90,7 @@
         New,
 
         Call,
+        CallVirt,
         Return,
 
         CmpEQ,

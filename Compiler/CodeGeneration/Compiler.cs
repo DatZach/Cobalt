@@ -785,7 +785,8 @@ namespace Compiler.CodeGeneration
                 operandArguments = null;
             
             // CALL
-            CurrentFunction.Body.Emit(Opcode.Call, functionStorage.Operand, retStorage?.Operand, operandArguments);
+            var opcode = function.Parent is TraitType ? Opcode.CallVirt : Opcode.Call;
+            CurrentFunction.Body.Emit(opcode, functionStorage.Operand, retStorage?.Operand, operandArguments);
 
             // CLEANUP
             functionStorage.Free(); // function reg

@@ -1,4 +1,5 @@
-﻿using System.Numerics;
+﻿using System.ComponentModel.Design;
+using System.Numerics;
 using System.Reflection;
 using System.Text;
 using Compiler.CodeGeneration;
@@ -34,8 +35,22 @@ namespace Compiler.Interpreter
                     case Opcode.None:
                         break;
                     case Opcode.Call:
+                    case Opcode.CallVirt:
                     {
-                        var callee = ReadOperand(inst.A!).Type.TagFunction!;
+                        Function callee;
+                        if (inst.Opcode == Opcode.Call)
+                            callee = ReadOperand(inst.A!).Type.TagFunction!;
+                        else
+                        {
+                            var virtFunc = ReadOperand(inst.A!).Type.TagFunction!;
+                            var @this = ReadOperand(inst.D![0]).Type.Tag;
+                            if (@this is StructType structType)
+                                callee = structType.FindVirtualFunction(virtFunc)!;
+                            else if (@this is TupleType tupleType)
+                                callee = tupleType.FindVirtualFunction(virtFunc)!;
+                            else
+                                throw new InvalidOperationException();
+                        }
 
                         IList<Variable>? calleeParameters;
                         if (callee.Parameters.Count > 0)
