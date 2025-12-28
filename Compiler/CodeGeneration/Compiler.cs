@@ -522,7 +522,35 @@ namespace Compiler.CodeGeneration
                 _ => Opcode.None
             };
 
-            if (expression.Operator == TokenType.Dot) // Dereference a.b
+            if (expression.Operator == TokenType.Generic)
+            {
+                var lhs = expression.Left.Accept(this);
+
+                if (expression.Right is not IdentifierExpression rhs)
+                {
+                    messages.Add(Message.UnexpectedToken2, expression.Right, "type name", expression.Right.Token);
+                    return null;
+                }
+
+                var aType = lhs?.Type;
+                var bType = CobType.FromString(rhs.Value);
+                CobType cType;
+
+                if (aType?.Tag is TupleType tupleType)
+                {
+                    cType = tupleType.FindOrAllocateConcretizedTupleType(bType);
+                }
+                else
+                {
+                    messages.Add(Message.IllegalTypeName, expression);
+                    return null;
+                }
+
+                lhs?.Free();
+
+                return new Storage(cType, Operand.None);
+            }
+            else if (expression.Operator == TokenType.Dot) // Dereference a.b
             {
                 // TODO Clean this up
                 var prevAsnSrc = AssignmentRHS;

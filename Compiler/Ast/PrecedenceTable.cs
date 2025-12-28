@@ -2,6 +2,8 @@
 {
     internal static class PrecedenceTable
     {
+        public const int GenericType = 18;
+
         public const int ArrayIndexer = 17;
 
         public const int FunctionCall = 16;

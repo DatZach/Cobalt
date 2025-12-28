@@ -255,6 +255,9 @@ namespace Compiler.CodeGeneration
                 var tupleType = CurrentModule.AllocateTupleType(expression.Name);
                 var cobType = new CobType(eCobType.Tuple, tag: tupleType);
 
+                foreach (var generic in expression.Generics)
+                    tupleType.AttachGeneric(generic);
+
                 if (!CobType.TryAddAlias(expression.Name, cobType))
                     messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
             }
@@ -269,7 +272,13 @@ namespace Compiler.CodeGeneration
                 if (Phase == DeclPhase.Fields)
                 {
                     foreach (var field in expression.Fields)
-                        tupleType.AllocateField(field.Name, CobType.FromString(field.TypeName), field.GetterExpression, field.SetterExpression);
+                    {
+                        var fieldType = tupleType.FindGenericType(field.TypeName);
+                        fieldType ??= CobType.FromString(field.TypeName);
+                        // TODO error if type is illegal
+
+                        tupleType.AllocateField(field.Name, fieldType, field.GetterExpression, field.SetterExpression);
+                    }
                 }
 
                 contextStack.Pop();
@@ -328,6 +337,7 @@ namespace Compiler.CodeGeneration
             if (Phase != DeclPhase.Functions)
                 return Unit.Value;
 
+            // TODO Generics
             var parameters = expression.Parameters.Select(x => new Function.Parameter(x.Name, CobType.FromString(x.TypeName), x.IsSpread)).ToList();
 
             if (CurrentContext is TraitType traitType)

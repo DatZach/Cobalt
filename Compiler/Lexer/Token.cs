@@ -90,6 +90,7 @@ namespace Compiler.Lexer
         [Description("','")] Comma,
         [Description("'.'")] Dot,
         [Description("':'")] Colon,
+        [Description("'`'")] Generic,
         [Description("'...'")] Spread,
         [Description("'..'")] Range,
         [Description("'..='")] RangeInclusive,

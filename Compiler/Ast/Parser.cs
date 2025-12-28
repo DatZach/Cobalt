@@ -1,8 +1,7 @@
-﻿using Compiler.Ast.Expressions;
-using Compiler.CodeGeneration;
-using Compiler.Lexer;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using Compiler.Ast.Expressions;
+using Compiler.Lexer;
 
 namespace Compiler.Ast
 {

@@ -9,8 +9,35 @@ namespace Compiler.Ast.Parselets.Statements
         public Expression Parse(Parser parser, Token token)
         {
             var name = parser.Take(TokenType.Identifier);
+            var generics = new List<GenericDefinition>();
             var fields = new List<FieldDefinition>();
             var functions = new List<FunctionDeclStatement>();
+
+            while (parser.MatchAndTakeToken(TokenType.Generic) != null)
+            {
+                var genericName = parser.Take(TokenType.Identifier);
+                var constraintTypeName = parser.MatchAndTakeToken(TokenType.Colon) != null
+                    ? parser.ParseTypeName()
+                    : null;
+
+                generics.Add(new GenericDefinition(genericName.Value, constraintTypeName));
+            }
+
+            //if (parser.MatchAndTakeToken(TokenType.LessThan) != null)
+            //{
+            //    do
+            //    {
+            //        var genericName = parser.Take(TokenType.Identifier);
+            //        var constraintTypeName = parser.MatchAndTakeToken(TokenType.Colon) != null
+            //            ? parser.ParseTypeName()
+            //            : null;
+
+            //        generics.Add(new GenericDefinition(genericName.Value, constraintTypeName));
+            //    } while (parser.MatchAndTakeToken(TokenType.Comma) != null);
+
+
+            //    parser.Take(TokenType.MoreThan);
+            //}
 
             parser.Take(TokenType.LeftParen);
             while (parser.MatchAndTakeToken(TokenType.RightParen) == null)
@@ -36,7 +63,7 @@ namespace Compiler.Ast.Parselets.Statements
                 parser.MatchAndTakeToken(TokenType.Semicolon);
             }
 
-            return new TupleDeclStatement(token, name.Value, fields, functions);
+            return new TupleDeclStatement(token, name.Value, generics, fields, functions);
         }
     }
 }

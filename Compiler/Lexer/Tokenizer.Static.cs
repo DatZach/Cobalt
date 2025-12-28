@@ -22,6 +22,7 @@ namespace Compiler.Lexer
                 [","] = TokenType.Comma,
                 ["."] = TokenType.Dot,
                 [":"] = TokenType.Colon,
+                ["`"] = TokenType.Generic,
                 ["..."] = TokenType.Spread,
                 [".."] = TokenType.Range,
                 ["..="] = TokenType.RangeInclusive,

@@ -489,7 +489,13 @@ namespace Compiler.Interpreter
                 {
                     Console.Write(
                         Encoding.UTF8.GetString(parameters[0].BufferValue),
-                        parameters.Skip(1).Select(x => x.Value).ToArray()
+                        parameters.Skip(1).Select(x =>
+                        {
+                            if (x.Type == CobType.String)
+                                return Encoding.UTF8.GetString(x.BufferValue);
+
+                            return x.Value;
+                        }).ToArray()
                     );
                     result = 0;
                 }
