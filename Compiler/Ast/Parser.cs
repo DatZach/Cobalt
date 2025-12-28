@@ -105,6 +105,12 @@ namespace Compiler.Ast
                 endToken = type;
             }
 
+            if (Match(TokenType.Not))
+            {
+                Take(TokenType.Not);
+                typeName += "!";
+            }
+
             return typeName;
         }
 

@@ -363,6 +363,14 @@ namespace Compiler.Interpreter
                         WriteOperand(inst.A!, d.ToCobVariable());
                         break;
                     }
+                    case Opcode.CmpTyEQ:
+                    {
+                        var b = ReadOperand(inst.B!).Type;
+                        var c = ReadOperand(inst.C!).Type;
+                        var d = b == c ? 1L : 0L;
+                        WriteOperand(inst.A!, d.ToCobVariable());
+                        break;
+                    }
                     case Opcode.JmpT:
                     {
                         var cmp = ReadOperand(inst.A!).IntValue;

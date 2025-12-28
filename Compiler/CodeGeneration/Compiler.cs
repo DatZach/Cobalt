@@ -34,6 +34,8 @@ namespace Compiler.CodeGeneration
 
         public Module RootModule { get; }
 
+        public Module Errors { get; }
+
         public IScopeContext CurrentContext => contextStack.Peek();
 
         public Module CurrentModule => contextStack.OfType<Module>().First();
@@ -52,6 +54,9 @@ namespace Compiler.CodeGeneration
 
             Scripts = new List<ScriptExpression>();
             RootModule = new Module(null, null, this);
+            Errors = RootModule.FindOrAllocateModule("error");
+            Errors.InitializerFunction.Body.Emit(Opcode.Return);
+            Errors.AllocateGlobal("$errorType", CobType.Error, false);
 
             contextStack = new Stack<IScopeContext>();
             loopStack = new Stack<LoopContext>();
@@ -120,6 +125,11 @@ namespace Compiler.CodeGeneration
         }
 
         public Storage? Visit(TraitStatement expression)
+        {
+            return null;
+        }
+
+        public Storage? Visit(ErrorStatement expression)
         {
             return null;
         }
@@ -404,7 +414,7 @@ namespace Compiler.CodeGeneration
             {
                 if (CurrentFunction.ReturnType == eCobType.None)
                     CurrentFunction.ReturnType = rhs.Type;
-                else if (CurrentFunction.ReturnType != rhs.Type)
+                else if (!CobType.IsCastable(rhs.Type, CurrentFunction.ReturnType))
                     messages.Add(Message.ReturnTypeMismatch, expression, CurrentFunction.ReturnType, rhs.Type);
                 
                 CurrentFunction.Body.Emit(Opcode.Return, rhs.Operand);
@@ -549,6 +559,35 @@ namespace Compiler.CodeGeneration
                 lhs?.Free();
 
                 return new Storage(cType, Operand.None);
+            }
+            else if (expression.Operator == TokenType.ErrorCoalesce) // !!
+            {
+                // call() !! 1234
+                var lhs = expression.Left.Accept(this);
+                var rhs = expression.Right.Accept(this);
+
+                if (!lhs.Type.ErrorFlag)
+                {
+                    messages.Add(Message.CannotErrorCoalesceType, expression, lhs.Type);
+                    return null;
+                }
+                // TODO Validate RHS type matches LHS
+
+                var c = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
+                var errorType = Errors.FindGlobal("$errorType");
+                var error = Errors.EmitGetForSymbol(errorType);
+
+                var labelEnd = CurrentFunction.Body.AllocateLabel();
+                CurrentFunction.Body.Emit(Opcode.CmpTyEQ, c.Operand, lhs.Operand, error.Operand);
+                CurrentFunction.Body.Emit(Opcode.JmpF, c.Operand, labelEnd);
+                CurrentFunction.Body.Emit(Opcode.Move, lhs.Operand, rhs.Operand);
+                labelEnd.Mark();
+
+                c.Free();
+                error?.Free();
+                rhs?.Free();
+
+                return lhs;
             }
             else if (expression.Operator == TokenType.Dot) // Dereference a.b
             {

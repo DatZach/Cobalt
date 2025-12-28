@@ -12,6 +12,7 @@
 
         public const int Unary = 15;
         public const int Range = 15;
+        public const int Coalesce = 15;
 
         public const int Exponent = 14;
         public const int Multiplication = 13;

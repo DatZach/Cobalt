@@ -235,6 +235,8 @@ namespace Compiler.Ast
 
         public static Def CannotCallType { get; } = new(MessageType.Error, "Cannot call type '{0}'");
 
+        public static Def CannotErrorCoalesceType { get; } = new(MessageType.Error, "Cannot error coalesce type '{0}'");
+
         public static Def CannotInstantiateType { get; } = new(MessageType.Error, "Cannot instantiate type '{0}'");
 
         public static Def FunctionParameterCountMismatch { get; } = new(MessageType.Error, "Expected {0} parameters, but received {1} instead");

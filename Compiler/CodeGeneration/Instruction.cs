@@ -99,6 +99,7 @@
         CmpLTE,
         CmpGT,
         CmpGTE,
+        CmpTyEQ,
 
         JmpT,
         JmpF,

@@ -248,6 +248,17 @@ namespace Compiler.CodeGeneration
             return Unit.Value;
         }
 
+        public Unit Visit(ErrorStatement expression)
+        {
+            if (Phase == DeclPhase.Types)
+            {
+                foreach (var x in expression.Members)
+                    compiler.Errors.AllocateGlobal(x, CobType.Error, false);
+            }
+
+            return Unit.Value;
+        }
+
         public Unit Visit(TupleDeclStatement expression)
         {
             if (Phase == DeclPhase.Types)
