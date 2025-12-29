@@ -57,6 +57,7 @@ namespace Compiler.Ast
             Register(TokenType.BitOr, new BinaryOperatorParselet(PrecedenceTable.BitOr));
             Register(TokenType.BitXor, new BinaryOperatorParselet(PrecedenceTable.BitXor));
             Register(TokenType.Not, new PrefixOperatorParselet(PrecedenceTable.Unary));
+            Register(TokenType.Not, new PostfixOperatorParselet(PrecedenceTable.ErrorPropagate));
             Register(TokenType.Dot, new BinaryOperatorParselet(PrecedenceTable.Dereference));
             Register(TokenType.ErrorCoalesce, new BinaryOperatorParselet(PrecedenceTable.Coalesce));
             Register(TokenType.Subtract, new PrefixOperatorParselet(PrecedenceTable.Unary));
@@ -97,7 +98,8 @@ namespace Compiler.Ast
             Register(TokenType.Artifact, new ArtifactParselet());
             Register(TokenType.Module, new ModuleParselet());
             Register(TokenType.Type, new TypeAliasParselet());
-            Register(TokenType.Errors, new ErrorParselet());
+            Register(TokenType.Error, new ErrorParselet());
+            Register(TokenType.Error, new IdentifierParselet());
             Register(TokenType.Trait, new TraitParselet());
             Register(TokenType.Tuple, new TupleDeclParselet());
             Register(TokenType.Struct, new StructDeclParselet());

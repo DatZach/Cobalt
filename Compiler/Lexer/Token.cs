@@ -55,7 +55,7 @@ namespace Compiler.Lexer
         [Description("packed")] Packed,
         [Description("enum")] Enum,
         [Description("bitflags")] BitFlags,
-        [Description("errors")] Errors,
+        [Description("error")] Error,
 
         [Description("const")] Const,
         [Description("var")] Var,

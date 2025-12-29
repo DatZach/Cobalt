@@ -103,7 +103,7 @@ namespace Compiler.Lexer
                 ["packed"] = TokenType.Packed,
                 ["enum"] = TokenType.Enum,
                 ["bitflags"] = TokenType.BitFlags,
-                ["errors"] = TokenType.Errors,
+                ["error"] = TokenType.Error,
 
                 ["true"] = TokenType.True,
                 ["false"] = TokenType.False,

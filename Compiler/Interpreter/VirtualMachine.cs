@@ -1,5 +1,4 @@
-﻿using System.ComponentModel.Design;
-using System.Numerics;
+﻿using System.Numerics;
 using System.Reflection;
 using System.Text;
 using Compiler.CodeGeneration;
@@ -303,7 +302,7 @@ namespace Compiler.Interpreter
                     {
                         var b = ReadOperand(inst.B!).IntValue;
                         var c = ReadOperand(inst.C!).IntValue;
-                        var d = b == 0 && c == 0 ? 1L : 0L;
+                        var d = b == 1 && c == 1 ? 1L : 0L;
                         WriteOperand(inst.A!, d.ToCobVariable());
                         break;
                     }
@@ -311,7 +310,7 @@ namespace Compiler.Interpreter
                     {
                         var b = ReadOperand(inst.B!).IntValue;
                         var c = ReadOperand(inst.C!).IntValue;
-                        var d = b == 0|| c == 0 ? 1L : 0L;
+                        var d = b == 1 || c == 1 ? 1L : 0L;
                         WriteOperand(inst.A!, d.ToCobVariable());
                         break;
                     }
@@ -388,6 +387,13 @@ namespace Compiler.Interpreter
                     case Opcode.Jmp:
                     {
                         ip = function.Body.Labels[(int)inst.A!.Value].Location - 1;
+                        break;
+                    }
+                    case Opcode.PanicOnErr:
+                    {
+                        var a = ReadOperand(inst.A!);
+                        if (a.Type == eCobType.Error)
+                            throw new InvalidOperationException($"Unhandled error returned from function call in '{function.Name}' @ {ip}");
                         break;
                     }
                     default:

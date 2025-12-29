@@ -562,11 +562,12 @@ namespace Compiler.CodeGeneration
             }
             else if (expression.Operator == TokenType.ErrorCoalesce) // !!
             {
-                // call() !! 1234
+                ++conditionalStack;
                 var lhs = expression.Left.Accept(this);
                 var rhs = expression.Right.Accept(this);
+                --conditionalStack;
 
-                if (!lhs.Type.ErrorFlag)
+                if (!lhs.Type.HasErrorFlag)
                 {
                     messages.Add(Message.CannotErrorCoalesceType, expression, lhs.Type);
                     return null;
@@ -771,7 +772,35 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(PostfixOperatorExpression expression)
         {
-            throw new NotImplementedException();
+            if (expression.Operator == TokenType.Not)
+            {
+                ++conditionalStack;
+                var lhs = expression.Left.Accept(this);
+                --conditionalStack;
+
+                if (!lhs.Type.HasErrorFlag)
+                {
+                    messages.Add(Message.CannotErrorCoalesceType, expression, lhs.Type);
+                    return null;
+                }
+
+                var c = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
+                var errorType = Errors.FindGlobal("$errorType");
+                var error = Errors.EmitGetForSymbol(errorType);
+
+                var labelEnd = CurrentFunction.Body.AllocateLabel();
+                CurrentFunction.Body.Emit(Opcode.CmpTyEQ, c.Operand, lhs.Operand, error.Operand);
+                CurrentFunction.Body.Emit(Opcode.JmpF, c.Operand, labelEnd);
+                CurrentFunction.Body.Emit(Opcode.Return, lhs.Operand);
+                labelEnd.Mark();
+
+                c.Free();
+                error.Free();
+
+                return lhs;
+            }
+            else
+                throw new ArgumentOutOfRangeException(nameof(expression));
         }
 
         public Storage? Visit(CallExpression expression)
@@ -854,6 +883,11 @@ namespace Compiler.CodeGeneration
             // CALL
             var opcode = function.Parent is TraitType ? Opcode.CallVirt : Opcode.Call;
             CurrentFunction.Body.Emit(opcode, functionStorage.Operand, retStorage?.Operand, operandArguments);
+
+            if (function.ReturnType.HasErrorFlag && conditionalStack <= 0)
+            {
+                CurrentFunction.Body.Emit(Opcode.PanicOnErr, retStorage.Operand);
+            }
 
             // CLEANUP
             functionStorage.Free(); // function reg

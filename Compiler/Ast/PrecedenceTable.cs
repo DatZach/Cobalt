@@ -3,6 +3,7 @@
     internal static class PrecedenceTable
     {
         public const int GenericType = 18;
+        public const int ErrorPropagate = 18;
 
         public const int ArrayIndexer = 17;
 

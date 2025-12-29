@@ -82,7 +82,18 @@ namespace Compiler
                     return;
                 }
 
-                vm.ExecuteFunction(artifact.EntryFunction);
+                try
+                {
+                    vm.ExecuteFunction(artifact.EntryFunction);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.Write("PANIC! ");
+                    Console.ForegroundColor = ConsoleColor.Gray;
+                    Console.WriteLine(ex.Message);
+                }
+
                 swRuntime.Stop();
 
                 PrintRuntimeStatistics();

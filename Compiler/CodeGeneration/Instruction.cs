@@ -14,11 +14,11 @@
 
         public override string ToString()
         {
-            if (D != null && B != null) return $"{Opcode,-10}{A}, {B}, ({string.Join(", ", D)})";
-            if (D != null) return $"{Opcode,-10}{A}, ({string.Join(", ", D)})";
-            if (C != null) return $"{Opcode,-10}{A}, {B}, {C}";
-            if (B != null) return $"{Opcode,-10}{A}, {B}";
-            if (A != null) return $"{Opcode,-10}{A}";
+            if (D != null && B != null) return $"{Opcode,-12}{A}, {B}, ({string.Join(", ", D)})";
+            if (D != null) return $"{Opcode,-12}{A}, ({string.Join(", ", D)})";
+            if (C != null) return $"{Opcode,-12}{A}, {B}, {C}";
+            if (B != null) return $"{Opcode,-12}{A}, {B}";
+            if (A != null) return $"{Opcode,-12}{A}";
             
             return Opcode.ToString();
         }
@@ -125,7 +125,9 @@
         CondAnd,
         CondOr,
         Neg,
-        Not
+        Not,
+
+        PanicOnErr
     }
 
     public enum OperandType : byte
