@@ -30,6 +30,7 @@ namespace Compiler.Ast.Visitors
         T Visit(BinaryOperatorExpression expression);
         T Visit(PrefixOperatorExpression expression);
         T Visit(PostfixOperatorExpression expression);
+        T Visit(PatternMatchExpression expression);
         T Visit(CallExpression expression);
         T Visit(IdentifierExpression expression);
         T Visit(AheadOfTimeExpression expression);

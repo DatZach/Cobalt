@@ -65,7 +65,6 @@ namespace Compiler.Lexer
         [Description("defer")] Defer,
         [Description("if")] If,
         [Description("else")] Else,
-        [Description("is")] Is,
         [Description("for")] For,
         [Description("in")] In,
         [Description("return")] Return,
@@ -144,6 +143,8 @@ namespace Compiler.Lexer
         [Description("'&='")] BitAndAssign,
         [Description("'|='")] BitOrAssign,
         [Description("'^='")] BitXorAssign,
+
+        [Description("::")] Is,
 
         [Description("'?.'")] NilDot,
         [Description("'??'")] NilCoalesce,

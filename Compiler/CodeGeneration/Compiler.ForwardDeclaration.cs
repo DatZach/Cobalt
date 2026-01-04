@@ -456,6 +456,11 @@ namespace Compiler.CodeGeneration
             return Unit.Value;
         }
 
+        public Unit Visit(PatternMatchExpression expression)
+        {
+            return Unit.Value;
+        }
+
         public Unit Visit(CallExpression expression)
         {
             return Unit.Value;

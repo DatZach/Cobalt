@@ -52,8 +52,9 @@
                 case OperandType.Local:
                 case OperandType.Global:
                 case OperandType.Function:
-                case OperandType.TupleType:
-                case OperandType.StructType:
+                case OperandType.Type:
+                //case OperandType.TupleType:
+                //case OperandType.StructType:
                     return Type.ToString()[..1].ToLowerInvariant()
                            + Value.ToString("G");
                 case OperandType.Label:
@@ -73,8 +74,9 @@
         public static Operand Global(int value) => new() { Type = OperandType.Global, Value = value };
         public static Operand Label(int value) => new() { Type = OperandType.Label, Value = value };
         public static Operand Function(int value) => new() { Type = OperandType.Function, Value = value };
-        public static Operand TupleType(int value) => new() { Type = OperandType.TupleType, Value = value };
-        public static Operand StructType(int value) => new() { Type = OperandType.StructType, Value = value };
+        public static Operand _Type(long value) => new() { Type = OperandType.Type, Value = value };
+        //public static Operand TupleType(int value) => new() { Type = OperandType.TupleType, Value = value };
+        //public static Operand StructType(int value) => new() { Type = OperandType.StructType, Value = value };
     }
 
     internal enum Opcode
@@ -142,7 +144,8 @@
         Global,
         Label,
         Function,
-        TupleType,
-        StructType
+        //TupleType,
+        //StructType,
+        Type
     }
 }

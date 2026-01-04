@@ -627,11 +627,10 @@ namespace Compiler.CodeGeneration
                                          or TokenType.RangeLength or TokenType.RangeTerminal)
             {
                 var type = Intrinsics.Range;
-                var typeIdx = TupleTypes.IndexOf(type);
                 var cobType = new CobType(eCobType.Tuple, tag: type);
 
                 var c = CurrentFunction.AllocateRegisterStorage(cobType);
-                CurrentFunction.Body.Emit(Opcode.New, c.Operand, Operand.TupleType(typeIdx));
+                CurrentFunction.Body.Emit(Opcode.New, c.Operand, cobType.ToOperand(artifact));
 
                 var a = expression.Left.Accept(this);
                 var b = expression.Right.Accept(this);
@@ -798,6 +797,72 @@ namespace Compiler.CodeGeneration
                 error.Free();
 
                 return lhs;
+            }
+            else
+                throw new ArgumentOutOfRangeException(nameof(expression));
+        }
+
+        public Storage? Visit(PatternMatchExpression expression)
+        {
+            ++conditionalStack;
+            var lhs = expression.Left.Accept(this);
+            --conditionalStack;
+
+            if (expression.RightSingle != null)
+            {
+                var type = expression.RightSingle.Type;
+
+                var c = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
+
+                CurrentFunction.Body.Emit(Opcode.CmpTyEQ, c.Operand, lhs.Operand, type.ToOperand(artifact));
+
+                lhs.Free();
+
+                return c;
+            }
+            else if (expression.RightMulti != null)
+            {
+                var c = CurrentFunction.AllocateRegisterStorage(CobType.Int);//lhs.Type); // TODO Not right
+
+                var labelEnd = CurrentFunction.Body.AllocateLabel();
+
+                foreach (var branch in expression.RightMulti)
+                {
+                    var type = branch.Type;
+
+                    var labelCaseEnd = CurrentFunction.Body.AllocateLabel();
+
+                    var d = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
+                    CurrentFunction.Body.Emit(Opcode.CmpTyEQ, d.Operand, lhs.Operand, type.ToOperand(artifact));
+                    CurrentFunction.Body.Emit(Opcode.JmpF, d.Operand, labelCaseEnd);
+                    d.Free();
+
+                    if (branch.ValueExpression is IdentifierExpression ie)
+                    {
+                        var local = CurrentFunction.AllocateLocal(ie.Value, type, false);
+                        CurrentFunction.Body.Emit(
+                            Opcode.Move,
+                            Operand.Local(CurrentFunction.FindLocalIndex(local)),
+                            lhs.Operand
+                        );
+                    }
+                    else if (branch.ValueExpression != null)
+                        throw new NotImplementedException();
+
+                    var rhs = branch.Right?.Accept(this);
+
+                    CurrentFunction.Body.Emit(Opcode.Move, c.Operand, rhs.Operand);
+                    CurrentFunction.Body.Emit(Opcode.Jmp, labelEnd);
+                    labelCaseEnd.Mark();
+
+                    rhs?.Free();
+                }
+
+                labelEnd.Mark();
+
+                lhs.Free();
+
+                return c;
             }
             else
                 throw new ArgumentOutOfRangeException(nameof(expression));
@@ -1078,11 +1143,10 @@ namespace Compiler.CodeGeneration
 
             functionStorage.Free();
 
-            var typeIdx = TupleTypes.IndexOf(tupleType);
             var cobType = new CobType(eCobType.Tuple, tag: tupleType);
 
             var storage = CurrentFunction.AllocateRegisterStorage(cobType);
-            CurrentFunction.Body.Emit(Opcode.New, storage.Operand, Operand.TupleType(typeIdx));
+            CurrentFunction.Body.Emit(Opcode.New, storage.Operand, cobType.ToOperand(artifact));
 
             for (var i = 0; i < expression.Arguments.Count; ++i)
             {
@@ -1108,11 +1172,10 @@ namespace Compiler.CodeGeneration
                 return null;
             }
 
-            var typeIdx = StructTypes.IndexOf(structType);
             var cobType = new CobType(eCobType.Struct, tag: structType);
 
             var storage = CurrentFunction.AllocateRegisterStorage(cobType);
-            CurrentFunction.Body.Emit(Opcode.New, storage.Operand, Operand.StructType(typeIdx));
+            CurrentFunction.Body.Emit(Opcode.New, storage.Operand, cobType.ToOperand(artifact));
 
             if (expression.Assignments != null)
             {

@@ -92,7 +92,7 @@ namespace Compiler.Ast
             string typeName;
 
             Token endToken;
-            var type = Take(TokenType.Identifier);
+            var type = Match(TokenType.Error) ? Take(TokenType.Error) : Take(TokenType.Identifier);
             if (Match(TokenType.LeftSquare))
             {
                 Take(TokenType.LeftSquare);

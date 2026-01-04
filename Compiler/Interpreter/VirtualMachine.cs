@@ -449,25 +449,15 @@ namespace Compiler.Interpreter
                         return artifact.Globals[(int)operand.Value];
                     case OperandType.Function:
                     {
-                        //var modIdx = (int)((operand.Value & 0x0FFFFFFF_00000000) >> 32);
-                        //var fnIdx  = (int)( operand.Value & 0x00000000_FFFFFFFF);
-                        //var function = compiler.Modules[modIdx].Functions[fnIdx];
                         var function = artifact.Functions[(int)operand.Value];
                         var type = new CobType(eCobType.Function, tag: function);
 
                         return new Variable("$func", type, false) { Value = function };
                     }
-                    case OperandType.TupleType:
+                    case OperandType.Type:
                     {
-                        var tupleType = artifact.TupleTypes[(int)operand.Value];
-                        var type = new CobType(eCobType.Tuple, tag: tupleType);
-                        return new Variable("$tuple", type, false);
-                    }
-                    case OperandType.StructType:
-                    {
-                        var structType = artifact.StructTypes[(int)operand.Value];
-                        var type = new CobType(eCobType.Struct, tag: structType);
-                        return new Variable("struct", type, false);
+                        var type = CobType.FromOperand(operand, artifact);
+                        return new Variable("$type", type, false);
                     }
                     default:
                         throw new ArgumentOutOfRangeException();
