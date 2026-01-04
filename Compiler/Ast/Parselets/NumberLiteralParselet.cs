@@ -17,7 +17,7 @@ namespace Compiler.Ast.Parselets
             var hasBinSpecified = false;
             var hasDotSpecified = false;
             var type = eCobType.None;
-            var bitSize = 64;
+            var bitSize = -1;
 
             int i = 0;
             if (value[0] == '-' || value[0] == '+')
@@ -42,7 +42,6 @@ namespace Compiler.Ast.Parselets
             }
             else if (value.IndexOf('.') != -1)
             {
-                bitSize = 64;
                 type = eCobType.Float;
                 hasDotSpecified = true;
             }

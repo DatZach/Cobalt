@@ -41,20 +41,35 @@ namespace Compiler.Ast.Parselets
 
             PatternMatchExpression.Pattern ParsePattern()
             {
-                var typeName = parser.ParseTypeName();
+                Token? token = null;
+                string? typeName = null;
                 Expression? valueExpr = null;
                 Expression? right = null;
 
-                if (!parser.Match(TokenType.FatArrow))
-                    valueExpr = parser.ParseExpression();
+                if (parser.Match(TokenType.Identifier) || parser.Match(TokenType.Error))
+                {
+                    token = parser.Peek();
+                    typeName = parser.ParseTypeName();
+                }
+
+                if (!parser.Match(TokenType.FatArrow) && !parser.Match(TokenType.LeftBrace))
+                {
+                    token = parser.Peek();
+                    valueExpr = parser.ParseExpression(Precedence);
+                }
 
                 if (parser.Match(TokenType.FatArrow))
                 {
-                    parser.Take(TokenType.FatArrow);
+                    token = parser.Take(TokenType.FatArrow);
                     right = parser.ParseExpression();
                 }
+                else if (parser.Match(TokenType.LeftBrace))
+                {
+                    right = parser.ParseBlock(true);
+                    token = right.StartToken;
+                }
 
-                return new PatternMatchExpression.Pattern(typeName, valueExpr, right);
+                return new PatternMatchExpression.Pattern(token, typeName, valueExpr, right);
             }
         }
     }

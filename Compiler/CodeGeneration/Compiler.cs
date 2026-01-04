@@ -822,21 +822,40 @@ namespace Compiler.CodeGeneration
             }
             else if (expression.RightMulti != null)
             {
+                // TODO Validate all types handled
+
                 var c = CurrentFunction.AllocateRegisterStorage(CobType.Int);//lhs.Type); // TODO Not right
 
                 var labelEnd = CurrentFunction.Body.AllocateLabel();
 
                 foreach (var branch in expression.RightMulti)
                 {
-                    var type = branch.Type;
-
                     var labelCaseEnd = CurrentFunction.Body.AllocateLabel();
+
+                    // TYPE CHECK
+                    CobType type;
+                    if (branch.ValueExpression is NumberLiteralExpression or BooleanLiteralExpression
+                                               or StringLiteralExpression)
+                    {
+                        var value = branch.ValueExpression.Accept(this)!;
+                        value.Free();
+
+                        type = value.Type;
+                    }
+                    else if (branch.Type != null)
+                        type = branch.Type;
+                    else
+                    {
+                        messages.Add(Message.IllegalPattern, branch.Token);
+                        continue;
+                    }
 
                     var d = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
                     CurrentFunction.Body.Emit(Opcode.CmpTyEQ, d.Operand, lhs.Operand, type.ToOperand(artifact));
                     CurrentFunction.Body.Emit(Opcode.JmpF, d.Operand, labelCaseEnd);
                     d.Free();
 
+                    // VALUE CHECK
                     if (branch.ValueExpression is IdentifierExpression ie)
                     {
                         var local = CurrentFunction.AllocateLocal(ie.Value, type, false);
@@ -846,9 +865,20 @@ namespace Compiler.CodeGeneration
                             lhs.Operand
                         );
                     }
+                    else if (branch.ValueExpression is NumberLiteralExpression or BooleanLiteralExpression
+                                                    or StringLiteralExpression)
+                    {
+                        var value = branch.ValueExpression.Accept(this);
+                        var e = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
+                        CurrentFunction.Body.Emit(Opcode.CmpEQ, e.Operand, lhs.Operand, value.Operand);
+                        CurrentFunction.Body.Emit(Opcode.JmpF, e.Operand, labelCaseEnd);
+                        e.Free();
+                        value.Free();
+                    }
                     else if (branch.ValueExpression != null)
                         throw new NotImplementedException();
 
+                    // VALUE
                     var rhs = branch.Right?.Accept(this);
 
                     CurrentFunction.Body.Emit(Opcode.Move, c.Operand, rhs.Operand);

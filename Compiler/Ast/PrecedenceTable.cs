@@ -2,6 +2,8 @@
 {
     internal static class PrecedenceTable
     {
+        public const int Is = 19;
+
         public const int GenericType = 18;
         public const int ErrorPropagate = 18;
 
@@ -42,8 +44,6 @@
         public const int ConditionalOr = 4;
 
         //public const int ConditionalExpression = 2; // ?
-
-        public const int Is = 2;
 
         public const int Assignment = 1;
         public const int In = 1;

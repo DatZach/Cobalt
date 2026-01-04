@@ -273,6 +273,8 @@ namespace Compiler.Ast
 
         public static Def IllegalCallingConvention { get; } = new(MessageType.Error, "The calling convention '{0}' is not legal here");
 
+        public static Def IllegalPattern { get; } = new(MessageType.Error, "Illegal pattern");
+
         public sealed record Def(
             MessageType Type,
             string Content,

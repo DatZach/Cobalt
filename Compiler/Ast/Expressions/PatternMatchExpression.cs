@@ -32,7 +32,7 @@ namespace Compiler.Ast.Expressions
             return visitor.Visit(this);
         }
 
-        public sealed record Pattern(string? TypeName, Expression? ValueExpression, Expression? Right)
+        public sealed record Pattern(Token? Token, string? TypeName, Expression? ValueExpression, Expression? Right)
         {
             public CobType? Type => TypeName == null ? null : CobType.FromString(TypeName);
         }
