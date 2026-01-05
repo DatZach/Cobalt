@@ -1,4 +1,5 @@
-﻿using System.Numerics;
+﻿using System.Data.SqlTypes;
+using System.Numerics;
 using System.Reflection;
 using System.Text;
 using Compiler.CodeGeneration;
@@ -302,7 +303,7 @@ namespace Compiler.Interpreter
                     {
                         var b = ReadOperand(inst.B!).IntValue;
                         var c = ReadOperand(inst.C!).IntValue;
-                        var d = b == 1 && c == 1 ? 1L : 0L;
+                        var d = b == 1 && c == 1;
                         WriteOperand(inst.A!, d.ToCobVariable());
                         break;
                     }
@@ -310,7 +311,7 @@ namespace Compiler.Interpreter
                     {
                         var b = ReadOperand(inst.B!).IntValue;
                         var c = ReadOperand(inst.C!).IntValue;
-                        var d = b == 1 || c == 1 ? 1L : 0L;
+                        var d = b == 1 || c == 1;
                         WriteOperand(inst.A!, d.ToCobVariable());
                         break;
                     }
@@ -318,7 +319,7 @@ namespace Compiler.Interpreter
                     {
                         var b = ReadOperand(inst.B!).IntValue;
                         var c = ReadOperand(inst.C!).IntValue;
-                        var d = b == c ? 1L : 0L;
+                        var d = b == c;
                         WriteOperand(inst.A!, d.ToCobVariable());
                         break;
                     }
@@ -326,7 +327,7 @@ namespace Compiler.Interpreter
                     {
                         var b = ReadOperand(inst.B!).IntValue;
                         var c = ReadOperand(inst.C!).IntValue;
-                        var d = b != c ? 1L : 0L;
+                        var d = b != c;
                         WriteOperand(inst.A!, d.ToCobVariable());
                         break;
                     }
@@ -334,7 +335,7 @@ namespace Compiler.Interpreter
                     {
                         var b = ReadOperand(inst.B!).IntValue;
                         var c = ReadOperand(inst.C!).IntValue;
-                        var d = b < c ? 1L : 0L;
+                        var d = b < c;
                         WriteOperand(inst.A!, d.ToCobVariable());
                         break;
                     }
@@ -342,7 +343,7 @@ namespace Compiler.Interpreter
                     {
                         var b = ReadOperand(inst.B!).IntValue;
                         var c = ReadOperand(inst.C!).IntValue;
-                        var d = b <= c ? 1L : 0L;
+                        var d = b <= c;
                         WriteOperand(inst.A!, d.ToCobVariable());
                         break;
                     }
@@ -350,7 +351,7 @@ namespace Compiler.Interpreter
                     {
                         var b = ReadOperand(inst.B!).IntValue;
                         var c = ReadOperand(inst.C!).IntValue;
-                        var d = b > c ? 1L : 0L;
+                        var d = b > c;
                         WriteOperand(inst.A!, d.ToCobVariable());
                         break;
                     }
@@ -358,7 +359,7 @@ namespace Compiler.Interpreter
                     {
                         var b = ReadOperand(inst.B!).IntValue;
                         var c = ReadOperand(inst.C!).IntValue;
-                        var d = b >= c ? 1L : 0L;
+                        var d = b >= c;
                         WriteOperand(inst.A!, d.ToCobVariable());
                         break;
                     }
@@ -366,7 +367,7 @@ namespace Compiler.Interpreter
                     {
                         var b = ReadOperand(inst.B!).Type;
                         var c = ReadOperand(inst.C!).Type;
-                        var d = b == c ? 1L : 0L;
+                        var d = b == c;
                         WriteOperand(inst.A!, d.ToCobVariable());
                         break;
                     }
@@ -591,9 +592,17 @@ namespace Compiler.Interpreter
 
     internal static class CobVariableExtensions
     {
+        private static readonly Variable True = new("$true", CobType.Boolean, false, 1);
+        private static readonly Variable False = new("$false", CobType.Boolean, false, 0);
+
         public static Variable ToCobVariable(this long value)
         {
             return new Variable("$imm", CobType.U64, false, value);
+        }
+
+        public static Variable ToCobVariable(this bool value)
+        {
+            return value ? True : False;
         }
     }
 }
