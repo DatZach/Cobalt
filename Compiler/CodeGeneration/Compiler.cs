@@ -824,13 +824,25 @@ namespace Compiler.CodeGeneration
             {
                 // TODO Validate all types handled
 
-                var c = CurrentFunction.AllocateRegisterStorage(CobType.Int);//lhs.Type); // TODO Not right
+                var seenTypes = new HashSet<CobType>();
+                PatternMatchExpression.Pattern? defaultBranch = null;
+                CobType? resultType = null;
 
+                var c = CurrentFunction.AllocateRegisterStorage(CobType.Any);
                 var labelEnd = CurrentFunction.Body.AllocateLabel();
 
                 foreach (var branch in expression.RightMulti)
                 {
                     var labelCaseEnd = CurrentFunction.Body.AllocateLabel();
+
+                    var isDefaultBranch = branch.TypeName == "default";
+                    var useDynamicTypeCheck = lhs.Type == eCobType.Union;
+
+                    if (isDefaultBranch)
+                    {
+                        defaultBranch = branch;
+                        continue;
+                    }
 
                     // TYPE CHECK
                     CobType type;
@@ -850,11 +862,26 @@ namespace Compiler.CodeGeneration
                         continue;
                     }
 
-                    var d = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
-                    CurrentFunction.Body.Emit(Opcode.CmpTyEQ, d.Operand, lhs.Operand, type.ToOperand(artifact));
-                    CurrentFunction.Body.Emit(Opcode.JmpF, d.Operand, labelCaseEnd);
-                    d.Free();
+                    if (useDynamicTypeCheck)
+                    {
+                        // Dynamic Check
+                        var d = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
+                        CurrentFunction.Body.Emit(Opcode.CmpTyEQ, d.Operand, lhs.Operand, type.ToOperand(artifact));
+                        CurrentFunction.Body.Emit(Opcode.JmpF, d.Operand, labelCaseEnd);
+                        d.Free();
+                    }
+                    else
+                    {
+                        // Static Check
+                        if (type != lhs.Type)
+                        {
+                            messages.Add(Message.TypeMismatch, branch.Token, lhs.Type, type);
+                            continue;
+                        }
+                    }
 
+                    seenTypes.Add(type);
+                    
                     // VALUE CHECK
                     if (branch.ValueExpression is IdentifierExpression ie)
                     {
@@ -885,6 +912,25 @@ namespace Compiler.CodeGeneration
                     CurrentFunction.Body.Emit(Opcode.Jmp, labelEnd);
                     labelCaseEnd.Mark();
 
+                    if (resultType == null || CobType.IsCastable(resultType, rhs.Type))
+                        resultType = rhs.Type;
+                    else
+                        messages.Add(Message.TypeMismatch, branch.Right, resultType, rhs.Type);
+
+                    rhs?.Free();
+                }
+
+                if (defaultBranch != null)
+                {
+                    var rhs = defaultBranch.Right.Accept(this);
+                    
+                    CurrentFunction.Body.Emit(Opcode.Move, c.Operand, rhs.Operand);
+
+                    if (resultType == null || CobType.IsCastable(resultType, rhs.Type))
+                        resultType = rhs.Type;
+                    else
+                        messages.Add(Message.TypeMismatch, defaultBranch.Right, resultType, rhs.Type);
+                    
                     rhs?.Free();
                 }
 
@@ -892,7 +938,26 @@ namespace Compiler.CodeGeneration
 
                 lhs.Free();
 
-                return c;
+                // Validate Types
+                if (resultType == null)
+                {
+                    messages.Add(Message.MissingPattern, expression, "any");
+                    return null;
+                }
+
+                if (defaultBranch == null)
+                {
+                    foreach (var expectedType in lhs.Type.YieldTypesInUnion())
+                    {
+                        if (seenTypes.Contains(expectedType))
+                            continue;
+
+                        messages.Add(Message.MissingPattern, expression, expectedType);
+                        return null;
+                    }
+                }
+
+                return new Storage(resultType, c.Operand, CurrentFunction);
             }
             else
                 throw new ArgumentOutOfRangeException(nameof(expression));

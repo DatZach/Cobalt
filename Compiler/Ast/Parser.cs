@@ -89,26 +89,37 @@ namespace Compiler.Ast
 
         public string ParseTypeName()
         {
-            string typeName;
-
+            string typeName = "";
             Token endToken;
-            var type = Match(TokenType.Error) ? Take(TokenType.Error) : Take(TokenType.Identifier);
-            if (Match(TokenType.LeftSquare))
-            {
-                Take(TokenType.LeftSquare);
-                endToken = Take(TokenType.RightSquare);
-                typeName = type.Value + "[]";
-            }
-            else
-            {
-                typeName = type.Value;
-                endToken = type;
-            }
 
-            if (Match(TokenType.Not))
+            while (true)
             {
-                Take(TokenType.Not);
-                typeName += "!";
+                var type = Match(TokenType.Error) ? Take(TokenType.Error) : Take(TokenType.Identifier);
+                if (Match(TokenType.LeftSquare))
+                {
+                    Take(TokenType.LeftSquare);
+                    endToken = Take(TokenType.RightSquare);
+                    typeName += type.Value + "[]";
+                }
+                else
+                {
+                    typeName += type.Value;
+                    endToken = type;
+                }
+
+                if (Match(TokenType.Not))
+                {
+                    Take(TokenType.Not);
+                    typeName += "!";
+                }
+
+                if (Match(TokenType.BitOr))
+                {
+                    Take(TokenType.BitOr);
+                    typeName += "|";
+                }
+                else
+                    break;
             }
 
             return typeName;

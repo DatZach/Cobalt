@@ -275,6 +275,8 @@ namespace Compiler.Ast
 
         public static Def IllegalPattern { get; } = new(MessageType.Error, "Illegal pattern");
 
+        public static Def MissingPattern { get; } = new(MessageType.Error, "Missing pattern for '{0}'");
+
         public sealed record Def(
             MessageType Type,
             string Content,
