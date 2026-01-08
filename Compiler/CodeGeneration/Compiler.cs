@@ -847,7 +847,7 @@ namespace Compiler.CodeGeneration
                     // TYPE CHECK
                     CobType type;
                     if (branch.ValueExpression is NumberLiteralExpression or BooleanLiteralExpression
-                                               or StringLiteralExpression)
+                                               or StringLiteralExpression or NilLiteralExpression)
                     {
                         var value = branch.ValueExpression.Accept(this)!;
                         value.Free();
@@ -893,7 +893,7 @@ namespace Compiler.CodeGeneration
                         );
                     }
                     else if (branch.ValueExpression is NumberLiteralExpression or BooleanLiteralExpression
-                                                    or StringLiteralExpression)
+                                                    or StringLiteralExpression or NilLiteralExpression)
                     {
                         var value = branch.ValueExpression.Accept(this);
                         var e = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
@@ -1316,6 +1316,11 @@ namespace Compiler.CodeGeneration
                 CobType.String,
                 Operand.Global(idx)
             );
+        }
+
+        public Storage? Visit(NilLiteralExpression expression)
+        {
+            return new Storage(CobType.Nil, CobType.Nil.ToOperand(artifact));
         }
 
         public Storage? Visit(EmptyExpression expression)

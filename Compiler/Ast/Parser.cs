@@ -94,7 +94,14 @@ namespace Compiler.Ast
 
             while (true)
             {
-                var type = Match(TokenType.Error) ? Take(TokenType.Error) : Take(TokenType.Identifier);
+                Token type;
+                if (Match(TokenType.Error))
+                    type = Take(TokenType.Error);
+                else if (Match(TokenType.Nil))
+                    type = Take(TokenType.Nil);
+                else
+                    type = Take(TokenType.Identifier);
+
                 if (Match(TokenType.LeftSquare))
                 {
                     Take(TokenType.LeftSquare);
@@ -105,6 +112,12 @@ namespace Compiler.Ast
                 {
                     typeName += type.Value;
                     endToken = type;
+                }
+
+                if (Match(TokenType.Question))
+                {
+                    Take(TokenType.Question);
+                    typeName += "?";
                 }
 
                 if (Match(TokenType.Not))

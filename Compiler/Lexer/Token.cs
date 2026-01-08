@@ -38,6 +38,7 @@ namespace Compiler.Lexer
         [Description("string")] String,
         [Description("true")] True,
         [Description("false")] False,
+        [Description("nil")] Nil,
         
         [Description("artifact")] Artifact,
         [Description("import")] Import,
@@ -117,6 +118,7 @@ namespace Compiler.Lexer
         [Description("'|'")] BitOr,
         [Description("'^'")] BitXor,
         [Description("'!'")] Not,
+        [Description("'?'")] Question,
 
         [Description("'&&'")] ConditionalAnd,
         [Description("'||'")] ConditionalOr,

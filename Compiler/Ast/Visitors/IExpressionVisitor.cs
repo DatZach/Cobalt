@@ -41,6 +41,7 @@ namespace Compiler.Ast.Visitors
         T Visit(NumberLiteralExpression expression);
         T Visit(BooleanLiteralExpression expression);
         T Visit(StringLiteralExpression expression);
+        T Visit(NilLiteralExpression expression);
         T Visit(EmptyExpression expression);
     }
 }

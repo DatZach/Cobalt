@@ -46,7 +46,7 @@ namespace Compiler.Ast.Parselets
                 Expression? valueExpr = null;
                 Expression? right = null;
 
-                if (parser.Match(TokenType.Identifier) || parser.Match(TokenType.Error))
+                if (parser.Match(TokenType.Identifier) || parser.Match(TokenType.Error) || parser.Match(TokenType.Nil))
                 {
                     token = parser.Peek();
                     typeName = parser.ParseTypeName();

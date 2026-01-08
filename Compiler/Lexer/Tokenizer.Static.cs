@@ -50,6 +50,7 @@ namespace Compiler.Lexer
                 ["|"] = TokenType.BitOr,
                 ["^"] = TokenType.BitXor,
                 ["!"] = TokenType.Not,
+                ["?"] = TokenType.Question,
 
                 ["&&"] = TokenType.ConditionalAnd,
                 ["||"] = TokenType.ConditionalOr,
@@ -109,6 +110,7 @@ namespace Compiler.Lexer
 
                 ["true"] = TokenType.True,
                 ["false"] = TokenType.False,
+                ["nil"] = TokenType.Nil,
 
                 ["const"] = TokenType.Const,
                 ["var"] = TokenType.Var,
