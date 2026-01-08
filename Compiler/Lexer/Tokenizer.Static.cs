@@ -84,6 +84,7 @@ namespace Compiler.Lexer
                 ["??"] = TokenType.NilCoalesce,
                 ["!."] = TokenType.ErrorDot,
                 ["!!"] = TokenType.ErrorCoalesce,
+                ["?!"] = TokenType.NilErrorCoalesce,
 
                 ["@"] = TokenType.At
             };

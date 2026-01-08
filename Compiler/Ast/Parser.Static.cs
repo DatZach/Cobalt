@@ -61,6 +61,8 @@ namespace Compiler.Ast
             Register(TokenType.Not, new PostfixOperatorParselet(PrecedenceTable.ErrorPropagate));
             Register(TokenType.Dot, new BinaryOperatorParselet(PrecedenceTable.Dereference));
             Register(TokenType.ErrorCoalesce, new BinaryOperatorParselet(PrecedenceTable.Coalesce));
+            Register(TokenType.NilCoalesce, new BinaryOperatorParselet(PrecedenceTable.Coalesce));
+            Register(TokenType.NilErrorCoalesce, new BinaryOperatorParselet(PrecedenceTable.Coalesce));
             Register(TokenType.Subtract, new PrefixOperatorParselet(PrecedenceTable.Unary));
 
             Register(TokenType.Generic, new BinaryOperatorParselet(PrecedenceTable.GenericType));

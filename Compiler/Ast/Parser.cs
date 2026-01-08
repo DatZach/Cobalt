@@ -114,6 +114,12 @@ namespace Compiler.Ast
                     endToken = type;
                 }
 
+                if (Match(TokenType.NilErrorCoalesce))
+                {
+                    Take(TokenType.NilErrorCoalesce);
+                    typeName += "?!";
+                }
+
                 if (Match(TokenType.Question))
                 {
                     Take(TokenType.Question);

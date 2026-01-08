@@ -152,6 +152,7 @@ namespace Compiler.Lexer
         [Description("'??'")] NilCoalesce,
         [Description("'!.'")] ErrorDot,
         [Description("'!!'")] ErrorCoalesce,
+        [Description("'?!'")] NilErrorCoalesce,
 
         [Description("'@'")] At,
 

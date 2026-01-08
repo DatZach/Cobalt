@@ -2,11 +2,12 @@
 using Compiler.Ast.Expressions;
 using Compiler.Ast.Expressions.Statements;
 using Compiler.Ast.Visitors;
+using Compiler.CodeGeneration.Artifacts;
 using Compiler.Interpreter;
 using Compiler.Lexer;
 using System.Diagnostics;
+using System.Reflection.Metadata.Ecma335;
 using System.Text;
-using Compiler.CodeGeneration.Artifacts;
 
 namespace Compiler.CodeGeneration
 {
@@ -560,6 +561,31 @@ namespace Compiler.CodeGeneration
 
                 return new Storage(cType, Operand.None);
             }
+            else if (expression.Operator == TokenType.NilCoalesce) // ??
+            {
+                var lhs = expression.Left.Accept(this);
+                var rhs = expression.Right.Accept(this);
+
+                if (!lhs.Type.HasNilFlag)
+                {
+                    messages.Add(Message.CannotNilCoalesceType, expression, lhs.Type);
+                    return null;
+                }
+                // TODO Validate RHS type matches LHS
+
+                var c = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
+                
+                var labelEnd = CurrentFunction.Body.AllocateLabel();
+                CurrentFunction.Body.Emit(Opcode.CmpTyEQ, c.Operand, lhs.Operand, CobType.Nil.ToOperand(artifact));
+                CurrentFunction.Body.Emit(Opcode.JmpF, c.Operand, labelEnd);
+                CurrentFunction.Body.Emit(Opcode.Move, lhs.Operand, rhs.Operand);
+                labelEnd.Mark();
+
+                c.Free();
+                rhs?.Free();
+
+                return lhs;
+            }
             else if (expression.Operator == TokenType.ErrorCoalesce) // !!
             {
                 ++conditionalStack;
@@ -581,6 +607,46 @@ namespace Compiler.CodeGeneration
                 var labelEnd = CurrentFunction.Body.AllocateLabel();
                 CurrentFunction.Body.Emit(Opcode.CmpTyEQ, c.Operand, lhs.Operand, error.Operand);
                 CurrentFunction.Body.Emit(Opcode.JmpF, c.Operand, labelEnd);
+                CurrentFunction.Body.Emit(Opcode.Move, lhs.Operand, rhs.Operand);
+                labelEnd.Mark();
+
+                c.Free();
+                error?.Free();
+                rhs?.Free();
+
+                return lhs;
+            }
+            else if (expression.Operator == TokenType.NilErrorCoalesce) // ?!
+            {
+                ++conditionalStack;
+                var lhs = expression.Left.Accept(this);
+                var rhs = expression.Right.Accept(this);
+                --conditionalStack;
+
+                if (!lhs.Type.HasErrorFlag)
+                {
+                    messages.Add(Message.CannotErrorCoalesceType, expression, lhs.Type);
+                    return null;
+                }
+                if (!lhs.Type.HasNilFlag)
+                {
+                    messages.Add(Message.CannotNilCoalesceType, expression, lhs.Type);
+                    return null;
+                }
+                // TODO Validate RHS type matches LHS
+
+                var c = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
+                var errorType = Errors.FindGlobal("$errorType");
+                var error = Errors.EmitGetForSymbol(errorType);
+
+                var labelEnd = CurrentFunction.Body.AllocateLabel();
+                var labelHandler = CurrentFunction.Body.AllocateLabel();
+                CurrentFunction.Body.Emit(Opcode.CmpTyEQ, c.Operand, lhs.Operand, CobType.Nil.ToOperand(artifact));
+                CurrentFunction.Body.Emit(Opcode.JmpT, c.Operand, labelHandler);
+                CurrentFunction.Body.Emit(Opcode.CmpTyEQ, c.Operand, lhs.Operand, error.Operand);
+                CurrentFunction.Body.Emit(Opcode.JmpT, c.Operand, labelHandler);
+                CurrentFunction.Body.Emit(Opcode.Jmp, labelEnd);
+                labelHandler.Mark();
                 CurrentFunction.Body.Emit(Opcode.Move, lhs.Operand, rhs.Operand);
                 labelEnd.Mark();
 
