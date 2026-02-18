@@ -14,6 +14,8 @@ namespace Compiler.Ast.Expressions.Statements
 
         public IReadOnlyList<FunctionDeclStatement> Functions { get; }
 
+        public IReadOnlyList<FactoryDeclStatement> Factories { get; }
+
         public IndexerDefinition? Indexer { get; }
 
         public StructDeclStatement(
@@ -22,6 +24,7 @@ namespace Compiler.Ast.Expressions.Statements
             IReadOnlyList<string> traitTypeNames,
             IReadOnlyList<FieldDefinition> fields,
             IReadOnlyList<FunctionDeclStatement> functions,
+            IReadOnlyList<FactoryDeclStatement> factories,
             IndexerDefinition? indexer
         )
             : base(token)
@@ -30,6 +33,7 @@ namespace Compiler.Ast.Expressions.Statements
             TraitTypeNames = traitTypeNames;
             Fields = fields;
             Functions = functions;
+            Factories = factories;
             Indexer = indexer;
         }
 

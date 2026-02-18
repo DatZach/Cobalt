@@ -1,18 +1,17 @@
-﻿using Compiler.Lexer;
-using Compiler.Ast.Expressions;
+﻿using Compiler.Ast.Expressions;
 using Compiler.Ast.Expressions.Statements;
-using Compiler.CodeGeneration.Artifacts;
+using Compiler.Lexer;
 
-namespace Compiler.Ast.Parselets
+namespace Compiler.Ast.Parselets.Statements
 {
-    internal sealed class FunctionDeclParselet : IPrefixExpressionParselet
+    internal sealed class FactoryDeclParselet : IPrefixStatementParselet
     {
         public Expression Parse(Parser parser, Token token)
         {
             IReadOnlyList<FunctionDeclStatement.Parameter> parameters;
 
-            var name = parser.MatchAndTakeToken(TokenType.Identifier)?.Value;
-
+            var name = parser.Take(TokenType.Identifier);
+            
             parser.Take(TokenType.LeftParen);
             if (!parser.Match(TokenType.RightParen))
             {
@@ -42,18 +41,6 @@ namespace Compiler.Ast.Parselets
 
             parser.Take(TokenType.RightParen);
 
-            var returnTypeName = parser.Match(TokenType.Identifier) ? parser.ParseTypeName() : null;
-
-            CallingConvention callingConvention;
-            if (parser.MatchAndTakeToken(TokenType.CCall) != null)
-                callingConvention = CallingConvention.CCall;
-            else if (parser.MatchAndTakeToken(TokenType.StdCall) != null)
-                callingConvention = CallingConvention.StdCall;
-            else if (parser.MatchAndTakeToken(TokenType.NakedCall) != null)
-                callingConvention = CallingConvention.NakedCall;
-            else
-                callingConvention = CallingConvention.Default;
-
             Token? fatArrowToken;
             Expression? body;
             if (parser.Match(TokenType.LeftBrace))
@@ -66,16 +53,12 @@ namespace Compiler.Ast.Parselets
                 );
             }
             else
-                body = null;
+            {
+                parser.Messages.Add(Message.MissingFunctionBody, token);
+                body = new EmptyExpression(token);
+            }
 
-            return new FunctionDeclStatement(
-                token,
-                name,
-                parameters,
-                body,
-                returnTypeName,
-                callingConvention
-            );
+            return new FactoryDeclStatement(token, name.Value, parameters, body);
         }
     }
 }

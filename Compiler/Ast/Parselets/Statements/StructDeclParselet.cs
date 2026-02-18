@@ -12,6 +12,7 @@ namespace Compiler.Ast.Parselets.Statements
             var traits = new List<string>();
             var fields = new List<FieldDefinition>();
             var functions = new List<FunctionDeclStatement>();
+            var factories = new List<FactoryDeclStatement>();
             IndexerDefinition? indexerDefinition = null;
 
             if (parser.MatchAndTakeToken(TokenType.Mixin) != null)
@@ -26,7 +27,12 @@ namespace Compiler.Ast.Parselets.Statements
             parser.Take(TokenType.LeftBrace);
             while (parser.MatchAndTakeToken(TokenType.RightBrace) == null)
             {
-                if (parser.Match(TokenType.Function)) // Function
+                if (parser.Match(TokenType.Factory)) // Factory
+                {
+                    var expr = (FactoryDeclStatement)parser.ParseStatement();
+                    factories.Add(expr);
+                }
+                else if (parser.Match(TokenType.Function)) // Function
                 {
                     var expr = (FunctionDeclStatement)parser.ParseStatement();
                     functions.Add(expr);
@@ -57,7 +63,7 @@ namespace Compiler.Ast.Parselets.Statements
                 parser.MatchAndTakeToken(TokenType.Semicolon);
             }
 
-            return new StructDeclStatement(token, name.Value, traits, fields, functions, indexerDefinition);
+            return new StructDeclStatement(token, name.Value, traits, fields, functions, factories, indexerDefinition);
         }
 
         public static void ParseGetterSetters(

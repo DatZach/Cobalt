@@ -6,7 +6,6 @@ using Compiler.CodeGeneration.Artifacts;
 using Compiler.Interpreter;
 using Compiler.Lexer;
 using System.Diagnostics;
-using System.Reflection.Metadata.Ecma335;
 using System.Text;
 
 namespace Compiler.CodeGeneration
@@ -57,8 +56,7 @@ namespace Compiler.CodeGeneration
             RootModule = new Module(null, null, this);
             Errors = RootModule.FindOrAllocateModule("error");
             Errors.InitializerFunction.Body.Emit(Opcode.Return);
-            Errors.AllocateGlobal("$errorType", CobType.Error, false);
-
+            
             contextStack = new Stack<IScopeContext>();
             loopStack = new Stack<LoopContext>();
 
@@ -150,11 +148,33 @@ namespace Compiler.CodeGeneration
         {
             var structType = CurrentModule.FindStructType(expression.Name)!;
             contextStack.Push(structType);
+            for (var i = 0; i < expression.Factories.Count; ++i)
+                expression.Factories[i].Accept(this);
             foreach (var functionExpression in expression.Functions)
                 functionExpression.Accept(this);
             contextStack.Pop();
 
             return null;
+        }
+
+        public Storage? Visit(FactoryDeclStatement expression)
+        {
+            Function function;
+            if (CurrentContext is StructType structType)
+                function = structType.FindFactory(expression.Name)!;
+            else
+                throw new InvalidOperationException(); // TODO ??
+
+            contextStack.Push(function);
+
+            expression.Body.Accept(this);
+
+            contextStack.Pop();
+
+            return new Storage(
+                new CobType(eCobType.Function, tag: function),
+                Operand.None
+            );
         }
 
         public Storage? Visit(FunctionDeclStatement expression)
@@ -601,17 +621,14 @@ namespace Compiler.CodeGeneration
                 // TODO Validate RHS type matches LHS
 
                 var c = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
-                var errorType = Errors.FindGlobal("$errorType");
-                var error = Errors.EmitGetForSymbol(errorType);
 
                 var labelEnd = CurrentFunction.Body.AllocateLabel();
-                CurrentFunction.Body.Emit(Opcode.CmpTyEQ, c.Operand, lhs.Operand, error.Operand);
+                CurrentFunction.Body.Emit(Opcode.CmpTyEQ, c.Operand, lhs.Operand, CobType.Error.ToOperand(artifact));
                 CurrentFunction.Body.Emit(Opcode.JmpF, c.Operand, labelEnd);
                 CurrentFunction.Body.Emit(Opcode.Move, lhs.Operand, rhs.Operand);
                 labelEnd.Mark();
 
                 c.Free();
-                error?.Free();
                 rhs?.Free();
 
                 return lhs;
@@ -636,14 +653,12 @@ namespace Compiler.CodeGeneration
                 // TODO Validate RHS type matches LHS
 
                 var c = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
-                var errorType = Errors.FindGlobal("$errorType");
-                var error = Errors.EmitGetForSymbol(errorType);
 
                 var labelEnd = CurrentFunction.Body.AllocateLabel();
                 var labelHandler = CurrentFunction.Body.AllocateLabel();
                 CurrentFunction.Body.Emit(Opcode.CmpTyEQ, c.Operand, lhs.Operand, CobType.Nil.ToOperand(artifact));
                 CurrentFunction.Body.Emit(Opcode.JmpT, c.Operand, labelHandler);
-                CurrentFunction.Body.Emit(Opcode.CmpTyEQ, c.Operand, lhs.Operand, error.Operand);
+                CurrentFunction.Body.Emit(Opcode.CmpTyEQ, c.Operand, lhs.Operand, CobType.Error.ToOperand(artifact));
                 CurrentFunction.Body.Emit(Opcode.JmpT, c.Operand, labelHandler);
                 CurrentFunction.Body.Emit(Opcode.Jmp, labelEnd);
                 labelHandler.Mark();
@@ -651,7 +666,6 @@ namespace Compiler.CodeGeneration
                 labelEnd.Mark();
 
                 c.Free();
-                error?.Free();
                 rhs?.Free();
 
                 return lhs;
@@ -850,17 +864,14 @@ namespace Compiler.CodeGeneration
                 }
 
                 var c = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
-                var errorType = Errors.FindGlobal("$errorType");
-                var error = Errors.EmitGetForSymbol(errorType);
 
                 var labelEnd = CurrentFunction.Body.AllocateLabel();
-                CurrentFunction.Body.Emit(Opcode.CmpTyEQ, c.Operand, lhs.Operand, error.Operand);
+                CurrentFunction.Body.Emit(Opcode.CmpTyEQ, c.Operand, lhs.Operand, CobType.Error.ToOperand(artifact));
                 CurrentFunction.Body.Emit(Opcode.JmpF, c.Operand, labelEnd);
                 CurrentFunction.Body.Emit(Opcode.Return, lhs.Operand);
                 labelEnd.Mark();
 
                 c.Free();
-                error.Free();
 
                 return lhs;
             }
@@ -1091,7 +1102,7 @@ namespace Compiler.CodeGeneration
                     ||  (paramType != null && !CobType.IsCastable(argStorage.Type, paramType.Type)))
                     {
                         aOperandArguments[i] = Operand.None;
-                        messages.Add(Message.TypeMismatch, arguments[i], paramType?.Type, argStorage.Type);
+                        messages.Add(Message.TypeMismatch, arguments[i], paramType?.Type, argStorage?.Type);
                         continue;
                     }
                     

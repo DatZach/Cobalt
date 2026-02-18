@@ -318,6 +318,9 @@ namespace Compiler.CodeGeneration
                 var structType = CurrentModule.FindStructType(expression.Name)!;
                 contextStack.Push(structType);
 
+                for (var i = 0; i < expression.Factories.Count; ++i)
+                    expression.Factories[i].Accept(this);
+
                 for (var i = 0; i < expression.Functions.Count; ++i)
                     expression.Functions[i].Accept(this);
 
@@ -339,6 +342,24 @@ namespace Compiler.CodeGeneration
 
                 contextStack.Pop();
             }
+
+            return Unit.Value;
+        }
+
+        public Unit Visit(FactoryDeclStatement expression)
+        {
+            if (Phase != DeclPhase.Functions)
+                return Unit.Value;
+
+            // TODO Generics
+            var parameters = expression.Parameters.Select(x => new Function.Parameter(x.Name, CobType.FromString(x.TypeName), x.IsSpread)).ToList();
+
+            if (CurrentContext is StructType structType)
+            {
+                structType.AllocateFactory(expression.Name, parameters);
+            }
+            else
+                messages.Add(Message.CannotDeclareSymbolHere, expression);
 
             return Unit.Value;
         }
