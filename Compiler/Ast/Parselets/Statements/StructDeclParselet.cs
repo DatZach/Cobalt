@@ -9,11 +9,22 @@ namespace Compiler.Ast.Parselets.Statements
         public Expression Parse(Parser parser, Token token)
         {
             var name = parser.Take(TokenType.Identifier);
+            var generics = new List<GenericDefinition>();
             var traits = new List<string>();
             var fields = new List<FieldDefinition>();
             var functions = new List<FunctionDeclStatement>();
             var factories = new List<FactoryDeclStatement>();
             IndexerDefinition? indexerDefinition = null;
+
+            while (parser.MatchAndTakeToken(TokenType.Generic) != null)
+            {
+                var genericName = parser.Take(TokenType.Identifier);
+                var constraintTypeName = parser.MatchAndTakeToken(TokenType.Colon) != null
+                    ? parser.ParseTypeName()
+                    : null;
+
+                generics.Add(new GenericDefinition(genericName.Value, constraintTypeName));
+            }
 
             if (parser.MatchAndTakeToken(TokenType.Mixin) != null)
             {
@@ -63,7 +74,7 @@ namespace Compiler.Ast.Parselets.Statements
                 parser.MatchAndTakeToken(TokenType.Semicolon);
             }
 
-            return new StructDeclStatement(token, name.Value, traits, fields, functions, factories, indexerDefinition);
+            return new StructDeclStatement(token, name.Value, generics, traits, fields, functions, factories, indexerDefinition);
         }
 
         public static void ParseGetterSetters(

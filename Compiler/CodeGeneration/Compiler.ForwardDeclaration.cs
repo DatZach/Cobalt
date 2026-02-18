@@ -284,10 +284,7 @@ namespace Compiler.CodeGeneration
                 {
                     foreach (var field in expression.Fields)
                     {
-                        var fieldType = tupleType.FindGenericType(field.TypeName);
-                        fieldType ??= CobType.FromString(field.TypeName);
-                        // TODO error if type is illegal
-
+                        var fieldType = CobTypeFromStringConsideringGenericProvider(field.TypeName, CurrentContext);
                         tupleType.AllocateField(field.Name, fieldType, field.GetterExpression, field.SetterExpression);
                     }
                 }
@@ -303,6 +300,9 @@ namespace Compiler.CodeGeneration
             if (Phase == DeclPhase.Types)
             {
                 var structType = CurrentModule.AllocateStructType(expression.Name);
+
+                foreach (var generic in expression.Generics)
+                    structType.AttachGeneric(generic);
 
                 foreach (var traitTypeName in expression.TraitTypeNames)
                 {
@@ -327,7 +327,10 @@ namespace Compiler.CodeGeneration
                 if (Phase == DeclPhase.Fields)
                 {
                     foreach (var field in expression.Fields)
-                        structType.AllocateField(field.Name, CobType.FromString(field.TypeName), field.GetterExpression, field.SetterExpression);
+                    {
+                        var fieldType = CobTypeFromStringConsideringGenericProvider(field.TypeName, CurrentContext);
+                        structType.AllocateField(field.Name, fieldType, field.GetterExpression, field.SetterExpression);
+                    }
 
                     if (expression.Indexer != null)
                     {
@@ -351,8 +354,9 @@ namespace Compiler.CodeGeneration
             if (Phase != DeclPhase.Functions)
                 return Unit.Value;
 
-            // TODO Generics
-            var parameters = expression.Parameters.Select(x => new Function.Parameter(x.Name, CobType.FromString(x.TypeName), x.IsSpread)).ToList();
+            var parameters = expression.Parameters.Select(
+                x => new Function.Parameter(x.Name, CobTypeFromStringConsideringGenericProvider(x.TypeName, CurrentContext), x.IsSpread)
+            ).ToList();
 
             if (CurrentContext is StructType structType)
             {
@@ -369,8 +373,9 @@ namespace Compiler.CodeGeneration
             if (Phase != DeclPhase.Functions)
                 return Unit.Value;
 
-            // TODO Generics
-            var parameters = expression.Parameters.Select(x => new Function.Parameter(x.Name, CobType.FromString(x.TypeName), x.IsSpread)).ToList();
+            var parameters = expression.Parameters.Select(
+                x => new Function.Parameter(x.Name, CobTypeFromStringConsideringGenericProvider(x.TypeName, CurrentContext), x.IsSpread)
+            ).ToList();
 
             if (CurrentContext is TraitType traitType)
             {
@@ -535,6 +540,17 @@ namespace Compiler.CodeGeneration
         public Unit Visit(EmptyExpression expression)
         {
             return Unit.Value;
+        }
+
+        // TODO Probably should move this into CobType
+        private static CobType CobTypeFromStringConsideringGenericProvider(string typeName, IScopeContext? context)
+        {
+            if (context is StructType structType)
+                return structType.FindGenericType(typeName) ?? CobType.FromString(typeName);
+            else if (context is TupleType tupleType)
+                return tupleType.FindGenericType(typeName) ?? CobType.FromString(typeName);
+
+            return CobType.FromString(typeName);
         }
 
         internal enum DeclPhase

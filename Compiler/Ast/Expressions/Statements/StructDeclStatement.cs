@@ -8,6 +8,8 @@ namespace Compiler.Ast.Expressions.Statements
     {
         public string Name { get; }
 
+        public IReadOnlyList<GenericDefinition> Generics { get; }
+
         public IReadOnlyList<string> TraitTypeNames { get; }
 
         public IReadOnlyList<FieldDefinition> Fields { get; }
@@ -21,6 +23,7 @@ namespace Compiler.Ast.Expressions.Statements
         public StructDeclStatement(
             Token token,
             string name,
+            IReadOnlyList<GenericDefinition> generics,
             IReadOnlyList<string> traitTypeNames,
             IReadOnlyList<FieldDefinition> fields,
             IReadOnlyList<FunctionDeclStatement> functions,
@@ -30,6 +33,7 @@ namespace Compiler.Ast.Expressions.Statements
             : base(token)
         {
             Name = name;
+            Generics = generics;
             TraitTypeNames = traitTypeNames;
             Fields = fields;
             Functions = functions;

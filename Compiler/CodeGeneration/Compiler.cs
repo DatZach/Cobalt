@@ -571,6 +571,10 @@ namespace Compiler.CodeGeneration
                 {
                     cType = tupleType.FindOrAllocateConcretizedTupleType(bType);
                 }
+                else if (aType?.Tag is StructType structType)
+                {
+                    cType = structType.FindOrAllocateConcretizedStructType(bType);
+                }
                 else
                 {
                     messages.Add(Message.IllegalTypeName, expression);
