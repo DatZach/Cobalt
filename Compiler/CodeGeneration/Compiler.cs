@@ -42,6 +42,8 @@ namespace Compiler.CodeGeneration
 
         public Function CurrentFunction => contextStack.OfType<Function>().First();
 
+        private readonly List<GenericTypeAstReference> genericTypeAstReferences;
+        private readonly List<ConcreteTypeAstReference> concreteTypeAstReferences;
         private readonly Stack<IScopeContext> contextStack;
         private readonly Stack<LoopContext> loopStack;
         private readonly Artifact artifact;
@@ -56,7 +58,9 @@ namespace Compiler.CodeGeneration
             RootModule = new Module(null, null, this);
             Errors = RootModule.FindOrAllocateModule("error");
             Errors.InitializerFunction.Body.Emit(Opcode.Return);
-            
+
+            genericTypeAstReferences = new List<GenericTypeAstReference>();
+            concreteTypeAstReferences = new List<ConcreteTypeAstReference>();
             contextStack = new Stack<IScopeContext>();
             loopStack = new Stack<LoopContext>();
 
@@ -147,12 +151,24 @@ namespace Compiler.CodeGeneration
         public Storage? Visit(StructDeclStatement expression)
         {
             var structType = CurrentModule.FindStructType(expression.Name)!;
-            contextStack.Push(structType);
-            for (var i = 0; i < expression.Factories.Count; ++i)
-                expression.Factories[i].Accept(this);
-            foreach (var functionExpression in expression.Functions)
-                functionExpression.Accept(this);
-            contextStack.Pop();
+            if (structType.IsGeneric)
+            {
+                genericTypeAstReferences.Add(new GenericTypeAstReference(
+                    structType,
+                    expression,
+                    new Stack<IScopeContext>(contextStack)
+                ));
+            }
+            else
+            {
+                contextStack.Push(structType);
+
+                for (var i = 0; i < expression.Factories.Count; ++i)
+                    expression.Factories[i].Accept(this);
+                foreach (var functionExpression in expression.Functions)
+                    functionExpression.Accept(this);
+                contextStack.Pop();
+            }
 
             return null;
         }
@@ -569,11 +585,20 @@ namespace Compiler.CodeGeneration
 
                 if (aType?.Tag is TupleType tupleType)
                 {
+                    // TODO Implement the pattern below
                     cType = tupleType.FindOrAllocateConcretizedTupleType(bType);
                 }
                 else if (aType?.Tag is StructType structType)
                 {
-                    cType = structType.FindOrAllocateConcretizedStructType(bType);
+                    var concreteStructType = structType.FindConcretizedStruct(bType);
+                    if (concreteStructType == null)
+                    {
+                        concreteStructType = structType.AllocateAsConcretizedStruct(bType);
+                        concreteTypeAstReferences.Add(new ConcreteTypeAstReference(structType, concreteStructType));
+                    }
+
+                    cType = new CobType(eCobType.Struct, tag: concreteStructType);
+                    //cType = structType.FindOrAllocateConcretizedStructType(bType);
                 }
                 else
                 {
@@ -1442,6 +1467,24 @@ namespace Compiler.CodeGeneration
                     compiler.Scripts[i].Accept(compiler);
                 
                 ast.Accept(compiler);
+
+                
+                // PASS 2 - Generics
+                foreach (var concreteType in compiler.concreteTypeAstReferences)
+                {
+                    var genericType = compiler.genericTypeAstReferences.First(x => x.Generic == concreteType.Generic);
+                    var concreteExpression = genericType.Expression switch
+                    {
+                        StructDeclStatement x => new StructDeclStatement(x, concreteType.Concrete.Name),
+                        _ => throw new ArgumentOutOfRangeException($"Unknown generic type expression '{genericType.Expression.Token}'")
+                    };
+
+                    compiler.contextStack.Clear();
+                    foreach (var y in genericType.ContextStack)
+                        compiler.contextStack.Push(y);
+                    
+                    concreteExpression.Accept(compiler);
+                }
                 
                 return artifact;
             }
@@ -1453,6 +1496,10 @@ namespace Compiler.CodeGeneration
 
         public static long TotalMilliseconds => stopwatch.ElapsedMilliseconds;
         private static readonly Stopwatch stopwatch = new ();
+
+        private sealed record GenericTypeAstReference(IScopeContext Generic, Expression Expression, Stack<IScopeContext> ContextStack);
+
+        private sealed record ConcreteTypeAstReference(IScopeContext Generic, IScopeContext Concrete);
     }
 
     internal sealed record Import

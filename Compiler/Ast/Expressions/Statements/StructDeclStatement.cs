@@ -41,6 +41,16 @@ namespace Compiler.Ast.Expressions.Statements
             Indexer = indexer;
         }
 
+        public StructDeclStatement(
+            StructDeclStatement other,
+            string name
+        )
+            : this(other.Token, name, other.Generics, other.TraitTypeNames, other.Fields, other.Functions,
+                   other.Factories, other.Indexer)
+        {
+
+        }
+
         [DebuggerStepThrough]
         public override T Accept<T>(IExpressionVisitor<T> visitor)
         {
