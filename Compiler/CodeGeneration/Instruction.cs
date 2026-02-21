@@ -88,7 +88,8 @@
         SetField,
         GetElem,
         SetElem,
-        Lens,
+        Peek,
+        Poke,
         New,
 
         Call,

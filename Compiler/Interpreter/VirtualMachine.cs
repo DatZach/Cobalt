@@ -1,9 +1,11 @@
 ﻿using System.Data.SqlTypes;
 using System.Numerics;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using Compiler.CodeGeneration;
 using Compiler.CodeGeneration.Artifacts;
+using CallingConvention = Compiler.CodeGeneration.Artifacts.CallingConvention;
 
 namespace Compiler.Interpreter
 {
@@ -130,20 +132,34 @@ namespace Compiler.Interpreter
                         throw new NotImplementedException();
                         break;
                     }
-                    case Opcode.Lens:
+                    case Opcode.Peek:
                     {
-                        var src = ReadOperand(inst.B!);
-                        WriteOperand(
-                            inst.A!,
-                            new Variable(
-                                "$lens",
-                                new CobType(eCobType.Lens, elementType: CobType.U8), // TODO Get the correct value!
-                                true
-                            )
-                            {
-                                Value = src.Value
-                            }
-                        );
+                        var ptr = (IntPtr)ReadOperand(inst.B!).IntValue;
+                        var size = ReadOperand(inst.C!).IntValue;
+                        var value = size switch
+                        {
+                            1 => Marshal.ReadByte(ptr),
+                            2 => Marshal.ReadInt16(ptr),
+                            4 => Marshal.ReadInt32(ptr),
+                            8 => Marshal.ReadInt64(ptr),
+                            _ => throw new InvalidOperationException($"Cannot peek size {size}")
+                        };
+                        WriteOperand(inst.A!, value.ToCobVariable());
+                        break;
+                    }
+                    case Opcode.Poke:
+                    {
+                        var ptr = (IntPtr)ReadOperand(inst.A!).IntValue;
+                        var size = ReadOperand(inst.B!).IntValue;
+                        var value = ReadOperand(inst.C!).IntValue;
+                        switch (size)
+                        {
+                            case 1: Marshal.WriteByte(ptr, (byte)value); break;
+                            case 2: Marshal.WriteInt16(ptr, (short)value); break;
+                            case 4: Marshal.WriteInt32(ptr, (int)value); break;
+                            case 8: Marshal.WriteInt64(ptr, value); break;
+                            default: throw new InvalidOperationException($"Cannot poke size {size}");
+                        }
                         break;
                     }
                     case Opcode.New:

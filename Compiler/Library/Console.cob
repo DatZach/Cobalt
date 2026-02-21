@@ -4,7 +4,7 @@ type HANDLE     u64;
 type BOOL       u32;
 type DWORD      u32;
 type LPDWORD    u64;
-type LPVOID     u64;
+type LPVOID     uint;
 
 const STD_OUTPUT_HANDLE: DWORD = -11;
 const NULL: LPVOID = 0;

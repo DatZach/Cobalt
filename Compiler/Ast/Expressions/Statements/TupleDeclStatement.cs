@@ -14,12 +14,15 @@ namespace Compiler.Ast.Expressions.Statements
 
         public IReadOnlyList<FunctionDeclStatement> Functions { get; }
 
+        public IndexerDefinition? Indexer { get; }
+
         public TupleDeclStatement(
             Token token,
             string name,
             IReadOnlyList<GenericDefinition> generics,
             IReadOnlyList<FieldDefinition> fields,
-            IReadOnlyList<FunctionDeclStatement> functions
+            IReadOnlyList<FunctionDeclStatement> functions,
+            IndexerDefinition? indexer
         )
             : base(token)
         {
@@ -27,6 +30,7 @@ namespace Compiler.Ast.Expressions.Statements
             Generics = generics;
             Fields = fields;
             Functions = functions;
+            Indexer = indexer;
         }
 
         [DebuggerStepThrough]

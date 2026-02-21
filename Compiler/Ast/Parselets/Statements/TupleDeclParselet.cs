@@ -12,8 +12,9 @@ namespace Compiler.Ast.Parselets.Statements
             var generics = new List<GenericDefinition>();
             var fields = new List<FieldDefinition>();
             var functions = new List<FunctionDeclStatement>();
+            IndexerDefinition? indexerDefinition = null;
 
-            while (parser.MatchAndTakeToken(TokenType.Generic) != null)
+            while (!parser.IsEndOfStream && parser.MatchAndTakeToken(TokenType.Generic) != null)
             {
                 var genericName = parser.Take(TokenType.Identifier);
                 var constraintTypeName = parser.MatchAndTakeToken(TokenType.Colon) != null
@@ -40,17 +41,27 @@ namespace Compiler.Ast.Parselets.Statements
             //}
 
             parser.Take(TokenType.LeftParen);
-            while (parser.MatchAndTakeToken(TokenType.RightParen) == null)
+            while (!parser.IsEndOfStream && parser.MatchAndTakeToken(TokenType.RightParen) == null)
             {
-                if (parser.Match(TokenType.Function))
+                if (parser.Match(TokenType.Function)) // Function
                 {
-                    // Function decl
                     var expr = (FunctionDeclStatement)parser.ParseStatement();
                     functions.Add(expr);
                 }
-                else
+                else if (parser.Match(TokenType.LeftSquare)) // Indexer
                 {
-                    // Field decl
+                    parser.Take(TokenType.LeftSquare);
+                    var keyType = parser.ParseTypeName();
+                    parser.Take(TokenType.RightSquare);
+                    parser.Take(TokenType.Colon);
+                    var returnType = parser.ParseTypeName();
+
+                    StructDeclParselet.ParseGetterSetters(parser, out var getterExpression, out var setterExpression);
+
+                    indexerDefinition = new IndexerDefinition(keyType, returnType, getterExpression, setterExpression);
+                }
+                else // Field
+                {
                     var fieldName = parser.Take(TokenType.Identifier);
                     parser.Take(TokenType.Colon);
                     var fieldTypeName = parser.ParseTypeName();
@@ -63,7 +74,7 @@ namespace Compiler.Ast.Parselets.Statements
                 parser.MatchAndTakeToken(TokenType.Semicolon);
             }
 
-            return new TupleDeclStatement(token, name.Value, generics, fields, functions);
+            return new TupleDeclStatement(token, name.Value, generics, fields, functions, indexerDefinition);
         }
     }
 }

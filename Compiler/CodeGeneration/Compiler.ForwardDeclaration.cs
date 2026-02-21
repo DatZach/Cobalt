@@ -287,6 +287,16 @@ namespace Compiler.CodeGeneration
                         var fieldType = CobTypeFromStringConsideringGenericProvider(field.TypeName, CurrentContext);
                         tupleType.AllocateField(field.Name, fieldType, field.GetterExpression, field.SetterExpression);
                     }
+
+                    if (expression.Indexer != null)
+                    {
+                        tupleType.AllocateIndexer(
+                            CobTypeFromStringConsideringGenericProvider(expression.Indexer.KeyTypeName, CurrentContext),
+                            CobTypeFromStringConsideringGenericProvider(expression.Indexer.ReturnTypeName, CurrentContext),
+                            expression.Indexer.GetterExpression,
+                            expression.Indexer.SetterExpression
+                        );
+                    }
                 }
 
                 contextStack.Pop();
@@ -335,8 +345,8 @@ namespace Compiler.CodeGeneration
                     if (expression.Indexer != null)
                     {
                         structType.AllocateIndexer(
-                            CobType.FromString(expression.Indexer.KeyTypeName),
-                            CobType.FromString(expression.Indexer.ReturnTypeName),
+                            CobTypeFromStringConsideringGenericProvider(expression.Indexer.KeyTypeName, CurrentContext),
+                            CobTypeFromStringConsideringGenericProvider(expression.Indexer.ReturnTypeName, CurrentContext),
                             expression.Indexer.GetterExpression,
                             expression.Indexer.SetterExpression
                         );

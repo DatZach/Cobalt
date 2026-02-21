@@ -9,6 +9,8 @@ namespace Compiler.Ast
     {
         public MessageCollection Messages { get; }
 
+        public bool IsEndOfStream => Peek().Type == TokenType.EndOfStream;
+
         private int readIndex;
 
         private readonly IReadOnlyList<Token> tokens;

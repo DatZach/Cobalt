@@ -1288,13 +1288,14 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(LensExpression expression)
         {
-            var target = expression.Expression.Accept(this);
+            throw new NotImplementedException();
+            //var target = expression.Expression.Accept(this);
 
-            var storage = CurrentFunction.AllocateRegisterStorage(new CobType(eCobType.Lens, elementType: expression.ElementType));
-            CurrentFunction.Body.Emit(Opcode.Lens, storage.Operand, target.Operand);
-            target.Free();
+            //var storage = CurrentFunction.AllocateRegisterStorage(new CobType(eCobType.Lens, elementType: expression.ElementType));
+            //CurrentFunction.Body.Emit(Opcode.Lens, storage.Operand, target.Operand);
+            //target.Free();
 
-            return storage;
+            //return storage;
         }
 
         public Storage? Visit(IndexerExpression expression)
@@ -1307,15 +1308,30 @@ namespace Compiler.CodeGeneration
             if (source == null)
                 messages.Add(Message.CannotIndexType, expression, "none");
             else if (source.Type == eCobType.Struct && source.Type.Tag is StructType structType
-            &&  structType.Indexer != null)
+                                                    && structType.Indexer != null)
             {
                 structType.Indexer.Index = index;
                 BinOpLHS = source; // ???
+                contextStack.Push(structType);
                 contextStack.Push(structType.Indexer);
                 storage = structType.Indexer.GetterExpression.Accept(this);
                 contextStack.Pop();
+                contextStack.Pop();
                 BinOpLHS = null;
                 structType.Indexer.Index = null;
+            }
+            else if (source.Type == eCobType.Tuple && source.Type.Tag is TupleType tupleType
+                                                   && tupleType.Indexer != null)
+            {
+                tupleType.Indexer.Index = index;
+                BinOpLHS = source; // ???
+                contextStack.Push(tupleType);
+                contextStack.Push(tupleType.Indexer);
+                storage = tupleType.Indexer.GetterExpression.Accept(this);
+                contextStack.Pop();
+                contextStack.Pop();
+                BinOpLHS = null;
+                tupleType.Indexer.Index = null;
             }
             else if (source.Type == eCobType.Lens)
             {
