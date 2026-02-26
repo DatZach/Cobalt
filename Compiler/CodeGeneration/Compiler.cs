@@ -585,20 +585,29 @@ namespace Compiler.CodeGeneration
 
                 if (aType?.Tag is TupleType tupleType)
                 {
-                    // TODO Implement the pattern below
-                    cType = tupleType.FindOrAllocateConcretizedTupleType(bType);
+                    var tag = tupleType.FindConcretizedTuple(bType);
+                    if (tag == null)
+                    {
+                        tag = tupleType.AllocateConcretizedTuple(bType);
+                        concreteTypeAstReferences.Add(new ConcreteTypeAstReference(tupleType, tag));
+                    }
+
+                    cType = new CobType(eCobType.Tuple, tag: tag);
+
+                    tag.PopulateConcretizedTupleIfRequired();
                 }
                 else if (aType?.Tag is StructType structType)
                 {
-                    var concreteStructType = structType.FindConcretizedStruct(bType);
-                    if (concreteStructType == null)
+                    var tag = structType.FindConcretizedStruct(bType);
+                    if (tag == null)
                     {
-                        concreteStructType = structType.AllocateAsConcretizedStruct(bType);
-                        concreteTypeAstReferences.Add(new ConcreteTypeAstReference(structType, concreteStructType));
+                        tag = structType.AllocateAsConcretizedStruct(bType);
+                        concreteTypeAstReferences.Add(new ConcreteTypeAstReference(structType, tag));
                     }
 
-                    cType = new CobType(eCobType.Struct, tag: concreteStructType);
-                    //cType = structType.FindOrAllocateConcretizedStructType(bType);
+                    cType = new CobType(eCobType.Struct, tag: tag);
+
+                    //tag.PopulateConcretizedStructIfRequired();
                 }
                 else
                 {

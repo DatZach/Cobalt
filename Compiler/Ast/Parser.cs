@@ -92,7 +92,6 @@ namespace Compiler.Ast
         public string ParseTypeName()
         {
             string typeName = "";
-            Token endToken;
 
             while (true)
             {
@@ -107,13 +106,17 @@ namespace Compiler.Ast
                 if (Match(TokenType.LeftSquare))
                 {
                     Take(TokenType.LeftSquare);
-                    endToken = Take(TokenType.RightSquare);
+                    Take(TokenType.RightSquare);
                     typeName += type.Value + "[]";
                 }
                 else
-                {
                     typeName += type.Value;
-                    endToken = type;
+
+                if (Match(TokenType.Generic))
+                {
+                    Take(TokenType.Generic);
+                    typeName += '`';
+                    continue;
                 }
 
                 if (Match(TokenType.NilErrorCoalesce))

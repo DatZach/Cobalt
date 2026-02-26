@@ -284,15 +284,15 @@ namespace Compiler.CodeGeneration
                 {
                     foreach (var field in expression.Fields)
                     {
-                        var fieldType = CobTypeFromStringConsideringGenericProvider(field.TypeName, CurrentContext);
+                        var fieldType = CobType.FromString(field.TypeName, CurrentContext);
                         tupleType.AllocateField(field.Name, fieldType, field.GetterExpression, field.SetterExpression);
                     }
 
                     if (expression.Indexer != null)
                     {
                         tupleType.AllocateIndexer(
-                            CobTypeFromStringConsideringGenericProvider(expression.Indexer.KeyTypeName, CurrentContext),
-                            CobTypeFromStringConsideringGenericProvider(expression.Indexer.ReturnTypeName, CurrentContext),
+                            CobType.FromString(expression.Indexer.KeyTypeName, CurrentContext),
+                            CobType.FromString(expression.Indexer.ReturnTypeName, CurrentContext),
                             expression.Indexer.GetterExpression,
                             expression.Indexer.SetterExpression
                         );
@@ -338,15 +338,15 @@ namespace Compiler.CodeGeneration
                 {
                     foreach (var field in expression.Fields)
                     {
-                        var fieldType = CobTypeFromStringConsideringGenericProvider(field.TypeName, CurrentContext);
+                        var fieldType = CobType.FromString(field.TypeName, CurrentContext);
                         structType.AllocateField(field.Name, fieldType, field.GetterExpression, field.SetterExpression);
                     }
 
                     if (expression.Indexer != null)
                     {
                         structType.AllocateIndexer(
-                            CobTypeFromStringConsideringGenericProvider(expression.Indexer.KeyTypeName, CurrentContext),
-                            CobTypeFromStringConsideringGenericProvider(expression.Indexer.ReturnTypeName, CurrentContext),
+                            CobType.FromString(expression.Indexer.KeyTypeName, CurrentContext),
+                            CobType.FromString(expression.Indexer.ReturnTypeName, CurrentContext),
                             expression.Indexer.GetterExpression,
                             expression.Indexer.SetterExpression
                         );
@@ -365,7 +365,7 @@ namespace Compiler.CodeGeneration
                 return Unit.Value;
 
             var parameters = expression.Parameters.Select(
-                x => new Function.Parameter(x.Name, CobTypeFromStringConsideringGenericProvider(x.TypeName, CurrentContext), x.IsSpread)
+                x => new Function.Parameter(x.Name, CobType.FromString(x.TypeName, CurrentContext), x.IsSpread)
             ).ToList();
 
             if (CurrentContext is StructType structType)
@@ -384,7 +384,7 @@ namespace Compiler.CodeGeneration
                 return Unit.Value;
 
             var parameters = expression.Parameters.Select(
-                x => new Function.Parameter(x.Name, CobTypeFromStringConsideringGenericProvider(x.TypeName, CurrentContext), x.IsSpread)
+                x => new Function.Parameter(x.Name, CobType.FromString(x.TypeName, CurrentContext), x.IsSpread)
             ).ToList();
 
             if (CurrentContext is TraitType traitType)
@@ -550,17 +550,6 @@ namespace Compiler.CodeGeneration
         public Unit Visit(EmptyExpression expression)
         {
             return Unit.Value;
-        }
-
-        // TODO Probably should move this into CobType
-        private static CobType CobTypeFromStringConsideringGenericProvider(string typeName, IScopeContext? context)
-        {
-            if (context is StructType structType)
-                return structType.FindGenericType(typeName) ?? CobType.FromString(typeName);
-            else if (context is TupleType tupleType)
-                return tupleType.FindGenericType(typeName) ?? CobType.FromString(typeName);
-
-            return CobType.FromString(typeName);
         }
 
         internal enum DeclPhase
