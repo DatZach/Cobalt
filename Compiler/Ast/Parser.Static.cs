@@ -120,6 +120,7 @@ namespace Compiler.Ast
             Register(TokenType.For, new ForParselet());
             Register(TokenType.Continue, new ContinueParselet());
             Register(TokenType.Break, new BreakParselet());
+            Register(TokenType.Machine, new MachineParselet());
         }
 
         private static void Register(TokenType type, IPrefixExpressionParselet parselet)

@@ -290,12 +290,12 @@ namespace Compiler.CodeGeneration
 
                     if (expression.Indexer != null)
                     {
-                        tupleType.AllocateIndexer(
-                            CobType.FromString(expression.Indexer.KeyTypeName, CurrentContext),
-                            CobType.FromString(expression.Indexer.ReturnTypeName, CurrentContext),
-                            expression.Indexer.GetterExpression,
-                            expression.Indexer.SetterExpression
-                        );
+                        var keyType = CobType.FromString(expression.Indexer.KeyTypeName, CurrentContext);
+                        var returnType = CobType.FromString(expression.Indexer.ReturnTypeName, CurrentContext);
+                        //var getter = tupleType.AllocateFunction("$Indexer_$get", new [] { new Function.Parameter("$this", new CobType(eCobType.Tuple, tag: tupleType), false), new Function.Parameter("key", keyType, false) }, returnType);
+                        //var setter = tupleType.AllocateFunction("$Indexer_$set", new [] { new Function.Parameter("$this", new CobType(eCobType.Tuple, tag: tupleType), false), new Function.Parameter("key", keyType, false), new Function.Parameter("value", returnType, false) }, returnType);
+
+                        tupleType.AllocateIndexer(keyType, returnType);
                     }
                 }
 
@@ -344,12 +344,12 @@ namespace Compiler.CodeGeneration
 
                     if (expression.Indexer != null)
                     {
-                        structType.AllocateIndexer(
-                            CobType.FromString(expression.Indexer.KeyTypeName, CurrentContext),
-                            CobType.FromString(expression.Indexer.ReturnTypeName, CurrentContext),
-                            expression.Indexer.GetterExpression,
-                            expression.Indexer.SetterExpression
-                        );
+                        var keyType = CobType.FromString(expression.Indexer.KeyTypeName, CurrentContext);
+                        var returnType = CobType.FromString(expression.Indexer.ReturnTypeName, CurrentContext);
+                        //var getter = structType.AllocateFunction("$Indexer_$get", new [] { new Function.Parameter("$this", new CobType(eCobType.Struct, tag: structType), false), new Function.Parameter("key", keyType, false) }, returnType);
+                        //var setter = structType.AllocateFunction("$Indexer_$set", new [] { new Function.Parameter("$this", new CobType(eCobType.Struct, tag: structType), false), new Function.Parameter("key", keyType, false), new Function.Parameter("value", returnType, false) }, returnType);
+
+                        structType.AllocateIndexer(keyType, returnType);
                     }
                 }
 
@@ -459,6 +459,11 @@ namespace Compiler.CodeGeneration
         }
 
         public Unit Visit(ReturnStatement expression)
+        {
+            return Unit.Value;
+        }
+
+        public Unit Visit(MachineStatement expression)
         {
             return Unit.Value;
         }

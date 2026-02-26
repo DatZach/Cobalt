@@ -76,7 +76,7 @@ namespace Compiler.CodeGeneration
             for (int i = 0; i < expressions.Count; ++i)
                 expressions[i].Accept(this);
 
-            CurrentModule.InitializerFunction.Body.Emit(Opcode.Return);
+            //CurrentModule.InitializerFunction.Body.Emit(Opcode.Return);
 
             contextStack.Pop();
             contextStack.Pop();
@@ -140,10 +140,41 @@ namespace Compiler.CodeGeneration
         public Storage? Visit(TupleDeclStatement expression)
         {
             var tupleType = CurrentModule.FindTupleType(expression.Name)!;
-            contextStack.Push(tupleType);
-            foreach (var functionExpression in expression.Functions)
-                functionExpression.Accept(this);
-            contextStack.Pop();
+            if (tupleType.IsGeneric)
+            {
+                genericTypeAstReferences.Add(new GenericTypeAstReference(
+                    tupleType,
+                    expression,
+                    new Stack<IScopeContext>(contextStack)
+                ));
+            }
+            else
+            {
+                contextStack.Push(tupleType);
+
+                foreach (var functionExpression in expression.Functions)
+                    functionExpression.Accept(this);
+
+                if (tupleType.Indexer != null)
+                {
+                    //contextStack.Push(tupleType.Indexer);
+                    if (tupleType.Indexer.Getter != null)
+                    {
+                        contextStack.Push(tupleType.Indexer.Getter);
+                        expression.Indexer?.GetterExpression?.Accept(this)?.Free();
+                        contextStack.Pop();
+                    }
+
+                    if (tupleType.Indexer.Setter != null)
+                    {
+                        contextStack.Push(tupleType.Indexer.Setter);
+                        expression.Indexer?.SetterExpression?.Accept(this)?.Free();
+                        contextStack.Pop();
+                    }
+                }
+
+                contextStack.Pop();
+            }
 
             return null;
         }
@@ -163,10 +194,30 @@ namespace Compiler.CodeGeneration
             {
                 contextStack.Push(structType);
 
-                for (var i = 0; i < expression.Factories.Count; ++i)
-                    expression.Factories[i].Accept(this);
+                foreach (var factoryExpression in expression.Factories)
+                    factoryExpression.Accept(this);
+
                 foreach (var functionExpression in expression.Functions)
                     functionExpression.Accept(this);
+
+                if (structType.Indexer != null)
+                {
+                    //contextStack.Push(tupleType.Indexer);
+                    if (structType.Indexer.Getter != null)
+                    {
+                        contextStack.Push(structType.Indexer.Getter);
+                        expression.Indexer?.GetterExpression?.Accept(this)?.Free();
+                        contextStack.Pop();
+                    }
+
+                    if (structType.Indexer.Setter != null)
+                    {
+                        contextStack.Push(structType.Indexer.Setter);
+                        expression.Indexer?.SetterExpression?.Accept(this)?.Free();
+                        contextStack.Pop();
+                    }
+                }
+
                 contextStack.Pop();
             }
 
@@ -461,6 +512,29 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
+        public Storage? Visit(MachineStatement expression)
+        {
+            if (expression.Target == "cobil")
+            {
+                if (expression.Source == "Lens_Get")
+                {
+                    CurrentFunction.Body.Emit(Opcode.GetField, Operand._Register(1), Operand.This, Operand.ImmediateUnsigned(0));
+                    CurrentFunction.Body.Emit(Opcode.Add, Operand._Register(1), Operand._Register(1), Operand.Argument(1));
+                    CurrentFunction.Body.Emit(Opcode.Peek, Operand._Register(0), Operand._Register(1), Operand.ImmediateUnsigned(1));
+                    CurrentFunction.Body.Emit(Opcode.Return, Operand._Register(0));
+                }
+                else if (expression.Source == "Lens_Set")
+                {
+                    CurrentFunction.Body.Emit(Opcode.GetField, Operand._Register(1), Operand.This, Operand.ImmediateUnsigned(0));
+                    CurrentFunction.Body.Emit(Opcode.Add, Operand._Register(1), Operand._Register(1), Operand.Argument(1));
+                    CurrentFunction.Body.Emit(Opcode.Poke, Operand._Register(1), Operand.ImmediateUnsigned(1), Operand.Argument(2));
+                    CurrentFunction.Body.Emit(Opcode.Return, Operand.ImmediateUnsigned(0));
+                }
+            }
+
+            return null;
+        }
+
         public Storage? Visit(BlockExpression expression)
         {
             for (var i = 0; i < expression.Expressions.Count; i++)
@@ -589,12 +663,12 @@ namespace Compiler.CodeGeneration
                     if (tag == null)
                     {
                         tag = tupleType.AllocateConcretizedTuple(bType);
-                        concreteTypeAstReferences.Add(new ConcreteTypeAstReference(tupleType, tag));
                     }
 
                     cType = new CobType(eCobType.Tuple, tag: tag);
 
-                    tag.PopulateConcretizedTupleIfRequired();
+                    if (tag.PopulateConcretizedTupleIfRequired())
+                        concreteTypeAstReferences.Add(new ConcreteTypeAstReference(tupleType, tag));
                 }
                 else if (aType?.Tag is StructType structType)
                 {
@@ -1309,41 +1383,112 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(IndexerExpression expression)
         {
+            // TODO Setters
+
             Storage? storage = null;
+
+            var prevAssignmentRHS = AssignmentRHS;
+            AssignmentRHS = null;
 
             var source = expression.Left.Accept(this);
             var index = expression.Index.Accept(this);
+
+            AssignmentRHS = prevAssignmentRHS;
+
+            // SET
+            if (AssignmentRHS != null)
+            {
+                if (source.Type == eCobType.Tuple && source.Type.Tag is TupleType tupleType
+                                                  && tupleType.Indexer != null)
+                {
+                    var function = tupleType.Indexer.Setter;
+                    var functionStorage = tupleType.EmitGetForSymbol(function);
+                    var operandArguments = new []{ source.Operand, index.Operand, AssignmentRHS.Operand };
+
+                    storage = CurrentFunction.AllocateRegisterStorage(function.ReturnType);
+
+                    // CALL
+                    CurrentFunction.Body.Emit(Opcode.Call, functionStorage.Operand, storage.Operand, operandArguments);
+
+                    if (function.ReturnType.HasErrorFlag && conditionalStack <= 0)
+                    {
+                        CurrentFunction.Body.Emit(Opcode.PanicOnErr, storage.Operand);
+                    }
+
+                    // CLEANUP
+                    functionStorage.Free(); // function reg
+                }
+
+                return null;
+            }
+
+            // GET
 
             if (source == null)
                 messages.Add(Message.CannotIndexType, expression, "none");
             else if (source.Type == eCobType.Struct && source.Type.Tag is StructType structType
                                                     && structType.Indexer != null)
             {
-                structType.Indexer.Index = index;
-                BinOpLHS = source; // ???
-                contextStack.Push(structType);
-                contextStack.Push(structType.Indexer);
-                storage = structType.Indexer.GetterExpression.Accept(this);
-                contextStack.Pop();
-                contextStack.Pop();
-                BinOpLHS = null;
-                structType.Indexer.Index = null;
+                //structType.Indexer.Index = index;
+                //BinOpLHS = source; // ???
+                //contextStack.Push(structType);
+                //contextStack.Push(structType.Indexer);
+                //storage = structType.Indexer.GetterExpression.Accept(this);
+                //contextStack.Pop();
+                //contextStack.Pop();
+                //BinOpLHS = null;
+                //structType.Indexer.Index = null;
+
+                var function = structType.Indexer.Getter;
+                var functionStorage = structType.EmitGetForSymbol(function);
+                var operandArguments = new []{ source.Operand, index.Operand };
+
+                storage = CurrentFunction.AllocateRegisterStorage(function.ReturnType);
+
+                // CALL
+                CurrentFunction.Body.Emit(Opcode.Call, functionStorage.Operand, storage.Operand, operandArguments);
+
+                if (function.ReturnType.HasErrorFlag && conditionalStack <= 0)
+                {
+                    CurrentFunction.Body.Emit(Opcode.PanicOnErr, storage.Operand);
+                }
+
+                // CLEANUP
+                functionStorage.Free(); // function reg
             }
             else if (source.Type == eCobType.Tuple && source.Type.Tag is TupleType tupleType
                                                    && tupleType.Indexer != null)
             {
-                tupleType.Indexer.Index = index;
-                BinOpLHS = source; // ???
-                contextStack.Push(tupleType);
-                contextStack.Push(tupleType.Indexer);
-                storage = tupleType.Indexer.GetterExpression.Accept(this);
-                contextStack.Pop();
-                contextStack.Pop();
-                BinOpLHS = null;
-                tupleType.Indexer.Index = null;
+                //tupleType.Indexer.Index = index;
+                //BinOpLHS = source; // ???
+                //contextStack.Push(tupleType);
+                //contextStack.Push(tupleType.Indexer);
+                //storage = tupleType.Indexer.GetterExpression.Accept(this);
+                //contextStack.Pop();
+                //contextStack.Pop();
+                //BinOpLHS = null;
+                //tupleType.Indexer.Index = null;
+
+                var function = tupleType.Indexer.Getter;
+                var functionStorage = tupleType.EmitGetForSymbol(function);
+                var operandArguments = new []{ source.Operand, index.Operand };
+
+                storage = CurrentFunction.AllocateRegisterStorage(function.ReturnType);
+
+                // CALL
+                CurrentFunction.Body.Emit(Opcode.Call, functionStorage.Operand, storage.Operand, operandArguments);
+
+                if (function.ReturnType.HasErrorFlag && conditionalStack <= 0)
+                {
+                    CurrentFunction.Body.Emit(Opcode.PanicOnErr, storage.Operand);
+                }
+
+                // CLEANUP
+                functionStorage.Free(); // function reg
             }
             else if (source.Type == eCobType.Lens)
             {
+                // TODO Remove
                 storage = CurrentFunction.AllocateRegisterStorage(source.Type.ElementType);
                 CurrentFunction.Body.Emit(
                     Opcode.GetElem,
@@ -1493,13 +1638,18 @@ namespace Compiler.CodeGeneration
                 
                 ast.Accept(compiler);
 
+                // HACK Really shouldn't be needed here
+                foreach (var module in artifact.Modules)
+                    module.InitializerFunction.Body.Emit(Opcode.Return);
+
                 
                 // PASS 2 - Generics
                 foreach (var concreteType in compiler.concreteTypeAstReferences)
                 {
                     var genericType = compiler.genericTypeAstReferences.First(x => x.Generic == concreteType.Generic);
-                    var concreteExpression = genericType.Expression switch
+                    Expression concreteExpression = genericType.Expression switch
                     {
+                        TupleDeclStatement x => new TupleDeclStatement(x, concreteType.Concrete.Name),
                         StructDeclStatement x => new StructDeclStatement(x, concreteType.Concrete.Name),
                         _ => throw new ArgumentOutOfRangeException($"Unknown generic type expression '{genericType.Expression.Token}'")
                     };

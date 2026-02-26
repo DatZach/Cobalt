@@ -25,6 +25,7 @@ namespace Compiler.Ast.Visitors
         T Visit(ContinueStatement expression);
         T Visit(BreakStatement expression);
         T Visit(ReturnStatement expression);
+        T Visit(MachineStatement expression);
         
         T Visit(BlockExpression expression);
         T Visit(FatArrowStatement expression);

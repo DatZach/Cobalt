@@ -11,6 +11,8 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public Indexer? Indexer { get; private set; }
 
+        public bool IsGeneric => generics.Count > 0;
+
         private TupleType? pendingSuperType;
         private CobType? pendingBType;
 
@@ -100,16 +102,18 @@ namespace Compiler.CodeGeneration.Artifacts
             return fields.FirstOrDefault(x => x.Name == name);
         }
 
-        public Indexer AllocateIndexer(CobType keyType, CobType returnType, Expression? getterExpression, Expression? setterExpression)
+        public Indexer AllocateIndexer(CobType keyType, CobType returnType)
         {
-            // TODO Allocate functions for the getters/setters
+            var getter = AllocateFunction("$Indexer_$get", new [] { new Function.Parameter("key", keyType, false) }, returnType);
+            var setter = AllocateFunction("$Indexer_$set", new [] { new Function.Parameter("key", keyType, false), new Function.Parameter("value", returnType, false) }, returnType);
+
             var indexer = new Indexer
             {
                 Parent = this,
                 KeyType = keyType,
                 ReturnType = returnType,
-                GetterExpression = getterExpression,
-                SetterExpression = setterExpression
+                Getter = getter,
+                Setter = setter
             };
 
             Indexer = indexer;
@@ -159,10 +163,10 @@ namespace Compiler.CodeGeneration.Artifacts
             return concreteTupleType;
         }
 
-        public void PopulateConcretizedTupleIfRequired()
+        public bool PopulateConcretizedTupleIfRequired()
         {
             if (pendingSuperType == null || pendingBType == null)
-                return;
+                return false;
 
             foreach (var trait in pendingSuperType.traits)
             {
@@ -189,14 +193,14 @@ namespace Compiler.CodeGeneration.Artifacts
             {
                 Indexer = AllocateIndexer(
                     pendingSuperType.Indexer.KeyType.ToConcreteType(pendingBType),
-                    pendingSuperType.Indexer.ReturnType.ToConcreteType(pendingBType),
-                    pendingSuperType.Indexer.GetterExpression,
-                    pendingSuperType.Indexer.SetterExpression
+                    pendingSuperType.Indexer.ReturnType.ToConcreteType(pendingBType)
                 );
             }
 
             pendingSuperType = null;
             pendingBType = null;
+
+            return true;
         }
 
         //public CobType FindOrAllocateConcretizedTupleType(CobType bType)

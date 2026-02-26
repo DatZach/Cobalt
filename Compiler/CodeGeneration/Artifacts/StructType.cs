@@ -116,16 +116,18 @@ namespace Compiler.CodeGeneration.Artifacts
             return fields.FirstOrDefault(x => x.Name == name);
         }
 
-        public Indexer AllocateIndexer(CobType keyType, CobType returnType, Expression? getterExpression, Expression? setterExpression)
+        public Indexer AllocateIndexer(CobType keyType, CobType returnType)
         {
-            // TODO Allocate functions for the getters/setters
+            var getter = AllocateFunction("$Indexer_$get", new [] { new Function.Parameter("key", keyType, false) }, returnType);
+            var setter = AllocateFunction("$Indexer_$set", new [] { new Function.Parameter("key", keyType, false), new Function.Parameter("value", returnType, false) }, returnType);
+
             var indexer = new Indexer
             {
                 Parent = this,
                 KeyType = keyType,
                 ReturnType = returnType,
-                GetterExpression = getterExpression,
-                SetterExpression = setterExpression
+                Getter = getter,
+                Setter = setter
             };
 
             Indexer = indexer;
@@ -202,9 +204,7 @@ namespace Compiler.CodeGeneration.Artifacts
             {
                 concreteStructType.Indexer = AllocateIndexer(
                     Indexer.KeyType.ToConcreteType(bType),
-                    Indexer.ReturnType.ToConcreteType(bType),
-                    Indexer.GetterExpression,
-                    Indexer.SetterExpression
+                    Indexer.ReturnType.ToConcreteType(bType)
                 );
             }
 
@@ -308,9 +308,13 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public CobType ReturnType { get; init; }
 
-        public Expression? GetterExpression { get; init; }
+        public Function? Getter { get; init; }
 
-        public Expression? SetterExpression { get; init; }
+        public Function? Setter { get; init; }
+
+        //public Expression? GetterExpression { get; init; }
+
+        //public Expression? SetterExpression { get; init; }
 
         public Storage? Index { get; set; }
 

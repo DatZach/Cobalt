@@ -1,5 +1,4 @@
-﻿using System.Data.SqlTypes;
-using System.Numerics;
+﻿using System.Numerics;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -489,7 +488,7 @@ namespace Compiler.Interpreter
 
         public sealed class NativeLibrariesProxy : IDisposable
         {
-            public delegate int NativeWrapperDelegate(Variable[]? variables);
+            public delegate long NativeWrapperDelegate(Variable[]? variables);
 
             private readonly Dictionary<string, NativeLibraryProxy> proxies;
 
@@ -503,7 +502,7 @@ namespace Compiler.Interpreter
                 if (native.Function == null)
                     return null;
 
-                int result;
+                long result;
                 var proxy = proxies[native.Library];
                 var methodDelegate = proxy.Functions[native.SymbolName!];
                 if (native.SymbolName == "printf") // HACK!!! REMOVE WHEN FORMATTING IS NATIVE
@@ -543,7 +542,7 @@ namespace Compiler.Interpreter
 
                     var method = new System.Reflection.Emit.DynamicMethod(
                         $"dynm_{import.SymbolName}",
-                        typeof(int),
+                        typeof(long),
                         new [] { typeof(Variable[]) },
                         typeof(NativeLibrariesProxy).Module
                     );

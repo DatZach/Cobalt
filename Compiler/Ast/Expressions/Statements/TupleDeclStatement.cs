@@ -33,6 +33,15 @@ namespace Compiler.Ast.Expressions.Statements
             Indexer = indexer;
         }
 
+        public TupleDeclStatement(
+            TupleDeclStatement other,
+            string name
+        )
+            : this(other.Token, name, other.Generics, other.Fields, other.Functions, other.Indexer)
+        {
+
+        }
+
         [DebuggerStepThrough]
         public override T Accept<T>(IExpressionVisitor<T> visitor)
         {
