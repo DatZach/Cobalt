@@ -40,6 +40,7 @@ namespace Compiler.Ast.Visitors
         T Visit(IndexerExpression expression);
 
         T Visit(StructLiteralExpression expression);
+        T Visit(ArrayLiteralExpression expression);
         T Visit(NumberLiteralExpression expression);
         T Visit(BooleanLiteralExpression expression);
         T Visit(StringLiteralExpression expression);

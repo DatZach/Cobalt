@@ -532,6 +532,11 @@ namespace Compiler.CodeGeneration
             return Unit.Value;
         }
 
+        public Unit Visit(ArrayLiteralExpression expression)
+        {
+            return Unit.Value;
+        }
+
         public Unit Visit(NumberLiteralExpression expression)
         {
             return Unit.Value;

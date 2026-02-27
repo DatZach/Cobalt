@@ -128,7 +128,6 @@ namespace Compiler.CodeGeneration.Artifacts
 
             var indexer = new Indexer
             {
-                Parent = this,
                 KeyType = keyType,
                 ReturnType = returnType,
                 Getter = getter,
@@ -206,7 +205,7 @@ namespace Compiler.CodeGeneration.Artifacts
 
             foreach (var x in pendingSuperType.functions)
             {
-                var parameters = x.Parameters.Select(
+                var parameters = x.Parameters.Skip(1).Select(
                     y => new Function.Parameter(y.Name, y.Type.ToConcreteType(pendingBType), y.IsSpread)
                 ).ToList();
                 var returnType = x.ReturnType.ToConcreteType(pendingBType);
@@ -323,12 +322,8 @@ namespace Compiler.CodeGeneration.Artifacts
         public override string ToString() => Name;
     }
 
-    internal sealed class Indexer : IScopeContext
+    internal sealed class Indexer
     {
-        public IScopeContext Parent { get; init; }
-
-        public string Name => "indexer";
-
         public CobType KeyType { get; init; }
 
         public CobType ReturnType { get; init; }
@@ -336,45 +331,5 @@ namespace Compiler.CodeGeneration.Artifacts
         public Function? Getter { get; init; }
 
         public Function? Setter { get; init; }
-
-        //public Expression? GetterExpression { get; init; }
-
-        //public Expression? SetterExpression { get; init; }
-
-        public Storage? Index { get; set; }
-
-        public ISymbol? FindSymbol(string name)
-        {
-            if (name == "key")
-                return new Variable("key", KeyType, false);
-
-            return null;
-        }
-
-        public Storage? EmitGetForSymbol(ISymbol symbol)
-        {
-            if (symbol is Variable variable && variable.Name == "key")
-                return Index;
-
-            return null;
-        }
-
-        public bool EmitSetForSymbol(ISymbol symbol)
-        {
-            return false;
-        }
-
-        public Storage? GetIdentifier(Compiler compiler, IdentifierExpression expression)
-        {
-            if (expression.Value == "key")
-                return Index;
-
-            return null;
-        }
-
-        public Variable? SetIdentifier(Compiler compiler, IdentifierExpression expression)
-        {
-            return null;
-        }
     }
 }

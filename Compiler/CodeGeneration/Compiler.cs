@@ -202,7 +202,6 @@ namespace Compiler.CodeGeneration
 
                 if (structType.Indexer != null)
                 {
-                    //contextStack.Push(tupleType.Indexer);
                     if (structType.Indexer.Getter != null)
                     {
                         contextStack.Push(structType.Indexer.Getter);
@@ -1376,8 +1375,9 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(IndexerExpression expression)
         {
-            // TODO Cleanup
-            Storage? storage = null;
+            Function? function = null;
+            IScopeContext? context = null;
+            Operand[]? operandArguments = null;
 
             var prevAssignmentRHS = AssignmentRHS;
             AssignmentRHS = null;
@@ -1387,53 +1387,23 @@ namespace Compiler.CodeGeneration
 
             AssignmentRHS = prevAssignmentRHS;
 
-            if (source == null)
+            if (source == null || index == null)
                 messages.Add(Message.CannotIndexType, expression, "none");
-            if (AssignmentRHS != null) // SET
+            else if (AssignmentRHS != null) // SET
             {
                 if (source.Type == eCobType.Struct && source.Type.Tag is StructType structType
                                                    && structType.Indexer != null)
                 {
-                    var function = structType.Indexer.Setter;
-                    var functionStorage = structType.EmitGetForSymbol(function);
-                    var operandArguments = new []{ source.Operand, index.Operand, AssignmentRHS.Operand };
-
-                    storage = CurrentFunction.AllocateRegisterStorage(function.ReturnType);
-
-                    // CALL
-                    CurrentFunction.Body.Emit(Opcode.Call, functionStorage.Operand, storage.Operand, operandArguments);
-
-                    if (function.ReturnType.HasErrorFlag && conditionalStack <= 0)
-                    {
-                        CurrentFunction.Body.Emit(Opcode.PanicOnErr, storage.Operand);
-                    }
-
-                    // CLEANUP
-                    functionStorage.Free(); // function reg
-                    storage.Free();
-                    storage = null;
+                    function = structType.Indexer.Setter;
+                    context = structType;
+                    operandArguments = new []{ source.Operand, index.Operand, AssignmentRHS.Operand };
                 }
                 else if (source.Type == eCobType.Tuple && source.Type.Tag is TupleType tupleType
                                                   && tupleType.Indexer != null)
                 {
-                    var function = tupleType.Indexer.Setter;
-                    var functionStorage = tupleType.EmitGetForSymbol(function);
-                    var operandArguments = new []{ source.Operand, index.Operand, AssignmentRHS.Operand };
-
-                    storage = CurrentFunction.AllocateRegisterStorage(function.ReturnType);
-
-                    // CALL
-                    CurrentFunction.Body.Emit(Opcode.Call, functionStorage.Operand, storage.Operand, operandArguments);
-
-                    if (function.ReturnType.HasErrorFlag && conditionalStack <= 0)
-                    {
-                        CurrentFunction.Body.Emit(Opcode.PanicOnErr, storage.Operand);
-                    }
-
-                    // CLEANUP
-                    functionStorage.Free(); // function reg
-                    storage.Free();
-                    storage = null;
+                    function = tupleType.Indexer.Setter;
+                    context = tupleType;
+                    operandArguments = new []{ source.Operand, index.Operand, AssignmentRHS.Operand };
                 }
             }
             else // GET
@@ -1441,44 +1411,35 @@ namespace Compiler.CodeGeneration
                 if (source.Type == eCobType.Struct && source.Type.Tag is StructType structType
                                                    && structType.Indexer != null)
                 {
-                    var function = structType.Indexer.Getter;
-                    var functionStorage = structType.EmitGetForSymbol(function);
-                    var operandArguments = new []{ source.Operand, index.Operand };
-
-                    storage = CurrentFunction.AllocateRegisterStorage(function.ReturnType);
-
-                    // CALL
-                    CurrentFunction.Body.Emit(Opcode.Call, functionStorage.Operand, storage.Operand, operandArguments);
-
-                    if (function.ReturnType.HasErrorFlag && conditionalStack <= 0)
-                    {
-                        CurrentFunction.Body.Emit(Opcode.PanicOnErr, storage.Operand);
-                    }
-
-                    // CLEANUP
-                    functionStorage.Free(); // function reg
+                    function = structType.Indexer.Getter;
+                    context = structType;
+                    operandArguments = new []{ source.Operand, index.Operand };
                 }
                 else if (source.Type == eCobType.Tuple && source.Type.Tag is TupleType tupleType
                                                        && tupleType.Indexer != null)
                 {
-                    var function = tupleType.Indexer.Getter;
-                    var functionStorage = tupleType.EmitGetForSymbol(function);
-                    var operandArguments = new []{ source.Operand, index.Operand };
-
-                    storage = CurrentFunction.AllocateRegisterStorage(function.ReturnType);
-
-                    // CALL
-                    CurrentFunction.Body.Emit(Opcode.Call, functionStorage.Operand, storage.Operand, operandArguments);
-
-                    if (function.ReturnType.HasErrorFlag && conditionalStack <= 0)
-                    {
-                        CurrentFunction.Body.Emit(Opcode.PanicOnErr, storage.Operand);
-                    }
-
-                    // CLEANUP
-                    functionStorage.Free(); // function reg
+                    function = tupleType.Indexer.Getter;
+                    context = tupleType;
+                    operandArguments = new []{ source.Operand, index.Operand };
                 }
             }
+
+            Storage? storage = null;
+            if (function != null && context != null && operandArguments != null)
+            {
+                var functionStorage = context.EmitGetForSymbol(function);
+
+                storage = CurrentFunction.AllocateRegisterStorage(function.ReturnType);
+
+                CurrentFunction.Body.Emit(Opcode.Call, functionStorage.Operand, storage.Operand, operandArguments);
+
+                if (function.ReturnType.HasErrorFlag && conditionalStack <= 0)
+                    CurrentFunction.Body.Emit(Opcode.PanicOnErr, storage.Operand);
+
+                functionStorage.Free(); // function reg
+            }
+            else
+                messages.Add(Message.CannotIndexType, expression, "none");
 
             index?.Free();
             source?.Free();
@@ -1537,6 +1498,59 @@ namespace Compiler.CodeGeneration
                 contextStack.Pop();
                 BinOpLHS = null;
             }
+
+            return storage;
+        }
+
+        public Storage? Visit(ArrayLiteralExpression expression)
+        {
+            // RESOLVE TYPE
+            var bType = CobType.U8; // TODO Implement correctly
+            var tag = Intrinsics.Array;
+            tag = tag.FindConcretizedStruct(bType) ?? tag.AllocateConcretizedStruct(bType);
+            var cobType = new CobType(eCobType.Struct, tag: tag);
+
+            if (tag.PopulateConcretizedStructIfRequired())
+                concreteTypeAstReferences.Add(new ConcreteTypeAstReference(Intrinsics.Array, tag));
+
+            // ALLOCATE
+            var returnStorage = CurrentFunction.AllocateRegisterStorage(CobType.Nil);
+            var storage = CurrentFunction.AllocateRegisterStorage(cobType);
+            
+            //CurrentFunction.Body.Emit(Opcode.New, storage.Operand, cobType.ToOperand(artifact));
+            
+            // CALL CTOR
+            var function = tag.FindFactory("New");
+            var functionStorage = tag.EmitGetForSymbol(function);
+
+            CurrentFunction.Body.Emit(
+                Opcode.Call,
+                functionStorage.Operand,
+                storage.Operand,
+                new []{ Operand.ImmediateUnsigned(0) } // TODO Prealloc element count
+            );
+
+            // ADD ELEMENTS
+            function = tag.FindFunction("Add");
+            functionStorage = tag.EmitGetForSymbol(function);
+
+            // TODO Validate types match
+            foreach (var element in expression.Elements)
+            {
+                var elemStorage = element.Accept(this);
+
+                CurrentFunction.Body.Emit(
+                    Opcode.Call,
+                    functionStorage.Operand,
+                    returnStorage.Operand,
+                    new []{ storage.Operand, elemStorage.Operand }
+                );
+
+                elemStorage.Free();
+            }
+
+            returnStorage.Free();
+            functionStorage.Free();
 
             return storage;
         }
