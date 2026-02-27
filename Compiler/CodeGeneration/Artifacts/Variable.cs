@@ -269,7 +269,7 @@ namespace Compiler.CodeGeneration.Artifacts
                 } 
                 else if (type.Tag is StructType structType)
                 {
-                    var tag = structType.FindConcretizedStruct(bType) ?? structType.AllocateAsConcretizedStruct(bType);
+                    var tag = structType.FindConcretizedStruct(bType) ?? structType.AllocateConcretizedStruct(bType);
                     type = new CobType(eCobType.Struct, tag: tag);
                 }
                 else
@@ -301,7 +301,28 @@ namespace Compiler.CodeGeneration.Artifacts
             }
         }
 
-        public CobType ToConcreteType(CobType bType) => this == eCobType.Generic ? bType : this;
+        //public CobType ToConcreteType(CobType bType) => this == eCobType.Generic ? bType : this;
+
+        public CobType ToConcreteType(CobType bType)
+        {
+            // TODO Could be cleaned up
+            if (this == eCobType.Generic)
+                return bType;
+            else if (this == eCobType.Union)
+                return new CobType(eCobType.Union, unionedTypes: UnionedTypes.Select(x => x.ToConcreteType(bType)).ToList());
+            else if (Tag is TupleType tupleType && tupleType.IsGeneric)
+            {
+                var tag = tupleType.FindConcretizedTuple(bType) ?? tupleType.AllocateConcretizedTuple(bType);
+                return new CobType(Type, tag: tag);
+            }
+            else if (Tag is StructType structType && structType.IsGeneric)
+            {
+                var tag = structType.FindConcretizedStruct(bType) ?? structType.AllocateConcretizedStruct(bType);
+                return new CobType(Type, tag: tag);
+            }
+            else
+                return this;
+        }
 
         public Type ToManagedType()
         {
@@ -517,10 +538,38 @@ namespace Compiler.CodeGeneration.Artifacts
             if (AliasName != null)
                 return AliasName;
             
-            if (ElementType != null)
-                return $"{Type}[{ElementType}]";
+            switch (Type)
+            {
+                case eCobType.Union:
+                    return string.Join("|", UnionedTypes!.Select(x => x.ToString()));
 
-            return $"{Type}.{Size}";
+                case eCobType.Signed:
+                case eCobType.Unsigned:
+                case eCobType.Float:
+                    return $"{Type}.{Size}";
+
+                case eCobType.None:
+                case eCobType.Any:
+                case eCobType.Boolean:
+                case eCobType.Lens:
+                case eCobType.Error:
+                case eCobType.Nil:
+                case eCobType.Generic:
+                    return $"{Type}";
+
+                case eCobType.Array:
+                    return $"{Type}[{ElementType}]";
+
+                case eCobType.Trait:
+                case eCobType.Struct:
+                case eCobType.Tuple:
+                case eCobType.Function:
+                case eCobType.Module:
+                    return $"{Type}.{Tag}";
+
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
         }
 
         public static bool IsCastable(CobType srcType, CobType dstType)
@@ -533,7 +582,15 @@ namespace Compiler.CodeGeneration.Artifacts
                 return true;
 
             if (dstType.Type == eCobType.Union)
-                return dstType.UnionedTypes.Any(x => IsCastable(srcType, x));
+            {
+                if (srcType.Type == eCobType.Union)
+                {
+                    // All srcTypes must be in dstType
+                    return srcType.UnionedTypes.All(x => dstType.UnionedTypes.Any(y => IsCastable(x, y)));
+                }
+                else
+                    return dstType.UnionedTypes.Any(x => IsCastable(srcType, x));
+            }
 
             if (srcType.Type is eCobType.Unsigned or eCobType.Signed or eCobType.Float
             &&  dstType.Type is eCobType.Unsigned or eCobType.Signed or eCobType.Float)

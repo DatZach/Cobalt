@@ -1,8 +1,10 @@
 ﻿using Compiler.Ast.Expressions;
 using Compiler.Ast.Expressions.Statements;
+using System.Diagnostics;
 
 namespace Compiler.CodeGeneration.Artifacts
 {
+    [DebuggerDisplay("Tuple '{Name}'")]
     internal sealed class TupleType : IScopeContext, ISymbol
     {
         public string Name { get; }
@@ -137,6 +139,9 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public TupleType? FindConcretizedTuple(CobType bType)
         {
+            if (bType == eCobType.Generic)
+                return this;
+
             var module = Parent as Module;
             if (module == null)
                 throw new NotImplementedException(); // TODO Nested TupleType, StructType
@@ -202,54 +207,6 @@ namespace Compiler.CodeGeneration.Artifacts
 
             return true;
         }
-
-        //public CobType FindOrAllocateConcretizedTupleType(CobType bType)
-        //{
-        //    var module = Parent as Module;
-        //    if (module == null)
-        //        throw new NotImplementedException(); // TODO Nested TupleType, StructType
-
-        //    var concreteName = $"{Name}`{bType}";
-
-        //    TupleType? concreteTupleType;
-        //    if ((concreteTupleType = module.FindTupleType(concreteName)) != null)
-        //        return new CobType(eCobType.Tuple, tag: concreteTupleType);
-
-        //    concreteTupleType = module.AllocateTupleType(concreteName);
-
-        //    foreach (var trait in traits)
-        //    {
-        //        concreteTupleType.AttachTrait(trait);
-        //    }
-
-        //    foreach (var x in functions)
-        //    {
-        //        var parameters = x.Parameters.Select(
-        //            y => new Function.Parameter(y.Name, y.Type.ToConcreteType(bType), y.IsSpread)
-        //        ).ToList();
-        //        var returnType = x.ReturnType.ToConcreteType(bType);
-
-        //        concreteTupleType.AllocateFunction(x.Name, parameters, returnType);
-        //    }
-
-        //    foreach (var x in fields)
-        //    {
-        //        var fieldType = x.Type.ToConcreteType(bType);
-        //        concreteTupleType.AllocateField(x.Name, fieldType, x.GetterExpression, x.SetterExpression);
-        //    }
-
-        //    if (Indexer != null)
-        //    {
-        //        concreteTupleType.Indexer = AllocateIndexer(
-        //            Indexer.KeyType.ToConcreteType(bType),
-        //            Indexer.ReturnType.ToConcreteType(bType),
-        //            Indexer.GetterExpression,
-        //            Indexer.SetterExpression
-        //        );
-        //    }
-
-        //    return new CobType(eCobType.Tuple, tag: concreteTupleType);
-        //}
 
         public ISymbol? FindSymbol(string name)
         {
@@ -321,6 +278,8 @@ namespace Compiler.CodeGeneration.Artifacts
         }
 
         public bool IsVisibleTo(IScopeContext context) => Compiler.IsSymbolVisible(context, Parent, Name);
+
+        public override string ToString() => Name;
     }
 
     internal sealed record Field : Variable

@@ -211,6 +211,8 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public bool IsVisibleTo(IScopeContext context) => Compiler.IsSymbolVisible(context, Parent, Name);
 
+        public override string ToString() => FullyQualifiedName;
+
         internal sealed record Parameter : Variable
         {
             public bool IsSpread { get; }

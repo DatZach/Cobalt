@@ -73,5 +73,7 @@
         }
 
         public bool IsVisibleTo(IScopeContext context) => Compiler.IsSymbolVisible(context, Parent, Name);
+
+        public override string ToString() => Name;
     }
 }

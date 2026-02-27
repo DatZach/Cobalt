@@ -1,8 +1,10 @@
 ﻿using Compiler.Ast.Expressions;
 using Compiler.Ast.Expressions.Statements;
+using System.Diagnostics;
 
 namespace Compiler.CodeGeneration.Artifacts
 {
+    [DebuggerDisplay("Struct '{Name}'")]
     internal sealed class StructType : IScopeContext, ISymbol
     {
         public string Name { get; }
@@ -12,6 +14,9 @@ namespace Compiler.CodeGeneration.Artifacts
         public Indexer? Indexer { get; private set; }
 
         public bool IsGeneric => generics.Count > 0;
+
+        private StructType? pendingSuperType;
+        private CobType? pendingBType;
 
         private readonly List<GenericDefinition> generics;
         private readonly List<TraitType> traits;
@@ -151,6 +156,9 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public StructType? FindConcretizedStruct(CobType bType)
         {
+            if (bType == eCobType.Generic)
+                return this;
+
             var module = Parent as Module;
             if (module == null)
                 throw new NotImplementedException(); // TODO Nested TupleType, StructType
@@ -160,7 +168,7 @@ namespace Compiler.CodeGeneration.Artifacts
             return module.FindStructType(concreteName);
         }
 
-        public StructType AllocateAsConcretizedStruct(CobType bType)
+        public StructType AllocateConcretizedStruct(CobType bType)
         {
             var module = Parent as Module;
             if (module == null)
@@ -170,48 +178,61 @@ namespace Compiler.CodeGeneration.Artifacts
 
             var concreteStructType = module.AllocateStructType(concreteName);
 
-            foreach (var trait in traits)
-            {
-                concreteStructType.AttachTrait(trait);
-            }
-
-            foreach (var x in factories)
-            {
-                var parameters = x.Parameters.Select(
-                    y => new Function.Parameter(y.Name, y.Type.ToConcreteType(bType), y.IsSpread)
-                ).ToList();
-
-                concreteStructType.AllocateFactory(x.Name, parameters);
-            }
-
-            foreach (var x in functions)
-            {
-                var parameters = x.Parameters.Select(
-                    y => new Function.Parameter(y.Name, y.Type.ToConcreteType(bType), y.IsSpread)
-                ).ToList();
-                var returnType = x.ReturnType.ToConcreteType(bType);
-
-                concreteStructType.AllocateFunction(x.Name, parameters, returnType);
-            }
-
-            foreach (var x in fields)
-            {
-                var fieldType = x.Type.ToConcreteType(bType);
-                concreteStructType.AllocateField(x.Name, fieldType, x.GetterExpression, x.SetterExpression);
-            }
-
-            if (Indexer != null)
-            {
-                concreteStructType.Indexer = AllocateIndexer(
-                    Indexer.KeyType.ToConcreteType(bType),
-                    Indexer.ReturnType.ToConcreteType(bType)
-                );
-            }
+            // HACK Really should be able to do this in a single pass when algebraic type resolution is implemented
+            concreteStructType.pendingSuperType = this;
+            concreteStructType.pendingBType = bType;
 
             return concreteStructType;
         }
 
-        public bool IsVisibleTo(IScopeContext? context) => Compiler.IsSymbolVisible(context, Parent, Name);
+        public bool PopulateConcretizedStructIfRequired()
+        {
+            if (pendingSuperType == null || pendingBType == null)
+                return false;
+
+            foreach (var trait in pendingSuperType.traits)
+            {
+                AttachTrait(trait);
+            }
+
+            foreach (var x in pendingSuperType.factories)
+            {
+                var parameters = x.Parameters.Select(
+                    y => new Function.Parameter(y.Name, y.Type.ToConcreteType(pendingBType), y.IsSpread)
+                ).ToList();
+
+                AllocateFactory(x.Name, parameters);
+            }
+
+            foreach (var x in pendingSuperType.functions)
+            {
+                var parameters = x.Parameters.Select(
+                    y => new Function.Parameter(y.Name, y.Type.ToConcreteType(pendingBType), y.IsSpread)
+                ).ToList();
+                var returnType = x.ReturnType.ToConcreteType(pendingBType);
+
+                AllocateFunction(x.Name, parameters, returnType);
+            }
+
+            foreach (var x in pendingSuperType.fields)
+            {
+                var fieldType = x.Type.ToConcreteType(pendingBType);
+                AllocateField(x.Name, fieldType, x.GetterExpression, x.SetterExpression);
+            }
+
+            if (pendingSuperType.Indexer != null)
+            {
+                Indexer = AllocateIndexer(
+                    pendingSuperType.Indexer.KeyType.ToConcreteType(pendingBType),
+                    pendingSuperType.Indexer.ReturnType.ToConcreteType(pendingBType)
+                );
+            }
+
+            pendingSuperType = null;
+            pendingBType = null;
+
+            return true;
+        }
 
         public ISymbol? FindSymbol(string name)
         {
@@ -296,6 +317,10 @@ namespace Compiler.CodeGeneration.Artifacts
 
             return false;
         }
+
+        public bool IsVisibleTo(IScopeContext? context) => Compiler.IsSymbolVisible(context, Parent, Name);
+
+        public override string ToString() => Name;
     }
 
     internal sealed class Indexer : IScopeContext
