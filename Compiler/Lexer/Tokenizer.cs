@@ -48,6 +48,19 @@ namespace Compiler.Lexer
                 var ch = PeekChar();
                 var chNext = PeekChar(1);
 
+                // Character
+                if (ch == '\'')
+                {
+                    TakeChar();
+
+                    var chrToken = YieldToken(TokenType.Character, TakeChar().ToString());
+
+                    if (TakeChar() != '\'')
+                        messages.Add(Message.StringUnterminated, chrToken);
+
+                    continue;
+                }
+
                 // String
                 if (ch == '"')
                 {

@@ -20,6 +20,7 @@ namespace Compiler.Ast
             // Primitives
             Register(TokenType.Number, new NumberLiteralParselet());
             Register(TokenType.String, new StringLiteralParselet());
+            Register(TokenType.Character, new CharacterLiteralParselet());
             Register(TokenType.True, new BooleanLiteralParselet());
             Register(TokenType.False, new BooleanLiteralParselet());
             Register(TokenType.Nil, new NilLiteralParselet());

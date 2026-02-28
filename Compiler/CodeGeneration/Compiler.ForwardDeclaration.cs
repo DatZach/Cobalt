@@ -554,6 +554,11 @@ namespace Compiler.CodeGeneration
             return Unit.Value;
         }
 
+        public Unit Visit(CharacterLiteralExpression expression)
+        {
+            return Unit.Value;
+        }
+
         public Unit Visit(NilLiteralExpression expression)
         {
             return Unit.Value;

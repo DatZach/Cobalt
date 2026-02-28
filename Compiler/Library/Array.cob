@@ -1,4 +1,3 @@
-/*
 struct Array `T {
     Length: uint; // , const
     data: Lens`T;
@@ -33,4 +32,3 @@ struct Array `T {
         return Lens`T ( data.Address + range.Start, range.Length );
     }
 }
-*/

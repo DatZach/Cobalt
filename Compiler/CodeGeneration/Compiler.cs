@@ -1597,6 +1597,14 @@ namespace Compiler.CodeGeneration
             );
         }
 
+        public Storage? Visit(CharacterLiteralExpression expression)
+        {
+            return new Storage(
+                CobType.U8,
+                Operand.ImmediateUnsigned(expression.Value)
+            );
+        }
+
         public Storage? Visit(NilLiteralExpression expression)
         {
             return new Storage(CobType.Nil, CobType.Nil.ToOperand(artifact));

@@ -8,17 +8,19 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Folder Include="Library\" />
-  </ItemGroup>
-
-  <ItemGroup>
+    <None Update="Library\Array.cob">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Update="Library\Console.cob">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Library\Heap.cob">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="Library\Library.cob">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="Library\Tuple.cob">
+    <None Update="Library\Range.cob">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
