@@ -2,6 +2,9 @@ struct Array `T {
     Length: uint; // , const
     data: Lens`T;
 
+    //Capacity: uint => data.Length;
+    Capacity: uint { get { return data.Length; } }
+
     [uint]: T! {
         get { return data[key]; }
         set { data[key] = value; }
@@ -30,5 +33,16 @@ struct Array `T {
     func Slice(range: Range) Lens`T! {
         if (range.Start < 0 || range.End >= Length) return error.OutOfBounds;
         return Lens`T ( data.Address + range.Start, range.Length );
+    }
+
+    func Reverse() {
+        var i: int;
+        for (i in ..(Length / 2)) {
+            const j = Length - i - 1;
+            const a = this[i];
+            const b = this[j];
+            this[i] = b;
+            this[j] = a;
+        }
     }
 }

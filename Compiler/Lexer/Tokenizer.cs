@@ -48,6 +48,7 @@ namespace Compiler.Lexer
                 var ch = PeekChar();
                 var chNext = PeekChar(1);
 
+                // TODO Clean this up and unify with String
                 // Character
                 if (ch == '\'')
                 {

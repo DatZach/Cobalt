@@ -9,16 +9,17 @@ namespace Compiler.Ast.Parselets
         {
             var elements = new List<Expression>();
 
-            if (parser.Match(TokenType.RightSquare))
-                parser.Take(TokenType.RightSquare);
-            else do
+            if (!parser.Match(TokenType.RightSquare))
             {
-                var element = parser.ParseExpression();
-                elements.Add(element);
+                do
+                {
+                    var element = parser.ParseExpression();
+                    elements.Add(element);
 
-                if (!parser.Match(TokenType.RightSquare))
-                    parser.Take(TokenType.Comma);
-            } while (!parser.IsEndOfStream && !parser.Match(TokenType.RightSquare));
+                    if (!parser.Match(TokenType.RightSquare))
+                        parser.Take(TokenType.Comma);
+                } while (!parser.IsEndOfStream && !parser.Match(TokenType.RightSquare));
+            }
 
             parser.Take(TokenType.RightSquare);
 

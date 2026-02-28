@@ -63,4 +63,10 @@ tuple Lens `T (
             // "
         }
     }
+
+    // TODO Slices for Lens
+    // TODO Enumerator
 )
+
+type string     Lens`u8;
+type cstring    LPVOID;

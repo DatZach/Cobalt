@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace Compiler.CodeGeneration.Artifacts
@@ -28,8 +29,21 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public long IntValue
         {
-            get => (long)Value;
+            //get => (long)Value;
+            get
+            {
+                if (Value is byte[] buffer)
+                    return GetPinnedAddress(buffer);
+
+                return (long)Value;
+            }
             set => Value = value;
+        }
+
+        private static unsafe long GetPinnedAddress(byte[] buffer)
+        {
+            var data = new Memory<byte>(buffer);
+            return new IntPtr(data.Pin().Pointer).ToInt64();
         }
 
         public Variable(string name, CobType type, bool mutable, object? value)
@@ -136,7 +150,7 @@ namespace Compiler.CodeGeneration.Artifacts
         public readonly static CobType U32 = new(eCobType.Unsigned, 32);
         public readonly static CobType U64 = new(eCobType.Unsigned, 64);
         public readonly static CobType Char = new(eCobType.Unsigned, 8);// { AliasName = "char" };
-        public readonly static CobType String = new (eCobType.Array, elementType: Char, tag: StringContext.Instance) { AliasName = "string" };
+        public readonly static CobType String = new (eCobType.Array, elementType: Char, tag: StringContext.Instance) { AliasName = "string" }; // TODO Remove
         public readonly static CobType Module = eCobType.Module;
         public readonly static CobType Error = eCobType.Error;
         public readonly static CobType Nil = eCobType.Nil;
@@ -654,7 +668,7 @@ namespace Compiler.CodeGeneration.Artifacts
             TryAddAlias("nil", Nil);
 
             TryAddAlias("char", Char);
-            TryAddAlias("string", String);
+            //TryAddAlias("string", String);
         }
     }
 
@@ -667,7 +681,7 @@ namespace Compiler.CodeGeneration.Artifacts
         Unsigned,
         Float,
         Boolean,
-        Array,
+        Array, // TODO Remove
         Trait,
         Struct,
         Tuple,

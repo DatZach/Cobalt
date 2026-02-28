@@ -821,28 +821,31 @@ namespace Compiler.CodeGeneration
                 var a = expression.Left.Accept(this);
                 var b = expression.Right.Accept(this);
 
+                var aType = a?.Type ?? b?.Type ?? CobType.UInt;
+                var bType = b?.Type ?? a?.Type ?? CobType.UInt;
+
                 if (expression.Left is EmptyExpression)
-                    a = new Storage(b.Type, Operand.ImmediateUnsigned(0));
-                else if (expression.Right is EmptyExpression)
-                    b = new Storage(a.Type, Operand.ImmediateUnsigned(~0));
+                    a = new Storage(bType, Operand.ImmediateUnsigned(0));
+                if (expression.Right is EmptyExpression)
+                    b = new Storage(aType, Operand.ImmediateUnsigned(~0));
 
                 if (expression.Operator == TokenType.Range)
                 {
-                    var d = CurrentFunction.AllocateRegisterStorage(b.Type);
+                    var d = CurrentFunction.AllocateRegisterStorage(bType);
                     CurrentFunction.Body.Emit(Opcode.Sub, d.Operand, b.Operand, Operand.ImmediateUnsigned(1));
                     b.Free();
                     b = d;
                 }
                 else if (expression.Operator == TokenType.RangeLength)
                 {
-                    var d = CurrentFunction.AllocateRegisterStorage(b.Type);
+                    var d = CurrentFunction.AllocateRegisterStorage(bType);
                     CurrentFunction.Body.Emit(Opcode.Add, d.Operand, a.Operand, b.Operand);
                     b.Free();
                     b = d;
                 }
                 else if (expression.Operator == TokenType.RangeTerminal)
                 {
-                    var d = CurrentFunction.AllocateRegisterStorage(b.Type);
+                    var d = CurrentFunction.AllocateRegisterStorage(bType);
                     CurrentFunction.Body.Emit(Opcode.BitNot, d.Operand, b.Operand);
                     b.Free();
                     b = d;
@@ -1586,16 +1589,39 @@ namespace Compiler.CodeGeneration
             var data = new byte[byteCount + 1];
             Encoding.UTF8.GetBytes(expression.Value, 0, expression.Value.Length, data, 0);
 
-            var global = CurrentModule.AllocateGlobal($"string{Globals.Count}", CobType.String, false);
-            global.BufferValue = data;
+            var cobType = new CobType(eCobType.Tuple, tag: Intrinsics.Lens.FindConcretizedTuple(CobType.U8));
+            var global = CurrentModule.AllocateGlobal($"string{Globals.Count}", cobType, false);
+            global.StructValue = new[]
+            {
+                new Variable("Address", CobType.UInt, false, data),
+                new Variable("Length", CobType.UInt, false, byteCount),
+            };
+            //global.BufferValue = data;
 
             var idx = Globals.IndexOf(global);
             
             return new Storage(
-                CobType.String,
+                cobType,
                 Operand.Global(idx)
             );
         }
+
+        //public Storage? Visit(StringLiteralExpression expression)
+        //{
+        //    var byteCount = Encoding.UTF8.GetByteCount(expression.Value);
+        //    var data = new byte[byteCount + 1];
+        //    Encoding.UTF8.GetBytes(expression.Value, 0, expression.Value.Length, data, 0);
+
+        //    var global = CurrentModule.AllocateGlobal($"string{Globals.Count}", CobType.String, false);
+        //    global.BufferValue = data;
+
+        //    var idx = Globals.IndexOf(global);
+            
+        //    return new Storage(
+        //        CobType.String,
+        //        Operand.Global(idx)
+        //    );
+        //}
 
         public Storage? Visit(CharacterLiteralExpression expression)
         {
