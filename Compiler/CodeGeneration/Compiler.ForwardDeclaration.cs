@@ -126,8 +126,8 @@ namespace Compiler.CodeGeneration
                 function = CurrentModule.AllocateFunction(
                     expression.SymbolName,
                     expression.SymbolTypeSignature.CallingConvention,
-                    expression.SymbolTypeSignature.Parameters.Select(x => new Function.Parameter(x.Name, CobType.FromString(x.TypeName), x.IsSpread)).ToList(),
-                    expression.SymbolTypeSignature.ReturnType
+                    expression.SymbolTypeSignature.Parameters.Select(x => new Function.Parameter(x.Name, CobType.FromString(x.TypeName, CurrentContext), x.IsSpread)).ToList(),
+                    CobType.FromString(expression.SymbolTypeSignature.ReturnTypeName, CurrentContext)
                 );
             }
             else
@@ -387,13 +387,15 @@ namespace Compiler.CodeGeneration
                 x => new Function.Parameter(x.Name, CobType.FromString(x.TypeName, CurrentContext), x.IsSpread)
             ).ToList();
 
+            var returnType = CobType.FromString(expression.ReturnTypeName, CurrentContext);
+
             if (CurrentContext is TraitType traitType)
             {
                 if (expression.CallingConvention != CallingConvention.Default
                 &&  expression.CallingConvention != CallingConvention.ThisCall)
                     messages.Add(Message.IllegalCallingConvention, expression, expression.CallingConvention);
 
-                traitType.AllocateFunction(expression.Name, parameters, expression.ReturnType);
+                traitType.AllocateFunction(expression.Name, parameters, returnType);
             }
             else if (CurrentContext is TupleType tupleType)
             {
@@ -401,7 +403,7 @@ namespace Compiler.CodeGeneration
                 &&  expression.CallingConvention != CallingConvention.ThisCall)
                     messages.Add(Message.IllegalCallingConvention, expression, expression.CallingConvention);
 
-                tupleType.AllocateFunction(expression.Name, parameters, expression.ReturnType);
+                tupleType.AllocateFunction(expression.Name, parameters, returnType);
             }
             else if (CurrentContext is StructType structType)
             {
@@ -409,11 +411,11 @@ namespace Compiler.CodeGeneration
                 &&  expression.CallingConvention != CallingConvention.ThisCall)
                     messages.Add(Message.IllegalCallingConvention, expression, expression.CallingConvention);
 
-                structType.AllocateFunction(expression.Name, parameters, expression.ReturnType);
+                structType.AllocateFunction(expression.Name, parameters, returnType);
             }
             else if (CurrentContext is Module module)
             {
-                module.AllocateFunction(expression.Name, expression.CallingConvention, parameters, expression.ReturnType);
+                module.AllocateFunction(expression.Name, expression.CallingConvention, parameters, returnType);
             }
             else
                 messages.Add(Message.CannotDeclareSymbolHere, expression);

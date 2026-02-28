@@ -520,6 +520,20 @@ namespace Compiler.CodeGeneration.Artifacts
             }
         }
 
+        public CobType Bust(CobType exclusion)
+        {
+            if (Type != eCobType.Union || UnionedTypes == null)
+                throw new InvalidOperationException();
+
+            var unionedTypes = UnionedTypes.Where(x => x.Type != exclusion).ToList();
+            if (unionedTypes.Count == 0)
+                return None;
+            else if (unionedTypes.Count == 1)
+                return unionedTypes[0];
+            else
+                return new CobType(eCobType.Union, unionedTypes: unionedTypes);
+        }
+
         public IEnumerable<CobType> YieldTypesInUnion()
         {
             if (Type == eCobType.Union)

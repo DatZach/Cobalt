@@ -653,8 +653,10 @@ namespace Compiler.CodeGeneration
                     return null;
                 }
 
+                // TODO Support T in function bodies to remove the hack below
                 var aType = lhs?.Type;
-                var bType = CobType.FromString(rhs.Value);
+                //var bType = CobType.FromString(rhs.Value);
+                var bType = rhs.Value == "T" ? CobType.U8 : CobType.FromString(rhs.Value); // HACK TODO THIS IS ENTIRELY INCORRECT
                 CobType cType;
 
                 if (aType?.Tag is TupleType tupleType)
@@ -1411,7 +1413,9 @@ namespace Compiler.CodeGeneration
                 if (source.Type == eCobType.Struct && source.Type.Tag is StructType structType
                                                    && structType.Indexer != null)
                 {
-                    function = structType.Indexer.Getter;
+                    function = index.Type.Tag == Intrinsics.Range
+                             ? structType.FindFunction("Slice")
+                             : structType.Indexer.Getter;
                     context = structType;
                     operandArguments = new []{ source.Operand, index.Operand };
                 }
@@ -1429,12 +1433,17 @@ namespace Compiler.CodeGeneration
             {
                 var functionStorage = context.EmitGetForSymbol(function);
 
-                storage = CurrentFunction.AllocateRegisterStorage(function.ReturnType);
-
-                CurrentFunction.Body.Emit(Opcode.Call, functionStorage.Operand, storage.Operand, operandArguments);
-
                 if (function.ReturnType.HasErrorFlag && conditionalStack <= 0)
+                {
+                    storage = CurrentFunction.AllocateRegisterStorage(function.ReturnType.Bust(CobType.Error));
+                    CurrentFunction.Body.Emit(Opcode.Call, functionStorage.Operand, storage.Operand, operandArguments);
                     CurrentFunction.Body.Emit(Opcode.PanicOnErr, storage.Operand);
+                }
+                else
+                {
+                    storage = CurrentFunction.AllocateRegisterStorage(function.ReturnType);
+                    CurrentFunction.Body.Emit(Opcode.Call, functionStorage.Operand, storage.Operand, operandArguments);
+                }
 
                 functionStorage.Free(); // function reg
             }

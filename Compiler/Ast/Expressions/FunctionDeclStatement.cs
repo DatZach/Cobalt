@@ -13,8 +13,6 @@ namespace Compiler.Ast.Expressions
 
         public string? ReturnTypeName { get; }
 
-        public CobType ReturnType => CobType.FromString(ReturnTypeName);
-
         public CallingConvention CallingConvention { get; }
 
         public IReadOnlyList<Parameter> Parameters { get; }

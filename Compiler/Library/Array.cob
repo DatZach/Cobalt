@@ -1,34 +1,36 @@
 /*
 struct Array `T {
-    Size: uint; // , const
+    Length: uint; // , const
     data: Lens`T;
-    capacity: uint;
 
     [uint]: T! {
         get { return data[key]; }
         set { data[key] = value; }
     }
 
-    factory New(count: uint) {
-        var _capacity = count;
-        if (_capacity == 0)
-            _capacity = 16;
+    factory New(length: uint) {
+        var capacity = length;
+        if (capacity == 0)
+            capacity = 16;
         
         return This {
-            Size = count,
-            data = Alloc(_capacity), // * T.Size)
-            capacity = _capacity
+            Length = length,
+            data = Alloc(capacity) // * T.Size)
         };
     }
 
     func Add(value: T) {
-        if (Size >= capacity) {
-            capacity <<= 1;
-            data = ReAlloc(data, capacity);
+        if (Length >= data.Length) {
+            data = ReAlloc(data, data.Length << 1);
         }
 
-        data[Size] = value;
-        Size += 1;
+        data[Length] = value;
+        Length += 1;
+    }
+
+    func Slice(range: Range) Lens`T! {
+        if (range.Start < 0 || range.End >= Length) return error.OutOfBounds;
+        return Lens`T ( data.Address + range.Start, range.Length );
     }
 }
 */
