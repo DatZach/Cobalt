@@ -46,7 +46,8 @@ namespace Compiler.Ast.Expressions
         public sealed record Parameter(
             string Name,
             string TypeName,
-            bool IsSpread
+            bool IsSpread,
+            Expression? DefaultValue
         );
     }
 }

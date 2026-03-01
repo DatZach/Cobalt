@@ -1253,46 +1253,50 @@ namespace Compiler.CodeGeneration
                 lArguments.AddRange(arguments);
                 arguments = lArguments;
             }
-            var hasSpreadParameter = parameters.Count > 0 && parameters[^1].IsSpread;
-            if (arguments.Count != parameters.Count && !hasSpreadParameter)
-                messages.Add(Message.FunctionParameterCountMismatch, expression, parameters.Count, arguments.Count);
-            
-            IReadOnlyList<Operand>? operandArguments;
-            if (arguments.Count > 0)
+
+            var parametersCountTotal = parameters.Count;
+            var parametersCountRequired = parameters.Count(x => x.DefaultValue == null);
+            var hasSpreadParameter = parametersCountTotal > 0 && parameters[^1].IsSpread;
+
+            var argumentsCountProvided = arguments.Count;
+            var argumentsCountRequired = hasSpreadParameter ? argumentsCountProvided : parametersCountRequired;
+
+            if (argumentsCountProvided < parametersCountRequired && !hasSpreadParameter)
+                messages.Add(Message.FunctionParameterCountMismatch, expression, parametersCountRequired, argumentsCountProvided);
+            // TODO optional parameters and spread parameters are not legally defined together
+
+            var argumentsTotalCount = Math.Max(argumentsCountProvided, parametersCountTotal);
+            var operandArguments = new Operand[argumentsTotalCount];
+            for (int i = 0; i < argumentsTotalCount; ++i)
             {
-                var aOperandArguments = new Operand[arguments.Count];
-                for (int i = 0; i < arguments.Count; ++i)
+                var paramType = parameters.ElementAtOrDefault(i);
+                var argument = arguments.ElementAtOrDefault(i);
+
+                Storage? argStorage;
+                if (argument == null)
+                    argStorage = paramType.DefaultValue.Accept(this);
+                else if (argument is IdentifierExpression argIdent && argIdent.Value == "$this")
                 {
-                    var paramType = parameters.ElementAtOrDefault(i);
-                    var argument = arguments[i];
-                    Storage? argStorage;
-                    if (argument is IdentifierExpression argIdent && argIdent.Value == "$this")
-                    {
-                        var boe = (BinaryOperatorExpression)expression.FunctionExpression;
-                        argStorage = boe.Left.Accept(this);
-                    }
-                    else
-                        argStorage = argument.Accept(this);
-
-                    if (paramType != null && paramType.IsSpread) paramType = null;
-                    if (argStorage == null
-                    ||  (paramType != null && !CobType.IsCastable(argStorage.Type, paramType.Type)))
-                    {
-                        aOperandArguments[i] = Operand.None;
-                        messages.Add(Message.TypeMismatch, arguments[i], paramType?.Type, argStorage?.Type);
-                        continue;
-                    }
-                    
-                    if (paramType != null && argStorage.Type != paramType.Type)
-                        argStorage = EmitCast(argStorage, paramType.Type);
-
-                    aOperandArguments[i] = argStorage.Operand;
+                    var boe = (BinaryOperatorExpression)expression.FunctionExpression;
+                    argStorage = boe.Left.Accept(this);
                 }
+                else
+                    argStorage = argument.Accept(this);
 
-                operandArguments = aOperandArguments;
+                if (paramType != null && paramType.IsSpread) paramType = null;
+                if (argStorage == null
+                ||  (paramType != null && !CobType.IsCastable(argStorage.Type, paramType.Type)))
+                {
+                    operandArguments[i] = Operand.None;
+                    messages.Add(Message.TypeMismatch, arguments[i], paramType?.Type, argStorage?.Type);
+                    continue;
+                }
+                
+                if (paramType != null && argStorage.Type != paramType.Type)
+                    argStorage = EmitCast(argStorage, paramType.Type);
+
+                operandArguments[i] = argStorage.Operand;
             }
-            else
-                operandArguments = null;
             
             // CALL
             var opcode = function.Parent is TraitType ? Opcode.CallVirt : Opcode.Call;
@@ -1305,11 +1309,8 @@ namespace Compiler.CodeGeneration
 
             // CLEANUP
             functionStorage.Free(); // function reg
-            if (operandArguments != null)
-            {
-                for (int i = 0; i < operandArguments.Count; ++i) // argument regs
-                    CurrentFunction.FreeStorage(operandArguments[i]);
-            }
+            for (int i = 0; i < operandArguments.Length; ++i) // argument regs
+                CurrentFunction.FreeStorage(operandArguments[i]);
 
             return retStorage;
         }

@@ -361,7 +361,7 @@ namespace Compiler.CodeGeneration
                 return Unit.Value;
 
             var parameters = expression.Parameters.Select(
-                x => new Function.Parameter(x.Name, CobType.FromString(x.TypeName, CurrentContext), x.IsSpread)
+                x => new Function.Parameter(x.Name, CobType.FromString(x.TypeName, CurrentContext), x.IsSpread, x.DefaultValue)
             ).ToList();
 
             if (CurrentContext is StructType structType)
@@ -380,7 +380,7 @@ namespace Compiler.CodeGeneration
                 return Unit.Value;
 
             var parameters = expression.Parameters.Select(
-                x => new Function.Parameter(x.Name, CobType.FromString(x.TypeName, CurrentContext), x.IsSpread)
+                x => new Function.Parameter(x.Name, CobType.FromString(x.TypeName, CurrentContext), x.IsSpread, x.DefaultValue)
             ).ToList();
 
             var returnType = CobType.FromString(expression.ReturnTypeName, CurrentContext);

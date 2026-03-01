@@ -23,8 +23,14 @@ namespace Compiler.Ast.Parselets
                     var isSpread = parser.MatchAndTakeToken(TokenType.Spread) != null;
 
                     var paramName = parser.Take(TokenType.Identifier);
-                    parser.Take(TokenType.Colon);
-                    var paramType = parser.ParseTypeName();
+                    var paramType = parser.MatchAndTakeToken(TokenType.Colon) != null
+                                  ? parser.ParseTypeName()
+                                  : nameof(CobType.Any);
+
+                    var paramDefault = parser.MatchAndTakeToken(TokenType.Assign) != null
+                                     ? parser.ParseExpression()
+                                     : null;
+
                     parser.MatchAndTakeToken(TokenType.Comma);
 
                     if (isSpread && hasSpread)
@@ -32,7 +38,7 @@ namespace Compiler.Ast.Parselets
 
                     hasSpread = hasSpread || isSpread;
 
-                    lParameters.Add(new FunctionDeclStatement.Parameter(paramName.Value, paramType, isSpread));
+                    lParameters.Add(new FunctionDeclStatement.Parameter(paramName.Value, paramType, isSpread, paramDefault));
                 }
 
                 parameters = lParameters;

@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using Compiler.Ast.Expressions;
 using Compiler.Interpreter;
 
 namespace Compiler.CodeGeneration.Artifacts
@@ -217,10 +218,13 @@ namespace Compiler.CodeGeneration.Artifacts
         {
             public bool IsSpread { get; }
 
-            public Parameter(string name, CobType type, bool isSpread)
+            public Expression? DefaultValue { get; }
+
+            public Parameter(string name, CobType type, bool isSpread, Expression? defaultValue = null)
                 : base(name, type, true)
             {
                 IsSpread = isSpread;
+                DefaultValue = defaultValue;
             }
         }
     }
