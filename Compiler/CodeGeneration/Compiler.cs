@@ -1596,7 +1596,6 @@ namespace Compiler.CodeGeneration
                 new Variable("Address", CobType.UInt, false, data),
                 new Variable("Length", CobType.UInt, false, byteCount),
             };
-            //global.BufferValue = data;
 
             var idx = Globals.IndexOf(global);
             
@@ -1605,23 +1604,6 @@ namespace Compiler.CodeGeneration
                 Operand.Global(idx)
             );
         }
-
-        //public Storage? Visit(StringLiteralExpression expression)
-        //{
-        //    var byteCount = Encoding.UTF8.GetByteCount(expression.Value);
-        //    var data = new byte[byteCount + 1];
-        //    Encoding.UTF8.GetBytes(expression.Value, 0, expression.Value.Length, data, 0);
-
-        //    var global = CurrentModule.AllocateGlobal($"string{Globals.Count}", CobType.String, false);
-        //    global.BufferValue = data;
-
-        //    var idx = Globals.IndexOf(global);
-            
-        //    return new Storage(
-        //        CobType.String,
-        //        Operand.Global(idx)
-        //    );
-        //}
 
         public Storage? Visit(CharacterLiteralExpression expression)
         {

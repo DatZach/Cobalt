@@ -1,5 +1,5 @@
-﻿using System.Diagnostics;
-using System.Runtime.CompilerServices;
+﻿using System.Buffers;
+using System.Diagnostics;
 using System.Text;
 
 namespace Compiler.CodeGeneration.Artifacts
@@ -29,21 +29,14 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public long IntValue
         {
-            //get => (long)Value;
-            get
+            get => Value switch
             {
-                if (Value is byte[] buffer)
-                    return GetPinnedAddress(buffer);
+                byte[] x => GetPinnedAddress(x),
+                long x => x,
+                _ => throw new InvalidDataException()
+            };
 
-                return (long)Value;
-            }
             set => Value = value;
-        }
-
-        private static unsafe long GetPinnedAddress(byte[] buffer)
-        {
-            var data = new Memory<byte>(buffer);
-            return new IntPtr(data.Pin().Pointer).ToInt64();
         }
 
         public Variable(string name, CobType type, bool mutable, object? value)
@@ -134,6 +127,27 @@ namespace Compiler.CodeGeneration.Artifacts
                 value = Value?.ToString() ?? "(null)";
 
             return $"{Name,-25}{Type} = {value}";
+        }
+
+        private MemoryHandle? pinnedAddress;
+        private unsafe nint GetPinnedAddress(byte[] buffer)
+        {
+            if (pinnedAddress == null)
+            {
+                var data = new Memory<byte>(buffer);
+                pinnedAddress = data.Pin();
+            }
+
+            return (nint)pinnedAddress.Value.Pointer;
+        }
+
+        ~Variable()
+        {
+            if (pinnedAddress != null)
+            {
+                pinnedAddress.Value.Dispose();
+                pinnedAddress = null;
+            }
         }
     }
 

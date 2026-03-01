@@ -48,42 +48,28 @@ namespace Compiler.Lexer
                 var ch = PeekChar();
                 var chNext = PeekChar(1);
 
-                // TODO Clean this up and unify with String
-                // Character
-                if (ch == '\'')
+                // String / Character
+                if (ch == '"' || ch == '\'')
                 {
-                    TakeChar();
-
-                    var chrToken = YieldToken(TokenType.Character, TakeChar().ToString());
-
-                    if (TakeChar() != '\'')
-                        messages.Add(Message.StringUnterminated, chrToken);
-
-                    continue;
-                }
-
-                // String
-                if (ch == '"')
-                {
-                    var hasInvalidEscape = false;
                     stringBuilder.Clear();
 
-                    TakeChar();
+                    var delim = TakeChar();
                     while (index < length)
                     {
                         ch = TakeChar();
-                        if (ch == '\"')
+                        if (ch == delim)
                             break;
 
                         stringBuilder.Append(ch);
                     }
 
-                    var strToken = YieldToken(TokenType.String, stringBuilder.ToString());
+                    var strToken = YieldToken(
+                        delim == '"' ? TokenType.String : TokenType.Character,
+                        stringBuilder.ToString()
+                    );
 
                     if (index >= length)
                         messages.Add(Message.StringUnterminated, strToken);
-                    if (hasInvalidEscape)
-                        messages.Add(Message.StringIllegalEscape, strToken);
 
                     continue;
                 }

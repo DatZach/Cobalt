@@ -219,6 +219,8 @@ namespace Compiler.Ast
 
         public static Def StringIllegalEscape { get; } = new(MessageType.Error, "Invalid escape code");
 
+        public static Def CharacterIllegalLength { get; } = new(MessageType.Error, "Characters must be 1 glyph in length");
+
         public static Def MissingClosingBrace { get; } = new(MessageType.Error, "Missing closing brace for this block");
 
         public static Def ExcessiveSpreadParameters { get; } = new(MessageType.Error, "Cannot define multiple spread parameters");
