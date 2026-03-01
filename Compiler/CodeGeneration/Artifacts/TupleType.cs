@@ -91,9 +91,12 @@ namespace Compiler.CodeGeneration.Artifacts
             return result;
         }
 
-        public Field AllocateField(string name, CobType type, Expression? getterExpression, Expression? setterExpression)
+        public Field AllocateField(string name, CobType type, bool hasGetter, bool hasSetter)
         {
-            var field = new Field(this, name, type, getterExpression, setterExpression);
+            var getter = hasGetter ? AllocateFunction($"{name}_$get", Array.Empty<Function.Parameter>(), type) : null;
+            var setter = hasSetter ? AllocateFunction($"{name}_$set", new [] { new Function.Parameter("value", type, false) }, type) : null;
+
+            var field = new Field(this, name, type, getter, setter);
             fields.Add(field);
 
             return field;
@@ -190,7 +193,7 @@ namespace Compiler.CodeGeneration.Artifacts
             foreach (var x in pendingSuperType.fields)
             {
                 var fieldType = x.Type.ToConcreteType(pendingBType);
-                AllocateField(x.Name, fieldType, x.GetterExpression, x.SetterExpression);
+                AllocateField(x.Name, fieldType, x.Getter != null, x.Setter != null);
             }
 
             if (pendingSuperType.Indexer != null)
@@ -227,13 +230,23 @@ namespace Compiler.CodeGeneration.Artifacts
                 var idx = fields.IndexOf(field);
                 var fieldType = field.Type;
 
-                if (field.GetterExpression != null)
+                var @this = compiler.BinOpLHS == null ? Operand.This : compiler.BinOpLHS.Operand;
+
+                if (field.Getter != null)
                 {
-                    return field.GetterExpression.Accept(compiler);
+                    var functionStorage = EmitGetForSymbol(field.Getter);
+                    var storage = compiler.CurrentFunction.AllocateRegisterStorage(field.Getter.ReturnType);
+                    compiler.CurrentFunction.Body.Emit(
+                        Opcode.Call,
+                        functionStorage.Operand,
+                        storage.Operand,
+                        new [] { @this }
+                    );
+
+                    return storage;
                 }
                 else
                 {
-                    var @this = compiler.BinOpLHS == null ? Operand.This : compiler.BinOpLHS.Operand;
                     var storage = compiler.CurrentFunction.AllocateRegisterStorage(fieldType);
                     compiler.CurrentFunction.Body.Emit(
                         Opcode.GetField,
@@ -283,19 +296,23 @@ namespace Compiler.CodeGeneration.Artifacts
 
     internal sealed record Field : Variable
     {
-        public Expression? GetterExpression { get; }
+        public Function? Getter { get; }
 
-        public Expression? SetterExpression { get; }
+        public Function? Setter { get; }
+
+        //public Expression? GetterExpression { get; }
+
+        //public Expression? SetterExpression { get; }
 
         private readonly IScopeContext parent;
 
-        public Field(IScopeContext parent, string name, CobType type, Expression? getterExpression, Expression? setterExpression)
+        public Field(IScopeContext parent, string name, CobType type, Function? getter, Function? setter)
             : base(name, type)
         {
             this.parent = parent;
 
-            GetterExpression = getterExpression;
-            SetterExpression = setterExpression;
+            Getter = getter;
+            Setter = setter;
         }
 
         public override bool IsVisibleTo(IScopeContext? context) => Compiler.IsSymbolVisible(context, parent, Name);

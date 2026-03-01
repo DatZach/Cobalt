@@ -155,13 +155,46 @@ namespace Compiler.CodeGeneration
                 foreach (var functionExpression in expression.Functions)
                     functionExpression.Accept(this);
 
+                foreach (var fieldExpression in expression.Fields)
+                {
+                    var field = tupleType.FindField(fieldExpression.Name);
+
+                    if (field?.Getter != null && fieldExpression.GetterExpression != null)
+                    {
+                        contextStack.Push(field.Getter);
+
+                        var retStorage = fieldExpression.GetterExpression?.Accept(this);
+                        if (retStorage != null)
+                        {
+                            CurrentFunction.Body.Emit(Opcode.Return, retStorage.Operand);
+                            retStorage.Free();
+                        }
+
+                        contextStack.Pop();
+                    }
+                    
+                    if (field?.Setter != null && fieldExpression.SetterExpression != null)
+                    {
+                        contextStack.Push(field.Setter);
+                        fieldExpression.SetterExpression?.Accept(this)?.Free();
+                        CurrentFunction.Body.Emit(Opcode.Return, Operand.ImmediateUnsigned(0));
+                        contextStack.Pop();
+                    }
+                }
+
                 if (tupleType.Indexer != null)
                 {
-                    //contextStack.Push(tupleType.Indexer);
                     if (tupleType.Indexer.Getter != null)
                     {
                         contextStack.Push(tupleType.Indexer.Getter);
-                        expression.Indexer?.GetterExpression?.Accept(this)?.Free();
+                        
+                        var retStorage = expression.Indexer?.GetterExpression?.Accept(this);
+                        if (retStorage != null)
+                        {
+                            CurrentFunction.Body.Emit(Opcode.Return, retStorage.Operand);
+                            retStorage.Free();
+                        }
+
                         contextStack.Pop();
                     }
 
@@ -169,6 +202,7 @@ namespace Compiler.CodeGeneration
                     {
                         contextStack.Push(tupleType.Indexer.Setter);
                         expression.Indexer?.SetterExpression?.Accept(this)?.Free();
+                        CurrentFunction.Body.Emit(Opcode.Return, Operand.ImmediateUnsigned(0));
                         contextStack.Pop();
                     }
                 }
@@ -200,12 +234,46 @@ namespace Compiler.CodeGeneration
                 foreach (var functionExpression in expression.Functions)
                     functionExpression.Accept(this);
 
+                foreach (var fieldExpression in expression.Fields)
+                {
+                    var field = structType.FindField(fieldExpression.Name);
+
+                    if (field?.Getter != null && fieldExpression.GetterExpression != null)
+                    {
+                        contextStack.Push(field.Getter);
+                        
+                        var retStorage = fieldExpression.GetterExpression?.Accept(this);
+                        if (retStorage != null)
+                        {
+                            CurrentFunction.Body.Emit(Opcode.Return, retStorage.Operand);
+                            retStorage.Free();
+                        }
+
+                        contextStack.Pop();
+                    }
+                    
+                    if (field?.Setter != null && fieldExpression.SetterExpression != null)
+                    {
+                        contextStack.Push(field.Setter);
+                        fieldExpression.SetterExpression?.Accept(this)?.Free();
+                        CurrentFunction.Body.Emit(Opcode.Return, Operand.ImmediateUnsigned(0));
+                        contextStack.Pop();
+                    }
+                }
+
                 if (structType.Indexer != null)
                 {
                     if (structType.Indexer.Getter != null)
                     {
                         contextStack.Push(structType.Indexer.Getter);
-                        expression.Indexer?.GetterExpression?.Accept(this)?.Free();
+                        
+                        var retStorage = expression.Indexer?.GetterExpression?.Accept(this);
+                        if (retStorage != null)
+                        {
+                            CurrentFunction.Body.Emit(Opcode.Return, retStorage.Operand);
+                            retStorage.Free();
+                        }
+
                         contextStack.Pop();
                     }
 

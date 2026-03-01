@@ -285,15 +285,13 @@ namespace Compiler.CodeGeneration
                     foreach (var field in expression.Fields)
                     {
                         var fieldType = CobType.FromString(field.TypeName, CurrentContext);
-                        tupleType.AllocateField(field.Name, fieldType, field.GetterExpression, field.SetterExpression);
+                        tupleType.AllocateField(field.Name, fieldType, field.GetterExpression != null, field.SetterExpression != null);
                     }
 
                     if (expression.Indexer != null)
                     {
                         var keyType = CobType.FromString(expression.Indexer.KeyTypeName, CurrentContext);
                         var returnType = CobType.FromString(expression.Indexer.ReturnTypeName, CurrentContext);
-                        //var getter = tupleType.AllocateFunction("$Indexer_$get", new [] { new Function.Parameter("$this", new CobType(eCobType.Tuple, tag: tupleType), false), new Function.Parameter("key", keyType, false) }, returnType);
-                        //var setter = tupleType.AllocateFunction("$Indexer_$set", new [] { new Function.Parameter("$this", new CobType(eCobType.Tuple, tag: tupleType), false), new Function.Parameter("key", keyType, false), new Function.Parameter("value", returnType, false) }, returnType);
 
                         tupleType.AllocateIndexer(keyType, returnType);
                     }
@@ -339,15 +337,13 @@ namespace Compiler.CodeGeneration
                     foreach (var field in expression.Fields)
                     {
                         var fieldType = CobType.FromString(field.TypeName, CurrentContext);
-                        structType.AllocateField(field.Name, fieldType, field.GetterExpression, field.SetterExpression);
+                        structType.AllocateField(field.Name, fieldType, field.GetterExpression != null, field.SetterExpression != null);
                     }
 
                     if (expression.Indexer != null)
                     {
                         var keyType = CobType.FromString(expression.Indexer.KeyTypeName, CurrentContext);
                         var returnType = CobType.FromString(expression.Indexer.ReturnTypeName, CurrentContext);
-                        //var getter = structType.AllocateFunction("$Indexer_$get", new [] { new Function.Parameter("$this", new CobType(eCobType.Struct, tag: structType), false), new Function.Parameter("key", keyType, false) }, returnType);
-                        //var setter = structType.AllocateFunction("$Indexer_$set", new [] { new Function.Parameter("$this", new CobType(eCobType.Struct, tag: structType), false), new Function.Parameter("key", keyType, false), new Function.Parameter("value", returnType, false) }, returnType);
 
                         structType.AllocateIndexer(keyType, returnType);
                     }

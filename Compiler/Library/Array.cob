@@ -2,8 +2,8 @@ struct Array `T {
     Length: uint; // , const
     data: Lens`T;
 
-    //Capacity: uint => data.Length;
-    Capacity: uint { get { return data.Length; } }
+    Capacity: uint => data.Length;
+    //Capacity: uint { get { return data.Length; } }
 
     [uint]: T! {
         get { return data[key]; }
@@ -36,6 +36,9 @@ struct Array `T {
     }
 
     func Reverse() {
+        if (Length < 2)
+            return;
+        
         var i: int;
         for (i in ..(Length / 2)) {
             const j = Length - i - 1;
@@ -43,6 +46,8 @@ struct Array `T {
             const b = this[j];
             this[i] = b;
             this[j] = a;
+
+            // (this[i], this[j]) = (this[j], this[i]);
         }
     }
 }
