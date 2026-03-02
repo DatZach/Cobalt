@@ -327,7 +327,12 @@ namespace Compiler.CodeGeneration
             else if (CurrentContext is TupleType tupleType)
                 function = tupleType.FindFunction(expression.Name)!;
             else
-                function = CurrentModule.FindFunction(expression.Name)!;
+            {
+                var candidates = CurrentModule.FindFunctionCandidates(expression.Name)!;
+                var parameterTypes = expression.Parameters.Select(x => CobType.FromString(x.TypeName, CurrentContext)).ToList();
+                function = candidates.ResolveSingle(parameterTypes)!;
+                //function = CurrentModule.FindFunction(expression.Name)!;
+            }
 
             contextStack.Push(function);
 
@@ -1234,6 +1239,76 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(CallExpression expression)
         {
+            // CAST OPERATOR (TODO Cleanup)
+            var castType = VisitCastExpression(expression);
+            if (castType != null)
+                return castType;
+
+            var candidatesStorage = expression.FunctionExpression.Accept(this);
+
+            // TUPLE ALLOCATION OPERATOR (TODO Cleanup)
+            var tuple = VisitTupleLiteralExpression(expression, candidatesStorage);
+            if (tuple != null)
+                return tuple;
+
+            // ARGUMENTS
+            var argumentsStorage = new List<Storage>();
+            foreach (var argExpression in expression.Arguments)
+            {
+                var argStorage = argExpression.Accept(this);
+                argumentsStorage.Add(argStorage);
+            }
+
+            // RESOLVE FUNCTION
+            Function? function;
+            if (candidatesStorage?.Type.Tag is FunctionCandidates tagCandidates)
+                function = tagCandidates.ResolveSingle(argumentsStorage.Select(x => x.Type).ToList());
+            else if (candidatesStorage?.Type.Tag is Function tagFunction)
+                function = tagFunction;
+            else
+                function = null;
+
+            if (function == null)
+            {
+                messages.Add(Message.CannotCallType, expression, candidatesStorage?.Type.ToString() ?? "(null)");
+                return null;
+            }
+
+            // EMIT CALL
+            if (function.CallingConvention == CallingConvention.ThisCall)
+            {
+                var boe = (BinaryOperatorExpression)expression.FunctionExpression;
+                var thisStorage = boe.Left.Accept(this);
+                argumentsStorage.Insert(0, thisStorage);
+            }
+
+            var functionStorage = function.Parent.EmitGetForSymbol(function)!;
+
+            var retStorage = function.ReturnType != eCobType.None
+                           ? CurrentFunction.AllocateRegisterStorage(function.ReturnType)
+                           : null;
+
+            CurrentFunction.Body.Emit(
+                function.Parent is TraitType ? Opcode.CallVirt : Opcode.Call,
+                functionStorage.Operand,
+                retStorage?.Operand ?? Operand.None,
+                argumentsStorage.Select(x => x.Operand).ToList()
+            );
+
+            if (function.ReturnType.HasErrorFlag && conditionalStack <= 0 && retStorage != null)
+                CurrentFunction.Body.Emit(Opcode.PanicOnErr, retStorage.Operand);
+
+            // CLEANUP
+            functionStorage.Free();
+            candidatesStorage!.Free();
+            for (int i = 0; i < argumentsStorage.Count; ++i)
+                CurrentFunction.FreeStorage(argumentsStorage[i].Operand);
+
+            return retStorage;
+        }
+
+        public Storage? Visit_(CallExpression expression)
+        {
             // CAST OPERATOR
             var castType = VisitCastExpression(expression);
             if (castType != null)
@@ -1310,8 +1385,6 @@ namespace Compiler.CodeGeneration
                     // ALLOCATE
                     var arrReturnStorage = CurrentFunction.AllocateRegisterStorage(CobType.Nil);
                     argStorage = CurrentFunction.AllocateRegisterStorage(cobType);
-            
-                    //CurrentFunction.Body.Emit(Opcode.New, storage.Operand, cobType.ToOperand(artifact));
             
                     // CALL CTOR
                     var arrNewFunction = tag.FindFactory("New");

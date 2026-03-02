@@ -188,6 +188,8 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public Function? TagFunction => Tag as Function;
 
+        public FunctionCandidates? TagFunctionCandidates => Tag as FunctionCandidates;
+
         public CobType(
             eCobType type,
             int size = -1,

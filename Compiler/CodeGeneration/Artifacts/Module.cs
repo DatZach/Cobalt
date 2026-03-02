@@ -120,6 +120,14 @@ namespace Compiler.CodeGeneration.Artifacts
             return functions.FirstOrDefault(x => x.Name == name);
         }
 
+        public FunctionCandidates? FindFunctionCandidates(string name)
+        {
+            var candidates = functions.Where(x => x.Name == name).ToList();
+            return candidates.Count > 0
+                ? new FunctionCandidates(candidates)
+                : null;
+        }
+
         public Variable AllocateGlobal(string name, CobType type, bool mutable)
         {
             // TODO Bit of a hack this isn't really a field but we need the visiblity rules and maybe we actually
@@ -144,8 +152,8 @@ namespace Compiler.CodeGeneration.Artifacts
                 return global;
 
             // FUNCTION
-            Function? function;
-            if ((function = FindFunction(name)) != null)
+            FunctionCandidates? function;
+            if ((function = FindFunctionCandidates(name)) != null)
                 return function;
 
             // MODULES
@@ -186,6 +194,15 @@ namespace Compiler.CodeGeneration.Artifacts
                 return new Storage(
                     new CobType(eCobType.Function, tag: compiler.Functions[idx]),
                     Operand.Function(idx)
+                );
+            }
+
+            // FUNCTION CANDIDATES
+            if (symbol is FunctionCandidates candidates)
+            {
+                return new Storage(
+                    new CobType(eCobType.Function, tag: candidates),
+                    Operand.None
                 );
             }
 

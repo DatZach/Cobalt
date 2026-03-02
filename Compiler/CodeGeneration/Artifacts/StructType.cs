@@ -110,6 +110,14 @@ namespace Compiler.CodeGeneration.Artifacts
             return result;
         }
 
+        public FunctionCandidates? FindFunctionCandidates(string name)
+        {
+            var candidates = functions.Where(x => x.Name == name).ToList();
+            return candidates.Count > 0
+                 ? new FunctionCandidates(candidates)
+                 : null;
+        }
+
         public Field AllocateField(string name, CobType type, bool hasGetter, bool hasSetter)
         {
             var getter = hasGetter ? AllocateFunction($"{name}_$get", Array.Empty<Function.Parameter>(), type) : null;
@@ -251,9 +259,9 @@ namespace Compiler.CodeGeneration.Artifacts
             if ((factory = FindFactory(name)) != null)
                 return factory;
 
-            Function? function;
-            if ((function = FindFunction(name)) != null)
-                return function;
+            FunctionCandidates? function;
+            if ((function = FindFunctionCandidates(name)) != null)
+                return function; // TODO Collapse to single function if possible
 
             return null;
         }
@@ -310,6 +318,14 @@ namespace Compiler.CodeGeneration.Artifacts
                 );
             }
 
+            if (symbol is FunctionCandidates candidates)
+            {
+                return new Storage(
+                    new CobType(eCobType.Function, tag: candidates),
+                    Operand.None
+                );
+            }
+
             return null;
         }
 
@@ -347,5 +363,44 @@ namespace Compiler.CodeGeneration.Artifacts
         public Function? Getter { get; init; }
 
         public Function? Setter { get; init; }
+    }
+
+    internal sealed class FunctionCandidates : ISymbol
+    {
+        private readonly IReadOnlyList<Function> candidates;
+
+        public FunctionCandidates(IReadOnlyList<Function> candidates)
+        {
+            this.candidates = candidates;
+        }
+
+        public Function? ResolveSingle(IReadOnlyList<CobType> arguments)
+        {
+            return candidates.FirstOrDefault(x =>
+            {
+                var parameterCount = x.Parameters.Count;
+                var argumentCount = arguments.Count;
+                var paramOffset = 0;
+
+                if (x.CallingConvention == CallingConvention.ThisCall)
+                    ++paramOffset;
+
+                if (parameterCount != argumentCount + paramOffset)
+                    return false;
+
+                for (int i = 0; i < argumentCount; ++i)
+                {
+                    var a = arguments[i];
+                    var b = x.Parameters[i + paramOffset].Type;
+
+                    if (!CobType.IsCastable(a, b))
+                        return false;
+                }
+
+                return true;
+            });
+        }
+
+        public bool IsVisibleTo(IScopeContext context) => candidates.Any(x => x.IsVisibleTo(context));
     }
 }
