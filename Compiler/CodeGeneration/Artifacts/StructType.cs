@@ -18,6 +18,8 @@ namespace Compiler.CodeGeneration.Artifacts
         private StructType? pendingSuperType;
         private CobType? pendingBType;
 
+        public StructType? HACK_PendingSuperType => pendingSuperType;
+
         private readonly List<GenericDefinition> generics;
         private readonly List<TraitType> traits;
         private readonly List<Function> factories;

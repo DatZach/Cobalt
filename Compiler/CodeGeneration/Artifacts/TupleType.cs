@@ -13,6 +13,8 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public Indexer? Indexer { get; private set; }
 
+        public TupleType? HACK_PendingSuperType => pendingSuperType;
+
         public bool IsGeneric => generics.Count > 0;
 
         private TupleType? pendingSuperType;

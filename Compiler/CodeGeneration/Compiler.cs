@@ -853,7 +853,22 @@ namespace Compiler.CodeGeneration
                 AssignmentRHS = prevAsnSrc;
                 BinOpLHS = lhs;
 
-                if (lhs != null) contextStack.Push((IScopeContext)lhs.Type.Tag);
+                if (lhs != null)
+                {
+                    if (lhs.Type.Tag is StructType structType)
+                    {
+                        if (structType.PopulateConcretizedStructIfRequired())
+                            concreteTypeAstReferences.Add(new ConcreteTypeAstReference(structType.HACK_PendingSuperType, structType));
+                    }
+                    else if (lhs.Type.Tag is TupleType tupleType)
+                    {
+                        if (tupleType.PopulateConcretizedTupleIfRequired())
+                            concreteTypeAstReferences.Add(new ConcreteTypeAstReference(tupleType.HACK_PendingSuperType, tupleType));
+                    }
+                    
+                    contextStack.Push((IScopeContext)lhs.Type.Tag);
+                }
+
                 var rhs = expression.Right.Accept(this);
                 if (lhs != null) contextStack.Pop();
                 lhs?.Free();
@@ -1265,12 +1280,13 @@ namespace Compiler.CodeGeneration
                 messages.Add(Message.FunctionParameterCountMismatch, expression, parametersCountRequired, argumentsCountProvided);
             // TODO optional parameters and spread parameters are not legally defined together
 
-            var argumentsTotalCount = Math.Max(argumentsCountProvided, parametersCountTotal);
+            var argumentsTotalCount = hasSpreadParameter ? parametersCountTotal : Math.Max(argumentsCountProvided, parametersCountTotal);
             var operandArguments = new Operand[argumentsTotalCount];
             for (int i = 0; i < argumentsTotalCount; ++i)
             {
                 var paramType = parameters.ElementAtOrDefault(i);
                 var argument = arguments.ElementAtOrDefault(i);
+                int j = i;
 
                 Storage? argStorage;
                 if (argument == null)
@@ -1280,10 +1296,57 @@ namespace Compiler.CodeGeneration
                     var boe = (BinaryOperatorExpression)expression.FunctionExpression;
                     argStorage = boe.Left.Accept(this);
                 }
+                else if (paramType != null && paramType.IsSpread)
+                {
+                    // RESOLVE TYPE
+                    var bType = CobType.U8; // TODO Implement correctly
+                    var tag = Intrinsics.Array;
+                    tag = tag.FindConcretizedStruct(bType) ?? tag.AllocateConcretizedStruct(bType);
+                    var cobType = new CobType(eCobType.Struct, tag: tag);
+
+                    if (tag.PopulateConcretizedStructIfRequired())
+                        concreteTypeAstReferences.Add(new ConcreteTypeAstReference(Intrinsics.Array, tag));
+
+                    // ALLOCATE
+                    var arrReturnStorage = CurrentFunction.AllocateRegisterStorage(CobType.Nil);
+                    argStorage = CurrentFunction.AllocateRegisterStorage(cobType);
+            
+                    //CurrentFunction.Body.Emit(Opcode.New, storage.Operand, cobType.ToOperand(artifact));
+            
+                    // CALL CTOR
+                    var arrNewFunction = tag.FindFactory("New");
+                    var arrFunctionStorage = tag.EmitGetForSymbol(arrNewFunction);
+
+                    CurrentFunction.Body.Emit(
+                        Opcode.Call,
+                        arrFunctionStorage.Operand,
+                        argStorage.Operand,
+                        new []{ Operand.ImmediateUnsigned(0) } // TODO Prealloc element count
+                    );
+
+                    // ADD ELEMENTS
+                    arrNewFunction = tag.FindFunction("Add");
+                    arrFunctionStorage = tag.EmitGetForSymbol(arrNewFunction);
+
+                    for (; i < argumentsCountProvided; ++i)
+                    {
+                        argument = arguments.ElementAtOrDefault(i);
+                        var elemStorage = argument.Accept(this);
+                        
+                        CurrentFunction.Body.Emit(
+                            Opcode.Call,
+                            arrFunctionStorage.Operand,
+                            arrReturnStorage.Operand,
+                            new []{ argStorage.Operand, elemStorage.Operand }
+                        );
+                    }
+
+                    arrReturnStorage.Free();
+                    arrFunctionStorage.Free();
+                }
                 else
                     argStorage = argument.Accept(this);
 
-                if (paramType != null && paramType.IsSpread) paramType = null;
                 if (argStorage == null
                 ||  (paramType != null && !CobType.IsCastable(argStorage.Type, paramType.Type)))
                 {
@@ -1295,7 +1358,7 @@ namespace Compiler.CodeGeneration
                 if (paramType != null && argStorage.Type != paramType.Type)
                     argStorage = EmitCast(argStorage, paramType.Type);
 
-                operandArguments[i] = argStorage.Operand;
+                operandArguments[j] = argStorage.Operand;
             }
             
             // CALL

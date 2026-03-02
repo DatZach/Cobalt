@@ -320,6 +320,9 @@ namespace Compiler.CodeGeneration
                 
                 if (!CobType.TryAddAlias(expression.Name, new CobType(eCobType.Struct, tag: structType)))
                     messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
+
+                if (expression.Name == "Array")
+                    Intrinsics.Array = structType;
             }
             else if (Phase > DeclPhase.Types)
             {

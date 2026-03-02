@@ -271,7 +271,11 @@ namespace Compiler.CodeGeneration.Artifacts
             if (isArray)
             {
                 var elementType = FromString(typeName[..^2], context);
-                type = new CobType(eCobType.Array, elementType: elementType);
+                //type = new CobType(eCobType.Array, elementType: elementType);
+                var tag = Intrinsics.Array.FindConcretizedStruct(elementType) ?? Intrinsics.Array.AllocateConcretizedStruct(elementType);
+
+
+                return new CobType(eCobType.Struct, tag: tag);
             }
             else if (typeName.Length >= 2 && typeName[0] == 's' && char.IsDigit(typeName[1]))
                 type = new CobType(eCobType.Signed, int.Parse(typeName[1..]));
@@ -292,6 +296,7 @@ namespace Compiler.CodeGeneration.Artifacts
             {
                 if (type.Tag is TupleType tupleType)
                 {
+                    // TODO Might be better to just merge these methods into a single one
                     var tag = tupleType.FindConcretizedTuple(bType) ?? tupleType.AllocateConcretizedTuple(bType);
                     type = new CobType(eCobType.Tuple, tag: tag);
                 } 
@@ -384,7 +389,8 @@ namespace Compiler.CodeGeneration.Artifacts
                     _ => throw new ArgumentOutOfRangeException()
                 },
                 eCobType.Array => this == String ? typeof(string) : ElementType.ToManagedType().MakeArrayType(),
-                eCobType.Struct => throw new NotImplementedException(), // ???
+                eCobType.Struct => Any.ToManagedType().MakeArrayType(), // TODO Not correct
+                                                                        // Tag == Intrinsics.Array ? Any.ToManagedType().MakeArrayType() :  throw new NotImplementedException(), // ???
                 eCobType.Tuple => throw new NotImplementedException(), // ???
                 eCobType.Lens => throw new NotImplementedException(), // ???
                 eCobType.Function => throw new NotImplementedException(), // ???
