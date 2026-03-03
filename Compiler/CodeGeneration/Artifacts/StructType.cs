@@ -375,22 +375,35 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public Function? ResolveSingle(IReadOnlyList<CobType> arguments)
         {
-            return candidates.FirstOrDefault(x =>
+            return candidates.SingleOrDefault(x =>
             {
                 var parameterCount = x.Parameters.Count;
+                var parametersCountRequired = x.Parameters.Count(y => y.DefaultValue == null);
+                var hasSpreadParameter = parameterCount > 0 && x.Parameters[^1].IsSpread;
+
                 var argumentCount = arguments.Count;
                 var paramOffset = 0;
 
                 if (x.CallingConvention == CallingConvention.ThisCall)
                     ++paramOffset;
 
-                if (parameterCount != argumentCount + paramOffset)
+                if (parameterCount < argumentCount + paramOffset && !hasSpreadParameter)
+                    return false;
+                if (argumentCount + paramOffset < parametersCountRequired)
                     return false;
 
                 for (int i = 0; i < argumentCount; ++i)
                 {
                     var a = arguments[i];
-                    var b = x.Parameters[i + paramOffset].Type;
+                    CobType b;
+                    if (hasSpreadParameter && i >= parameterCount - 1)
+                    {
+                        // Spread argument
+                        b = x.Parameters[parameterCount - 1].Type;
+                        b = CobType.Any; // TODO Need a way to get the ElementType from Array intrinsic
+                    }
+                    else
+                        b = x.Parameters[i + paramOffset].Type;
 
                     if (!CobType.IsCastable(a, b))
                         return false;

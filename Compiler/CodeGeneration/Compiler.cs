@@ -334,6 +334,8 @@ namespace Compiler.CodeGeneration
                 //function = CurrentModule.FindFunction(expression.Name)!;
             }
 
+            if (function == null) throw new InvalidOperationException("Unable to resolve declared function");
+
             contextStack.Push(function);
 
             // TODO Temporary hack to call our initializer functions in the entry point
@@ -1257,23 +1259,74 @@ namespace Compiler.CodeGeneration
             return storage;
         }
 
+        private Storage? VisitCastExpression(CallExpression expression)
+        {
+            if (expression.FunctionExpression is not IdentifierExpression ie)
+                return null;
+            
+            if (!CobType.TryParse(ie.Value, out var castType)
+            ||  castType.Type == eCobType.Tuple
+            ||  castType.Type == eCobType.Struct
+            ||  castType.Type == eCobType.None)
+                return null;
+
+            var arguments = expression.Arguments;
+            if (arguments.Count != 1)
+            {
+                messages.Add(Message.FunctionParameterCountMismatch, expression, 1, arguments.Count);
+                return null;
+            }
+
+            var source = arguments[0].Accept(this);
+            var target = EmitCast(source, castType);
+
+            return target;
+        }
+
+        private Storage? VisitTupleLiteralExpression(CallExpression expression, Storage? functionStorage)
+        {
+            if (functionStorage == null || functionStorage.Type != eCobType.Tuple
+            ||  functionStorage.Type.Tag is not TupleType tupleType)
+                return null;
+
+            functionStorage.Free();
+
+            var cobType = new CobType(eCobType.Tuple, tag: tupleType);
+
+            var storage = CurrentFunction.AllocateRegisterStorage(cobType);
+            CurrentFunction.Body.Emit(Opcode.New, storage.Operand, cobType.ToOperand(artifact));
+
+            for (var i = 0; i < expression.Arguments.Count; ++i)
+            {
+                var argStorage = expression.Arguments[i].Accept(this);
+                CurrentFunction.Body.Emit(
+                    Opcode.SetField,
+                    storage.Operand,
+                    Operand.ImmediateUnsigned(i),
+                    argStorage.Operand
+                );
+            }
+
+            return storage;
+        }
+
         private Storage? VisitCallExpression(CallExpression expression, Storage? candidatesStorage)
         {
             // ARGUMENTS
-            var argumentsStorage = new List<Storage>();
+            var arguments = new List<Storage>();
             foreach (var argExpression in expression.Arguments)
             {
                 var argStorage = argExpression.Accept(this);
                 if (argStorage == null)
                     continue;
 
-                argumentsStorage.Add(argStorage);
+                arguments.Add(argStorage);
             }
 
             // RESOLVE FUNCTION
             Function? function;
             if (candidatesStorage?.Type.Tag is FunctionCandidates tagCandidates)
-                function = tagCandidates.ResolveSingle(argumentsStorage.Select(x => x.Type).ToList());
+                function = tagCandidates.ResolveSingle(arguments.Select(x => x.Type).ToList());
             else if (candidatesStorage?.Type.Tag is Function tagFunction)
                 function = tagFunction;
             else
@@ -1285,122 +1338,30 @@ namespace Compiler.CodeGeneration
                 return null;
             }
 
-            // EMIT CALL
+            // RECTIFY ARGUMENTS
             if (function.CallingConvention == CallingConvention.ThisCall)
             {
                 var boe = (BinaryOperatorExpression)expression.FunctionExpression;
                 var thisStorage = boe.Left.Accept(this);
-                argumentsStorage.Insert(0, thisStorage);
+                arguments.Insert(0, thisStorage);
             }
 
-            // RECTIFY ARGUMENTS
             var parameters = function.Parameters;
             for (int i = 0; i < parameters.Count; ++i)
             {
                 var parameter = parameters[i];
-                var argument = argumentsStorage.ElementAtOrDefault(i);
+                var argument = arguments.ElementAtOrDefault(i);
 
                 // Default Parameter
                 if (argument == null)
                     argument = parameter.DefaultValue.Accept(this);
 
-                // Casting
-                if (argument.Type != parameter.Type)
-                    argument = EmitCast(argument, parameter.Type);
-
-                argumentsStorage[i] = argument;
-            }
-
-            var functionStorage = function.Parent.EmitGetForSymbol(function)!;
-
-            var retStorage = function.ReturnType != eCobType.None
-                ? CurrentFunction.AllocateRegisterStorage(function.ReturnType)
-                : null;
-
-            CurrentFunction.Body.Emit(
-                function.Parent is TraitType ? Opcode.CallVirt : Opcode.Call,
-                functionStorage.Operand,
-                retStorage?.Operand ?? Operand.None,
-                argumentsStorage.Select(x => x.Operand).ToList()
-            );
-
-            if (function.ReturnType.HasErrorFlag && conditionalStack <= 0 && retStorage != null)
-                CurrentFunction.Body.Emit(Opcode.PanicOnErr, retStorage.Operand);
-
-            // CLEANUP
-            functionStorage.Free();
-            for (int i = 0; i < argumentsStorage.Count; ++i)
-                CurrentFunction.FreeStorage(argumentsStorage[i].Operand);
-
-            return retStorage;
-        }
-
-        public Storage? Visit_(CallExpression expression)
-        {
-            // CAST OPERATOR
-            var castType = VisitCastExpression(expression);
-            if (castType != null)
-                return castType;
-
-            // FUNCTION IDENTIFIER
-            var functionStorage = expression.FunctionExpression.Accept(this);
-            
-            // TUPLE ALLOCATION OPERATOR
-            var tuple = VisitTupleLiteralExpression(expression, functionStorage);
-            if (tuple != null)
-                return tuple;
-
-            var function = functionStorage?.Type.TagFunction;
-            if (function == null)
-            {
-                messages.Add(Message.CannotCallType, expression, functionStorage?.Type.ToString() ?? "(null)");
-                return null;
-            }
-
-            var retStorage = function.ReturnType != eCobType.None
-                           ? CurrentFunction.AllocateRegisterStorage(function.ReturnType)
-                           : null;
-
-            // ARGUMENTS
-            var parameters = function.Parameters;
-            var arguments = expression.Arguments;
-            if (function.CallingConvention == CallingConvention.ThisCall)
-            {
-                var lArguments = new List<Expression>();
-                lArguments.Add(new IdentifierExpression(new Token(TokenType.Identifier, "$this", "", 0, 0)));
-                lArguments.AddRange(arguments);
-                arguments = lArguments;
-            }
-
-            var parametersCountTotal = parameters.Count;
-            var parametersCountRequired = parameters.Count(x => x.DefaultValue == null);
-            var hasSpreadParameter = parametersCountTotal > 0 && parameters[^1].IsSpread;
-
-            var argumentsCountProvided = arguments.Count;
-            var argumentsCountRequired = hasSpreadParameter ? argumentsCountProvided : parametersCountRequired;
-
-            if (argumentsCountProvided < parametersCountRequired && !hasSpreadParameter)
-                messages.Add(Message.FunctionParameterCountMismatch, expression, parametersCountRequired, argumentsCountProvided);
-            // TODO optional parameters and spread parameters are not legally defined together
-
-            var argumentsTotalCount = hasSpreadParameter ? parametersCountTotal : Math.Max(argumentsCountProvided, parametersCountTotal);
-            var operandArguments = new Operand[argumentsTotalCount];
-            for (int i = 0; i < argumentsTotalCount; ++i)
-            {
-                var paramType = parameters.ElementAtOrDefault(i);
-                var argument = arguments.ElementAtOrDefault(i);
-                int j = i;
-
-                Storage? argStorage;
-                if (argument == null)
-                    argStorage = paramType.DefaultValue.Accept(this);
-                else if (argument is IdentifierExpression argIdent && argIdent.Value == "$this")
+                // Spread Parameter
+                if (parameter.IsSpread)
                 {
-                    var boe = (BinaryOperatorExpression)expression.FunctionExpression;
-                    argStorage = boe.Left.Accept(this);
-                }
-                else if (paramType != null && paramType.IsSpread)
-                {
+                    // TODO Cleanup & Merge with ArrayLiteralExpression Visitor
+                    int j = i;
+
                     // RESOLVE TYPE
                     var bType = CobType.U8; // TODO Implement correctly
                     var tag = Intrinsics.Array;
@@ -1412,7 +1373,7 @@ namespace Compiler.CodeGeneration
 
                     // ALLOCATE
                     var arrReturnStorage = CurrentFunction.AllocateRegisterStorage(CobType.Nil);
-                    argStorage = CurrentFunction.AllocateRegisterStorage(cobType);
+                    argument = CurrentFunction.AllocateRegisterStorage(cobType);
             
                     // CALL CTOR
                     var arrNewFunction = tag.FindFactory("New");
@@ -1421,7 +1382,7 @@ namespace Compiler.CodeGeneration
                     CurrentFunction.Body.Emit(
                         Opcode.Call,
                         arrFunctionStorage.Operand,
-                        argStorage.Operand,
+                        argument.Operand,
                         new []{ Operand.ImmediateUnsigned(0) } // TODO Prealloc element count
                     );
 
@@ -1429,56 +1390,58 @@ namespace Compiler.CodeGeneration
                     arrNewFunction = tag.FindFunction("Add");
                     arrFunctionStorage = tag.EmitGetForSymbol(arrNewFunction);
 
-                    for (; i < argumentsCountProvided; ++i)
+                    for (; i < arguments.Count; ++i)
                     {
-                        argument = arguments.ElementAtOrDefault(i);
-                        var elemStorage = argument.Accept(this);
-                        
                         CurrentFunction.Body.Emit(
                             Opcode.Call,
                             arrFunctionStorage.Operand,
                             arrReturnStorage.Operand,
-                            new []{ argStorage.Operand, elemStorage.Operand }
+                            new []{ argument.Operand, arguments[i].Operand }
                         );
                     }
 
                     arrReturnStorage.Free();
                     arrFunctionStorage.Free();
+
+                    while (j < arguments.Count)
+                        arguments.RemoveAt(j);
                 }
+
+                // Casting
+                if (argument.Type != parameter.Type)
+                    argument = EmitCast(argument, parameter.Type);
+
+                if (i < arguments.Count)
+                    arguments[i] = argument;
                 else
-                    argStorage = argument.Accept(this);
-
-                if (argStorage == null
-                ||  (paramType != null && !CobType.IsCastable(argStorage.Type, paramType.Type)))
-                {
-                    operandArguments[i] = Operand.None;
-                    messages.Add(Message.TypeMismatch, arguments[i], paramType?.Type, argStorage?.Type);
-                    continue;
-                }
-                
-                if (paramType != null && argStorage.Type != paramType.Type)
-                    argStorage = EmitCast(argStorage, paramType.Type);
-
-                operandArguments[j] = argStorage.Operand;
+                    arguments.Add(argument);
             }
-            
-            // CALL
-            var opcode = function.Parent is TraitType ? Opcode.CallVirt : Opcode.Call;
-            CurrentFunction.Body.Emit(opcode, functionStorage.Operand, retStorage?.Operand, operandArguments);
 
-            if (function.ReturnType.HasErrorFlag && conditionalStack <= 0)
-            {
+            // EMIT CALL
+            var functionStorage = function.Parent.EmitGetForSymbol(function)!;
+
+            var retStorage = function.ReturnType != eCobType.None
+                ? CurrentFunction.AllocateRegisterStorage(function.ReturnType)
+                : null;
+
+            CurrentFunction.Body.Emit(
+                function.Parent is TraitType ? Opcode.CallVirt : Opcode.Call,
+                functionStorage.Operand,
+                retStorage?.Operand ?? Operand.None,
+                arguments.Select(x => x.Operand).ToList()
+            );
+
+            if (function.ReturnType.HasErrorFlag && conditionalStack <= 0 && retStorage != null)
                 CurrentFunction.Body.Emit(Opcode.PanicOnErr, retStorage.Operand);
-            }
 
             // CLEANUP
-            functionStorage.Free(); // function reg
-            for (int i = 0; i < operandArguments.Length; ++i) // argument regs
-                CurrentFunction.FreeStorage(operandArguments[i]);
+            functionStorage.Free();
+            for (int i = 0; i < arguments.Count; ++i)
+                CurrentFunction.FreeStorage(arguments[i].Operand);
 
             return retStorage;
         }
-        
+
         public Storage? Visit(IdentifierExpression expression)
         {
             var inAssignment = AssignmentRHS != null;
@@ -1514,52 +1477,6 @@ namespace Compiler.CodeGeneration
 
             messages.Add(Message.UndeclaredIdentifier, expression, expression.Value);
             return null;
-        }
-
-        private Storage? VisitCastExpression(CallExpression expression)
-        {
-            if (expression.FunctionExpression is not IdentifierExpression ie)
-                return null;
-            
-            if (!CobType.TryParse(ie.Value, out var castType)
-            ||  castType.Type == eCobType.Tuple
-            ||  castType.Type == eCobType.Struct
-            ||  castType.Type == eCobType.None)
-                return null;
-
-            var arguments = expression.Arguments;
-            if (arguments.Count != 1)
-            {
-                messages.Add(Message.FunctionParameterCountMismatch, expression, 1, arguments.Count);
-                return null;
-            }
-
-            var source = arguments[0].Accept(this);
-            var target = EmitCast(source, castType);
-
-            return target;
-        }
-
-        private Storage EmitCast(Storage source, CobType dstType)
-        {
-            var srcType = source.Type;
-            if (srcType == dstType)
-                return source;
-            
-            if (srcType == eCobType.Unsigned
-            ||  srcType == eCobType.Signed
-            ||  srcType == eCobType.Float)
-            {
-                return source;
-                // TODO Reimplement
-                //return source with { Type = dstType };
-            }
-            else if (srcType == eCobType.Struct && dstType == eCobType.Trait)
-            {
-                return source; // TODO ??
-            }
-            else
-                throw new NotImplementedException();
         }
 
         public Storage? Visit(AheadOfTimeExpression expression)
@@ -1688,33 +1605,6 @@ namespace Compiler.CodeGeneration
 
             index?.Free();
             source?.Free();
-
-            return storage;
-        }
-
-        private Storage? VisitTupleLiteralExpression(CallExpression expression, Storage? functionStorage)
-        {
-            if (functionStorage == null || functionStorage.Type != eCobType.Tuple
-            ||  functionStorage.Type.Tag is not TupleType tupleType)
-                return null;
-
-            functionStorage.Free();
-
-            var cobType = new CobType(eCobType.Tuple, tag: tupleType);
-
-            var storage = CurrentFunction.AllocateRegisterStorage(cobType);
-            CurrentFunction.Body.Emit(Opcode.New, storage.Operand, cobType.ToOperand(artifact));
-
-            for (var i = 0; i < expression.Arguments.Count; ++i)
-            {
-                var argStorage = expression.Arguments[i].Accept(this);
-                CurrentFunction.Body.Emit(
-                    Opcode.SetField,
-                    storage.Operand,
-                    Operand.ImmediateUnsigned(i),
-                    argStorage.Operand
-                );
-            }
 
             return storage;
         }
@@ -1854,6 +1744,28 @@ namespace Compiler.CodeGeneration
         public Storage? Visit(EmptyExpression expression)
         {
             return null;
+        }
+
+        private static Storage EmitCast(Storage source, CobType dstType)
+        {
+            var srcType = source.Type;
+            if (srcType == dstType)
+                return source;
+            
+            if (srcType == eCobType.Unsigned
+                ||  srcType == eCobType.Signed
+                ||  srcType == eCobType.Float)
+            {
+                return source;
+                // TODO Reimplement
+                //return source with { Type = dstType };
+            }
+            else if (srcType == eCobType.Struct && dstType == eCobType.Trait)
+            {
+                return source; // TODO ??
+            }
+            else
+                throw new NotImplementedException();
         }
 
         public static bool IsSymbolVisible(IScopeContext? context, IScopeContext? parent, string? name)
