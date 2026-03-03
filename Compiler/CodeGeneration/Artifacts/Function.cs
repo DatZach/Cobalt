@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Text;
 using Compiler.Ast.Expressions;
 using Compiler.Interpreter;
 
@@ -212,7 +213,34 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public bool IsVisibleTo(IScopeContext context) => Compiler.IsSymbolVisible(context, Parent, Name);
 
-        public override string ToString() => FullyQualifiedName;
+        //public override string ToString() => FullyQualifiedName;
+        public override string ToString()
+        {
+            var sb = new StringBuilder(80);
+            sb.Append(Name);
+            sb.Append('(');
+            for (var i = 0; i < Parameters.Count; ++i)
+            {
+                var x = Parameters[i];
+                if (x.IsSpread) sb.Append("...");
+                sb.Append(x.Name);
+                sb.Append(": ");
+                sb.Append(x.Type);
+                if (x.DefaultValue != null)
+                    sb.Append(" = ?");
+                if (i < Parameters.Count - 1)
+                    sb.Append(", ");
+            }
+
+            sb.Append(')');
+            if (ReturnType != eCobType.None)
+            {
+                sb.Append(": ");
+                sb.Append(ReturnType);
+            }
+
+            return sb.ToString();
+        }
 
         internal sealed record Parameter : Variable
         {

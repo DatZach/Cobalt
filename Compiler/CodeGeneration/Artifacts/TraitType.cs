@@ -44,11 +44,19 @@
             return functions.FirstOrDefault(x => x.Name == name);
         }
 
+        public FunctionCandidates? FindFunctionCandidates(string name)
+        {
+            var candidates = functions.Where(x => x.Name == name).ToList();
+            return candidates.Count > 0
+                ? new FunctionCandidates(candidates)
+                : null;
+        }
+
         public ISymbol? FindSymbol(string name)
         {
-            Function? function;
-            if ((function = FindFunction(name)) != null)
-                return function;
+            FunctionCandidates? candidates;
+            if ((candidates = FindFunctionCandidates(name)) != null)
+                return candidates;
 
             return null;
         }
@@ -61,6 +69,14 @@
                 return new Storage(
                     new CobType(eCobType.Function, tag: compiler.Functions[idx]),
                     Operand.Function(idx)
+                );
+            }
+
+            if (symbol is FunctionCandidates candidates)
+            {
+                return new Storage(
+                    new CobType(eCobType.Function, tag: candidates),
+                    Operand.None
                 );
             }
 

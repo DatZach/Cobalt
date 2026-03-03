@@ -155,11 +155,17 @@ namespace Compiler.Ast
                 else
                     continue;
 
-                Console.ForegroundColor = color;
-                Console.Write(typePrefix);
-                Console.ForegroundColor = ConsoleColor.White;
-                Console.Write(" ");
-                Console.WriteLine(message.Content);
+                var contentLines = message.Content.Split('\n');
+                for (var i = 0; i < contentLines.Length; ++i)
+                {
+                    var contentLine = contentLines[i];
+
+                    Console.ForegroundColor = color;
+                    Console.Write(typePrefix);
+                    Console.ForegroundColor = ConsoleColor.White;
+                    Console.Write(i == 0 ? " " : "    ");
+                    Console.WriteLine(contentLine);
+                }
 
                 var indentCount = (endToken.Line + 1).ToString("G").Length;
                 var indent = new string(' ', indentCount);
@@ -182,6 +188,8 @@ namespace Compiler.Ast
                     Console.Write(new string(' ' , startToken.Column));
                     Console.ForegroundColor = color;
                     var tokenLength = startToken.Value.Length;
+                    if (startToken != endToken && startToken.Line == endToken.Line)
+                        tokenLength += endToken.Column - (startToken.Column + startToken.Value.Length) + endToken.Value.Length;
                     if (startToken.Type == TokenType.String) tokenLength += 2;
                     Console.WriteLine(new string('^', Math.Max(1, Math.Min(tokenLength, line.Length - startToken.Column))));
                     Console.WriteLine();
@@ -236,6 +244,8 @@ namespace Compiler.Ast
         public static Def CannotIndexType { get; } = new(MessageType.Error, "Cannot index type '{0}'");
 
         public static Def CannotCallType { get; } = new(MessageType.Error, "Cannot call type '{0}'");
+
+        public static Def NoMatchingFunctionCandidate { get; } = new(MessageType.Error, "No candidate matches provided signature. Considered:\n{0}");
 
         public static Def CannotErrorCoalesceType { get; } = new(MessageType.Error, "Cannot error coalesce type '{0}'");
 

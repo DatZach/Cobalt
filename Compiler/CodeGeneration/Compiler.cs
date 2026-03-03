@@ -1239,23 +1239,34 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(CallExpression expression)
         {
-            // CAST OPERATOR (TODO Cleanup)
-            var castType = VisitCastExpression(expression);
-            if (castType != null)
-                return castType;
-
             var candidatesStorage = expression.FunctionExpression.Accept(this);
 
-            // TUPLE ALLOCATION OPERATOR (TODO Cleanup)
-            var tuple = VisitTupleLiteralExpression(expression, candidatesStorage);
-            if (tuple != null)
-                return tuple;
+            // CAST
+            var storage = VisitCastExpression(expression);
 
+            // TUPLE ALLOCATION
+            if (storage == null)
+                storage = VisitTupleLiteralExpression(expression, candidatesStorage);
+
+            // CALL
+            if (storage == null)
+                storage = VisitCallExpression(expression, candidatesStorage);
+
+            candidatesStorage?.Free();
+
+            return storage;
+        }
+
+        private Storage? VisitCallExpression(CallExpression expression, Storage? candidatesStorage)
+        {
             // ARGUMENTS
             var argumentsStorage = new List<Storage>();
             foreach (var argExpression in expression.Arguments)
             {
                 var argStorage = argExpression.Accept(this);
+                if (argStorage == null)
+                    continue;
+
                 argumentsStorage.Add(argStorage);
             }
 
@@ -1270,7 +1281,7 @@ namespace Compiler.CodeGeneration
 
             if (function == null)
             {
-                messages.Add(Message.CannotCallType, expression, candidatesStorage?.Type.ToString() ?? "(null)");
+                messages.Add(Message.NoMatchingFunctionCandidate, expression.FunctionExpression, candidatesStorage?.Type.Tag?.ToString());
                 return null;
             }
 
@@ -1282,11 +1293,29 @@ namespace Compiler.CodeGeneration
                 argumentsStorage.Insert(0, thisStorage);
             }
 
+            // RECTIFY ARGUMENTS
+            var parameters = function.Parameters;
+            for (int i = 0; i < parameters.Count; ++i)
+            {
+                var parameter = parameters[i];
+                var argument = argumentsStorage.ElementAtOrDefault(i);
+
+                // Default Parameter
+                if (argument == null)
+                    argument = parameter.DefaultValue.Accept(this);
+
+                // Casting
+                if (argument.Type != parameter.Type)
+                    argument = EmitCast(argument, parameter.Type);
+
+                argumentsStorage[i] = argument;
+            }
+
             var functionStorage = function.Parent.EmitGetForSymbol(function)!;
 
             var retStorage = function.ReturnType != eCobType.None
-                           ? CurrentFunction.AllocateRegisterStorage(function.ReturnType)
-                           : null;
+                ? CurrentFunction.AllocateRegisterStorage(function.ReturnType)
+                : null;
 
             CurrentFunction.Body.Emit(
                 function.Parent is TraitType ? Opcode.CallVirt : Opcode.Call,
@@ -1300,7 +1329,6 @@ namespace Compiler.CodeGeneration
 
             // CLEANUP
             functionStorage.Free();
-            candidatesStorage!.Free();
             for (int i = 0; i < argumentsStorage.Count; ++i)
                 CurrentFunction.FreeStorage(argumentsStorage[i].Operand);
 

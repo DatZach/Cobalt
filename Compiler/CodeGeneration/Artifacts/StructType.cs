@@ -1,5 +1,4 @@
-﻿using Compiler.Ast.Expressions;
-using Compiler.Ast.Expressions.Statements;
+﻿using Compiler.Ast.Expressions.Statements;
 using System.Diagnostics;
 
 namespace Compiler.CodeGeneration.Artifacts
@@ -259,9 +258,9 @@ namespace Compiler.CodeGeneration.Artifacts
             if ((factory = FindFactory(name)) != null)
                 return factory;
 
-            FunctionCandidates? function;
-            if ((function = FindFunctionCandidates(name)) != null)
-                return function; // TODO Collapse to single function if possible
+            FunctionCandidates? candidates;
+            if ((candidates = FindFunctionCandidates(name)) != null)
+                return candidates;
 
             return null;
         }
@@ -402,5 +401,7 @@ namespace Compiler.CodeGeneration.Artifacts
         }
 
         public bool IsVisibleTo(IScopeContext context) => candidates.Any(x => x.IsVisibleTo(context));
+
+        public override string ToString() => string.Join('\n', candidates);
     }
 }
