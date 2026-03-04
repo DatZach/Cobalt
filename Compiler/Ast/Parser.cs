@@ -21,15 +21,19 @@ namespace Compiler.Ast
             Messages = messages ?? throw new ArgumentNullException(nameof(messages));
         }
 
-        public Expression ParseExpression(int precedence = 0, bool isConditional = false)
+        public Expression ParseExpression(int precedence = 0, bool isConditional = false, bool allowEmpty = false)
         {
-            var token = Take();
+            var token = Peek();
 
             if (!ExpressionPrefixParselets.TryGetValue(token.Type, out var prefixExpression))
             {
-                Messages.Add(Message.UnexpectedToken1, token, token.Type.GetDescription());
+                if (!allowEmpty)
+                    Messages.Add(Message.UnexpectedToken1, token, token.Type.GetDescription());
+
                 return new EmptyExpression(token);
             }
+
+            Take();
 
             var left = prefixExpression.Parse(this, token);
             while(GetPrecedence(isConditional) > precedence)

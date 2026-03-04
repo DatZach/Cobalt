@@ -119,6 +119,7 @@ namespace Compiler.Lexer
         [Description("'|'")] BitOr,
         [Description("'^'")] BitXor,
         [Description("'!'")] Not,
+        [Description("'~'")] BitNot,
         [Description("'?'")] Question,
 
         [Description("'&&'")] ConditionalAnd,

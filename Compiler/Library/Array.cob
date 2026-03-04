@@ -30,9 +30,16 @@ struct Array `T {
         Length += 1;
     }
 
+    func AddRange(value: T[]) {
+        var i: int;
+        for (i in ..value.Length)
+            Add(value[i]);
+    }
+
     func Slice(range: Range) Lens`T! {
-        if (range.Start < 0 || range.End >= Length) return error.OutOfBounds;
-        return Lens`T ( data.Address + range.Start, range.Length );
+        var length = (range.End < 0) :: { true => Length - ~range.End, false => range.Length };
+        if (range.Start < 0 || length < 0 || length > Length) return error.OutOfBounds;
+        return Lens`T ( data.Address + range.Start, length );
     }
 
     func Reverse() {

@@ -243,7 +243,7 @@ namespace Compiler.Ast
 
         public static Def CannotIndexType { get; } = new(MessageType.Error, "Cannot index type '{0}'");
 
-        public static Def CannotCallType { get; } = new(MessageType.Error, "Cannot call type '{0}'");
+        public static Def CannotResolveThis { get; } = new(MessageType.Error, "Unable to resolve to 'this' symbol for thiscall function");
 
         public static Def NoMatchingFunctionCandidate { get; } = new(MessageType.Error, "No candidate matches provided signature. Considered:\n{0}");
 

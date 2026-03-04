@@ -1031,11 +1031,16 @@ namespace Compiler.CodeGeneration
             {
                 CurrentFunction.Body.Emit(Opcode.Not, c.Operand, right.Operand);
             }
+            else if (expression.Operator == TokenType.Spread)
+            {
+                // This is an error, cannot spread outside of array literals
+                // TODO message.Add()
+            }
             else
             {
                 var opcode = expression.Operator switch
                 {
-                    TokenType.Not => Opcode.BitNot,
+                    TokenType.BitNot => Opcode.BitNot, // TODO Return to using ! instead of ~?
                     TokenType.Subtract => Opcode.Neg,
                     _ => throw new ArgumentOutOfRangeException(nameof(expression))
                 };
@@ -1341,8 +1346,21 @@ namespace Compiler.CodeGeneration
             // RECTIFY ARGUMENTS
             if (function.CallingConvention == CallingConvention.ThisCall)
             {
-                var boe = (BinaryOperatorExpression)expression.FunctionExpression;
-                var thisStorage = boe.Left.Accept(this);
+                Storage? thisStorage;
+                if (expression.FunctionExpression is BinaryOperatorExpression { Operator: TokenType.Dot } boe)
+                    thisStorage = boe.Left.Accept(this);
+                else
+                {
+                    var thisSymbol = CurrentContext.FindSymbol("this");
+                    thisStorage = thisSymbol != null ? CurrentContext.EmitGetForSymbol(thisSymbol) : null;
+                }
+
+                if (thisStorage == null)
+                {
+                    messages.Add(Message.CannotResolveThis, expression.FunctionExpression);
+                    return null;
+                }
+
                 arguments.Insert(0, thisStorage);
             }
 
@@ -1354,7 +1372,7 @@ namespace Compiler.CodeGeneration
 
                 // Default Parameter
                 if (argument == null)
-                    argument = parameter.DefaultValue.Accept(this);
+                    argument = parameter.DefaultValue!.Accept(this);
 
                 // Spread Parameter
                 if (parameter.IsSpread)
@@ -1649,7 +1667,6 @@ namespace Compiler.CodeGeneration
                 concreteTypeAstReferences.Add(new ConcreteTypeAstReference(Intrinsics.Array, tag));
 
             // ALLOCATE
-            var returnStorage = CurrentFunction.AllocateRegisterStorage(CobType.Nil);
             var storage = CurrentFunction.AllocateRegisterStorage(cobType);
             
             //CurrentFunction.Body.Emit(Opcode.New, storage.Operand, cobType.ToOperand(artifact));
@@ -1672,19 +1689,37 @@ namespace Compiler.CodeGeneration
             // TODO Validate types match
             foreach (var element in expression.Elements)
             {
-                var elemStorage = element.Accept(this);
+                if (element is PrefixOperatorExpression { Operator: TokenType.Spread } poe)
+                {
+                    var srcArrayStorage = poe.Right.Accept(this);
 
-                CurrentFunction.Body.Emit(
-                    Opcode.Call,
-                    functionStorage.Operand,
-                    returnStorage.Operand,
-                    new []{ storage.Operand, elemStorage.Operand }
-                );
+                    var addRangeFunction = tag.FindFunction("AddRange");
+                    var addRangeFunctionStorage = tag.EmitGetForSymbol(addRangeFunction);
 
-                elemStorage.Free();
+                    CurrentFunction.Body.Emit(
+                        Opcode.Call,
+                        addRangeFunctionStorage.Operand,
+                        Operand.None,
+                        new []{ storage.Operand, srcArrayStorage.Operand }
+                    );
+
+                    srcArrayStorage.Free();
+                }
+                else
+                {
+                    var elemStorage = element.Accept(this);
+
+                    CurrentFunction.Body.Emit(
+                        Opcode.Call,
+                        functionStorage.Operand,
+                        Operand.None,
+                        new []{ storage.Operand, elemStorage.Operand }
+                    );
+
+                    elemStorage.Free();
+                }
             }
 
-            returnStorage.Free();
             functionStorage.Free();
 
             return storage;

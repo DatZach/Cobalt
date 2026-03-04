@@ -14,16 +14,18 @@ namespace Compiler.Ast.Parselets
 
         public Expression Parse(Parser parser, Token token)
         {
-            var right = parser.ParseExpression(precedence);
-
             if (token.Type is TokenType.Range or TokenType.RangeInclusive
                            or TokenType.RangeLength or TokenType.RangeTerminal)
             {
                 var empty = new EmptyExpression(token);
+                var right = parser.ParseExpression(precedence, allowEmpty: true);
                 return new BinaryOperatorExpression(token, empty, right);
             }
-
-            return new PrefixOperatorExpression(token, right);
+            else
+            {
+                var right = parser.ParseExpression(precedence);
+                return new PrefixOperatorExpression(token, right);
+            }
         }
     }
 }
