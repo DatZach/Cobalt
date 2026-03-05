@@ -591,47 +591,6 @@ namespace Compiler.CodeGeneration
                 CurrentFunction.Body.Emit(Opcode.GetField, index.Operand, enumeratorStorage.Operand, Operand.ImmediateUnsigned(0));
 
                 index.Free();
-
-                //CurrentFunction.Body.Emit(Opcode.GetField, index.Operand, enumeratorStorage.Operand, Operand.ImmediateUnsigned(0));
-
-                /**************************/
-
-                //var index = boe.Left.Accept(this);
-                //var range = boe.Right.Accept(this);
-
-                //// TODO Should be abstracted behind an Intrinsics class
-                //// TODO Should use the Trait `Enumerable` instead of assuming the enumerator type
-                //var tdeRangeEnumerator = (TupleType)range.Type.Tag; // RootModule.FindTupleType("RangeEnumerator");
-                //var typeRangeTuple = new CobType(eCobType.Struct, tag: tdeRangeEnumerator);
-                //var varEnumerator = CurrentFunction.AllocateRegisterStorage(typeRangeTuple);
-
-                //var getEnumeratorStorage = tdeRangeEnumerator.EmitGetForSymbol(tdeRangeEnumerator.FindFunction("GetEnumerator"));
-                //// TODO tdeRangeEnumerator.FindFunctionIndex("GetEnumerator");
-                //CurrentFunction.Body.Emit(
-                //    Opcode.Call,
-                //    getEnumeratorStorage.Operand,
-                //    varEnumerator.Operand,
-                //    new[] { range.Operand }
-                //);
-                //getEnumeratorStorage.Free();
-                //range.Free();
-
-                //startLabel.Mark();
-
-                //// TODO tdeRangeEnumerator.FindFunctionIndex("MoveNext");
-                //tdeRangeEnumerator = (TupleType)getEnumeratorStorage.Type.TagFunction.ReturnType.Tag;
-                //var moveNextStorage = tdeRangeEnumerator.EmitGetForSymbol(tdeRangeEnumerator.FindFunction("MoveNext"));
-                //var moveNextResultStorage = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
-                //CurrentFunction.Body.Emit(
-                //    Opcode.Call,
-                //    moveNextStorage.Operand,
-                //    moveNextResultStorage.Operand,
-                //    new[] { varEnumerator.Operand }
-                //);
-                //moveNextStorage.Free();
-
-                //CurrentFunction.Body.Emit(Opcode.JmpF, moveNextResultStorage.Operand, endLabel);
-                //CurrentFunction.Body.Emit(Opcode.GetField, index.Operand, varEnumerator.Operand, Operand.ImmediateUnsigned(0));
             }
             else if (expression.Conditional != null)
             {
@@ -1784,6 +1743,18 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(ArrayLiteralExpression expression)
         {
+            Function? function;
+            Storage? functionStorage;
+
+            var elements = new List<(bool IsSpread, Storage? Storage)>();
+            foreach (var element in expression.Elements)
+            {
+                if (element is PrefixOperatorExpression { Operator: TokenType.Spread } poe)
+                    elements.Add((true, poe.Right.Accept(this)));
+                else
+                    elements.Add((false, element.Accept(this)));
+            }
+
             // RESOLVE TYPE
             var bType = CobType.U8; // TODO Implement correctly
             var tag = Intrinsics.Array;
@@ -1793,61 +1764,95 @@ namespace Compiler.CodeGeneration
             if (tag.PopulateConcretizedStructIfRequired())
                 concreteTypeAstReferences.Add(new ConcreteTypeAstReference(Intrinsics.Array, tag));
 
-            // ALLOCATE
             var storage = CurrentFunction.AllocateRegisterStorage(cobType);
-            
-            //CurrentFunction.Body.Emit(Opcode.New, storage.Operand, cobType.ToOperand(artifact));
-            
-            // CALL CTOR
-            var function = tag.FindFactory("New");
-            var functionStorage = tag.EmitGetForSymbol(function);
 
-            CurrentFunction.Body.Emit(
-                Opcode.Call,
-                functionStorage.Operand,
-                storage.Operand,
-                new []{ Operand.ImmediateUnsigned(0) } // TODO Prealloc element count
-            );
-
-            // ADD ELEMENTS
-            function = tag.FindFunction("Add");
-            functionStorage = tag.EmitGetForSymbol(function);
-
-            // TODO Validate types match
-            foreach (var element in expression.Elements)
+            // ALLOCATE & ADD ELEMENTS
+            if (elements.Count == 2 && elements[0].IsSpread && elements[0].Storage?.Type == CobType.Int)
             {
-                if (element is PrefixOperatorExpression { Operator: TokenType.Spread } poe)
+                // Fill Elements
+                // TODO Validate types match
+
+                function = tag.FindFactory("New");
+                functionStorage = tag.EmitGetForSymbol(function);
+
+                CurrentFunction.Body.Emit(
+                    Opcode.Call,
+                    functionStorage.Operand,
+                    storage.Operand,
+                    new []{ elements[0].Storage.Operand }
+                );
+                functionStorage.Free();
+
+                var countStorage = CurrentFunction.AllocateRegisterStorage(CobType.Int);
+                var resultStorage = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
+                var loopLabel = CurrentFunction.Body.AllocateLabel();
+                var endLabel = CurrentFunction.Body.AllocateLabel();
+
+                CurrentFunction.Body.Emit(Opcode.Move, countStorage.Operand, elements[0].Storage!.Operand);
+                loopLabel.Mark();
+                CurrentFunction.Body.Emit(Opcode.CmpLT, resultStorage.Operand, countStorage.Operand, Operand.ImmediateUnsigned(0));
+                CurrentFunction.Body.Emit(Opcode.JmpT, resultStorage.Operand, endLabel);
+
+                function = tag.FindFunction("Add");
+                functionStorage = tag.EmitGetForSymbol(function);
+
+                CurrentFunction.Body.Emit(
+                    Opcode.Call,
+                    functionStorage.Operand,
+                    Operand.None,
+                    new[] { storage.Operand, elements[1].Storage.Operand }
+                );
+
+                CurrentFunction.Body.Emit(Opcode.Sub, countStorage.Operand, countStorage.Operand, Operand.ImmediateUnsigned(1));
+                CurrentFunction.Body.Emit(Opcode.Jmp, loopLabel);
+                endLabel.Mark();
+
+                functionStorage.Free();
+                resultStorage.Free();
+                countStorage.Free();
+                elements[0].Storage.Free();
+                elements[1].Storage.Free();
+            }
+            else
+            {
+                // Explicit Elements
+                // TODO Validate types match
+
+                function = tag.FindFactory("New");
+                functionStorage = tag.EmitGetForSymbol(function);
+
+                CurrentFunction.Body.Emit(
+                    Opcode.Call,
+                    functionStorage.Operand,
+                    storage.Operand,
+                    new []{ Operand.ImmediateUnsigned(elements.Count) }
+                );
+                functionStorage.Free();
+
+                foreach (var element in elements)
                 {
-                    var srcArrayStorage = poe.Right.Accept(this);
-
-                    var addRangeFunction = tag.FindFunction("AddRange");
-                    var addRangeFunctionStorage = tag.EmitGetForSymbol(addRangeFunction);
-
-                    CurrentFunction.Body.Emit(
-                        Opcode.Call,
-                        addRangeFunctionStorage.Operand,
-                        Operand.None,
-                        new []{ storage.Operand, srcArrayStorage.Operand }
-                    );
-
-                    srcArrayStorage.Free();
-                }
-                else
-                {
-                    var elemStorage = element.Accept(this);
+                    if (element.IsSpread)
+                    {
+                        function = tag.FindFunction("AddRange");
+                        functionStorage = tag.EmitGetForSymbol(function);
+                    }
+                    else
+                    {
+                        function = tag.FindFunction("Add");
+                        functionStorage = tag.EmitGetForSymbol(function);
+                    }
 
                     CurrentFunction.Body.Emit(
                         Opcode.Call,
                         functionStorage.Operand,
                         Operand.None,
-                        new []{ storage.Operand, elemStorage.Operand }
+                        new[] { storage.Operand, element.Storage.Operand }
                     );
 
-                    elemStorage.Free();
+                    functionStorage.Free();
+                    element.Storage.Free();
                 }
             }
-
-            functionStorage.Free();
 
             return storage;
         }

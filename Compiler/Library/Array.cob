@@ -10,14 +10,14 @@ struct Array `T {
         set { data[key] = value; }
     }
 
-    factory New(length: uint) {
-        var capacity = length;
-        if (capacity == 0)
-            capacity = 16;
+    factory New(capacity: uint) {
+        var _capacity = capacity; // TODO capacity
+        if (_capacity == 0)
+            _capacity = 16;
         
         return This {
-            Length = length,
-            data = Alloc(capacity) // * T.Size)
+            Length = 0,
+            data = Alloc(_capacity) // TODO * T.Size)
         };
     }
 
