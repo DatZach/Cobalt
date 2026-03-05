@@ -80,6 +80,7 @@ namespace Compiler.Lexer
                 ["^="] = TokenType.BitXorAssign,
 
                 ["::"] = TokenType.Is,
+                ["!:"] = TokenType.IsNot,
 
                 ["?."] = TokenType.NilDot,
                 ["??"] = TokenType.NilCoalesce,

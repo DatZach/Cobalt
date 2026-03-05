@@ -7,6 +7,8 @@ namespace Compiler.Ast.Expressions
 {
     internal sealed class PatternMatchExpression : Expression
     {
+        public TokenType Operation => Token.Type;
+
         public Expression Left { get; }
 
         public Pattern? RightSingle { get; }

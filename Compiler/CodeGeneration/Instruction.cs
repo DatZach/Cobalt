@@ -103,6 +103,7 @@
         CmpGT,
         CmpGTE,
         CmpTyEQ,
+        CmpTyNEQ,
 
         JmpT,
         JmpF,

@@ -137,7 +137,7 @@ namespace Compiler.Lexer
         [Description("'*='")] MultiplyAssign,
         [Description("'/='")] DivideAssign,
         [Description("'/^='")] DivideCeilAssign,
-        [Description("'/_='")] DivideFloorAssign,
+        [Description("'/~='")] DivideFloorAssign,
         [Description("'%='")] RemainderAssign,
         [Description("'%%='")] ModuloAssign,
         [Description("'<<='")] BitLeftShiftAssign,
@@ -149,6 +149,7 @@ namespace Compiler.Lexer
         [Description("'^='")] BitXorAssign,
 
         [Description("::")] Is,
+        [Description("!:")] IsNot,
 
         [Description("'?.'")] NilDot,
         [Description("'??'")] NilCoalesce,

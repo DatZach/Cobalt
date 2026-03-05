@@ -1181,7 +1181,12 @@ namespace Compiler.CodeGeneration
 
                 var c = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
 
-                CurrentFunction.Body.Emit(Opcode.CmpTyEQ, c.Operand, lhs.Operand, type.ToOperand(artifact));
+                CurrentFunction.Body.Emit(
+                    expression.Operation == TokenType.Is ? Opcode.CmpTyEQ : Opcode.CmpTyNEQ,
+                    c.Operand,
+                    lhs.Operand,
+                    type.ToOperand(artifact)
+                );
 
                 lhs.Free();
 
@@ -1189,6 +1194,12 @@ namespace Compiler.CodeGeneration
             }
             else if (expression.RightMulti != null)
             {
+                if (expression.Operation != TokenType.Is)
+                {
+                    messages.Add(Message.CannotMatchNotPattern, expression);
+                    return null;
+                }
+
                 // TODO Validate all types handled
 
                 var seenTypes = new HashSet<CobType>();

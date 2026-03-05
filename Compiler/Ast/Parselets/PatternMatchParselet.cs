@@ -13,7 +13,8 @@ namespace Compiler.Ast.Parselets
             List<PatternMatchExpression.Pattern>? rightMulti;
 
             // x :: int
-            // x :: !int
+            // x !: int
+            // x :: int y
             // x :: { int y => y, _ => 0 }
             // x :: { 1 => 1234, _ => 4321 }
             // x :: { error => 0, _ => 1 }

@@ -72,6 +72,7 @@ namespace Compiler.Ast
             Register(TokenType.Generic, new BinaryOperatorParselet(PrecedenceTable.GenericType));
 
             Register(TokenType.Is, new PatternMatchParselet());
+            Register(TokenType.IsNot, new PatternMatchParselet());
             Register(TokenType.In, new BinaryOperatorParselet(PrecedenceTable.In));
             
             Register(TokenType.Equals, new BinaryOperatorParselet(PrecedenceTable.Equals));

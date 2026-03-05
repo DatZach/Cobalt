@@ -293,6 +293,8 @@ namespace Compiler.Ast
 
         public static Def CannotEnumerateType { get; } = new(MessageType.Error, "Cannot enumerate type '{0}'");
 
+        public static Def CannotMatchNotPattern { get; } = new(MessageType.Error, "Cannot pattern match 'is not' against multiple patterns");
+
         public sealed record Def(
             MessageType Type,
             string Content,
