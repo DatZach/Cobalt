@@ -36,12 +36,6 @@ struct Array `T {
             Add(value[i]);
     }
 
-    func Slice(range: Range) Lens`T! {
-        var length = (range.End < 0) :: { true => Length - ~range.End, false => range.Length };
-        if (range.Start < 0 || length < 0 || length > Length) return error.OutOfBounds;
-        return Lens`T ( data.Address + range.Start, length );
-    }
-
     func Reverse() {
         if (Length < 2)
             return;
@@ -57,4 +51,29 @@ struct Array `T {
             // (this[i], this[j]) = (this[j], this[i]);
         }
     }
+
+    func Slice(range: Range) Lens`T! {
+        var length = (range.End < 0) :: { true => Length - ~range.End, false => range.Length };
+        if (range.Start < 0 || length < 0 || length > Length) return error.OutOfBounds;
+        return Lens`T ( data.Address + range.Start, length );
+    }
+
+    func GetEnumerator() ArrayEnumerator`T => ArrayEnumerator`T ( this[0], this, 0 );
 }
+
+tuple ArrayEnumerator `T (
+    Current: T;
+    parent: Array`T;
+    current: u64;
+
+    func MoveNext() bool {
+        if (current < parent.Length) {
+            Current = parent[current];
+            current += 1;
+            
+            return true;
+        }
+
+        return false;
+    }
+)

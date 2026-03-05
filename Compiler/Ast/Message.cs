@@ -291,6 +291,8 @@ namespace Compiler.Ast
 
         public static Def MissingPattern { get; } = new(MessageType.Error, "Missing pattern for '{0}'");
 
+        public static Def CannotEnumerateType { get; } = new(MessageType.Error, "Cannot enumerate type '{0}'");
+
         public sealed record Def(
             MessageType Type,
             string Content,

@@ -8,6 +8,15 @@ type LPDWORD    u64;
 type LPVOID     uint;
 type SIZE_T     uint;
 
+tuple Range (
+    Start: u64;
+    End: u64;
+
+    Length: u64 => End - Start;
+
+    func GetEnumerator() RangeEnumerator => RangeEnumerator ( Start - 1, End );
+)
+
 tuple RangeEnumerator (
     Current: u64;
     End: u64;
@@ -20,13 +29,4 @@ tuple RangeEnumerator (
 
         return false;
     }
-)
-
-tuple Range (
-    Start: u64;
-    End: u64;
-
-    Length: u64 => End - Start;
-
-    func GetEnumerator() RangeEnumerator => RangeEnumerator ( Start - 1, End );
 )

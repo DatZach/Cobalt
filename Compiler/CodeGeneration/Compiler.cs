@@ -5,6 +5,7 @@ using Compiler.Ast.Visitors;
 using Compiler.CodeGeneration.Artifacts;
 using Compiler.Interpreter;
 using Compiler.Lexer;
+using System;
 using System.Diagnostics;
 using System.Text;
 
@@ -473,38 +474,164 @@ namespace Compiler.CodeGeneration
             if (expression.Conditional is BinaryOperatorExpression boe
             &&  boe.Operator == TokenType.In)
             {
-                //var varIndex = CurrentFunction.AllocateStorage(CobType.Int);
                 var index = boe.Left.Accept(this);
-                var range = boe.Right.Accept(this);
+                var enumerableStorage = boe.Right.Accept(this);
 
-                // TODO Should be abstracted behind an Intrinsics class
-                // TODO Should use the Trait `Enumerable` instead of assuming the enumerator type
-                var tdeRangeEnumerator = RootModule.FindTupleType("RangeEnumerator");
-                var typeRangeTuple = new CobType(eCobType.Struct, tag: tdeRangeEnumerator);
-                var varEnumerator = CurrentFunction.AllocateRegisterStorage(typeRangeTuple);
+                Storage? getEnumeratorFn;
+                if (enumerableStorage != null && enumerableStorage.Type.Tag is IScopeContext enumerableScopeContext)
+                {
+                    var getEnumeratorFnSymbol = enumerableScopeContext.FindSymbol("GetEnumerator");
+                    getEnumeratorFn = getEnumeratorFnSymbol != null
+                                    ? enumerableScopeContext.EmitGetForSymbol(getEnumeratorFnSymbol)
+                                    : null;
+                    if (getEnumeratorFn?.Type.TagFunctionCandidates != null)
+                    {
+                        getEnumeratorFn = enumerableScopeContext.EmitGetForSymbol(
+                            getEnumeratorFn.Type.TagFunctionCandidates.ResolveSingle(null)
+                        );
+                    }
+                }
+                else
+                    getEnumeratorFn = null;
 
-                // TODO tdeRangeEnumerator.FindFunctionIndex("GetEnumerator");
+                if (getEnumeratorFn == null || getEnumeratorFn.Type.TagFunction == null)
+                {
+                    messages.Add(Message.CannotEnumerateType, boe.Right, enumerableStorage?.Type.ToString() ?? "(null)");
+                    return null;
+                }
+
+                var enumeratorType = getEnumeratorFn.Type.TagFunction.ReturnType;
+                if (enumeratorType.Tag is StructType structType)
+                {
+                    var superType = structType.HACK_PendingSuperType;
+                    if (structType.PopulateConcretizedStructIfRequired())
+                        concreteTypeAstReferences.Add(new ConcreteTypeAstReference(superType, structType));
+                }
+                else if (enumeratorType.Tag is TupleType tupleType)
+                {
+                    var superType = tupleType.HACK_PendingSuperType;
+                    if (tupleType.PopulateConcretizedTupleIfRequired())
+                        concreteTypeAstReferences.Add(new ConcreteTypeAstReference(superType, tupleType));
+                }
+
+                var enumeratorStorage = CurrentFunction.AllocateRegisterStorage(enumeratorType);
+
+                // $tmp = GetEnumerator()
                 CurrentFunction.Body.Emit(
                     Opcode.Call,
-                    Operand.Function(Functions.FindIndex(x => x.Name == "GetEnumerator")),
-                    varEnumerator.Operand,
-                    new[] { range.Operand }
+                    getEnumeratorFn.Operand,
+                    enumeratorStorage.Operand,
+                    new[] { enumerableStorage!.Operand }
                 );
-                range.Free();
+                getEnumeratorFn.Free();
+                enumerableStorage.Free();
 
                 startLabel.Mark();
 
-                // TODO tdeRangeEnumerator.FindFunctionIndex("MoveNext");
-                var moveNextResultStorage = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
+                // if (!$tmp.MoveNext()) break;
+
+                Storage? moveNextFn;
+                if (enumeratorStorage.Type.Tag is IScopeContext enumeratorScopeContext)
+                {
+                    var moveNextFnSymbol = enumeratorScopeContext.FindSymbol("MoveNext");
+                    moveNextFn = moveNextFnSymbol != null
+                               ? enumeratorScopeContext.EmitGetForSymbol(moveNextFnSymbol)
+                               : null;
+                    if (moveNextFn?.Type.TagFunctionCandidates != null)
+                    {
+                        moveNextFn = enumeratorScopeContext.EmitGetForSymbol(
+                            moveNextFn.Type.TagFunctionCandidates.ResolveSingle(null)
+                        );
+                    }
+                }
+                else
+                {
+                    moveNextFn = null;
+                }
+
+                if (moveNextFn == null || moveNextFn.Type.TagFunction == null)
+                {
+                    messages.Add(Message.CannotEnumerateType, boe.Right, enumerableStorage?.Type.ToString() ?? "(null)");
+                    return null;
+                }
+
+                var moveNextResultStorage = CurrentFunction.AllocateRegisterStorage(moveNextFn.Type.TagFunction.ReturnType);
                 CurrentFunction.Body.Emit(
                     Opcode.Call,
-                    Operand.Function(Functions.FindIndex(x => x.Name == "MoveNext")),
+                    moveNextFn.Operand,
                     moveNextResultStorage.Operand,
-                    new[] { varEnumerator.Operand }
+                    new[] { enumeratorStorage.Operand }
                 );
 
                 CurrentFunction.Body.Emit(Opcode.JmpF, moveNextResultStorage.Operand, endLabel);
-                CurrentFunction.Body.Emit(Opcode.GetField, index.Operand, varEnumerator.Operand, Operand.ImmediateUnsigned(0));
+                moveNextResultStorage.Free();
+
+                // index = $tmp.Current;
+
+                //Storage? currentField;
+                //if (enumeratorStorage.Type.Tag is IScopeContext enumeratorScopeContext2)
+                //{
+                //    var currentFieldSymbol = enumeratorScopeContext2.FindSymbol("Current");
+                //    currentField = currentFieldSymbol != null
+                //        ? enumeratorScopeContext2.EmitGetForSymbol(currentFieldSymbol)
+                //        : null;
+                //}
+                //else
+                //    currentField = null;
+
+                //if (currentField == null)
+                //{
+                //    messages.Add(Message.CannotEnumerateType, boe.Right, enumerableStorage?.Type.ToString() ?? "(null)");
+                //    return null;
+                //}
+
+                //CurrentFunction.Body.Emit(Opcode.Move, index.Operand, currentField.Operand);
+                //currentField.Free();
+
+                CurrentFunction.Body.Emit(Opcode.GetField, index.Operand, enumeratorStorage.Operand, Operand.ImmediateUnsigned(0));
+
+                index.Free();
+
+                //CurrentFunction.Body.Emit(Opcode.GetField, index.Operand, enumeratorStorage.Operand, Operand.ImmediateUnsigned(0));
+
+                /**************************/
+
+                //var index = boe.Left.Accept(this);
+                //var range = boe.Right.Accept(this);
+
+                //// TODO Should be abstracted behind an Intrinsics class
+                //// TODO Should use the Trait `Enumerable` instead of assuming the enumerator type
+                //var tdeRangeEnumerator = (TupleType)range.Type.Tag; // RootModule.FindTupleType("RangeEnumerator");
+                //var typeRangeTuple = new CobType(eCobType.Struct, tag: tdeRangeEnumerator);
+                //var varEnumerator = CurrentFunction.AllocateRegisterStorage(typeRangeTuple);
+
+                //var getEnumeratorStorage = tdeRangeEnumerator.EmitGetForSymbol(tdeRangeEnumerator.FindFunction("GetEnumerator"));
+                //// TODO tdeRangeEnumerator.FindFunctionIndex("GetEnumerator");
+                //CurrentFunction.Body.Emit(
+                //    Opcode.Call,
+                //    getEnumeratorStorage.Operand,
+                //    varEnumerator.Operand,
+                //    new[] { range.Operand }
+                //);
+                //getEnumeratorStorage.Free();
+                //range.Free();
+
+                //startLabel.Mark();
+
+                //// TODO tdeRangeEnumerator.FindFunctionIndex("MoveNext");
+                //tdeRangeEnumerator = (TupleType)getEnumeratorStorage.Type.TagFunction.ReturnType.Tag;
+                //var moveNextStorage = tdeRangeEnumerator.EmitGetForSymbol(tdeRangeEnumerator.FindFunction("MoveNext"));
+                //var moveNextResultStorage = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
+                //CurrentFunction.Body.Emit(
+                //    Opcode.Call,
+                //    moveNextStorage.Operand,
+                //    moveNextResultStorage.Operand,
+                //    new[] { varEnumerator.Operand }
+                //);
+                //moveNextStorage.Free();
+
+                //CurrentFunction.Body.Emit(Opcode.JmpF, moveNextResultStorage.Operand, endLabel);
+                //CurrentFunction.Body.Emit(Opcode.GetField, index.Operand, varEnumerator.Operand, Operand.ImmediateUnsigned(0));
             }
             else if (expression.Conditional != null)
             {
@@ -1843,21 +1970,29 @@ namespace Compiler.CodeGeneration
 
                 
                 // PASS 2 - Generics
-                foreach (var concreteType in compiler.concreteTypeAstReferences)
+                var hack = compiler.concreteTypeAstReferences.ToList();
+                var seen = new List<ConcreteTypeAstReference>();
+                while (hack.Count > 0)
                 {
-                    var genericType = compiler.genericTypeAstReferences.First(x => x.Generic == concreteType.Generic);
-                    Expression concreteExpression = genericType.Expression switch
+                    foreach (var concreteType in hack)
                     {
-                        TupleDeclStatement x => new TupleDeclStatement(x, concreteType.Concrete.Name),
-                        StructDeclStatement x => new StructDeclStatement(x, concreteType.Concrete.Name),
-                        _ => throw new ArgumentOutOfRangeException($"Unknown generic type expression '{genericType.Expression.Token}'")
-                    };
+                        var genericType = compiler.genericTypeAstReferences.First(x => x.Generic == concreteType.Generic);
+                        Expression concreteExpression = genericType.Expression switch
+                        {
+                            TupleDeclStatement x => new TupleDeclStatement(x, concreteType.Concrete.Name),
+                            StructDeclStatement x => new StructDeclStatement(x, concreteType.Concrete.Name),
+                            _ => throw new ArgumentOutOfRangeException($"Unknown generic type expression '{genericType.Expression.Token}'")
+                        };
 
-                    compiler.contextStack.Clear();
-                    foreach (var y in genericType.ContextStack)
-                        compiler.contextStack.Push(y);
-                    
-                    concreteExpression.Accept(compiler);
+                        compiler.contextStack.Clear();
+                        foreach (var y in genericType.ContextStack)
+                            compiler.contextStack.Push(y);
+                        
+                        concreteExpression.Accept(compiler);
+                    }
+
+                    seen.AddRange(hack);
+                    hack = seen.Except(hack).ToList();
                 }
                 
                 return artifact;

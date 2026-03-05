@@ -373,10 +373,13 @@ namespace Compiler.CodeGeneration.Artifacts
             this.candidates = candidates;
         }
 
-        public Function? ResolveSingle(IReadOnlyList<CobType> arguments)
+        public Function? ResolveSingle(IReadOnlyList<CobType>? arguments)
         {
             return candidates.SingleOrDefault(x =>
             {
+                if (arguments == null)
+                    return true;
+
                 var parameterCount = x.Parameters.Count;
                 var parametersCountRequired = x.Parameters.Count(y => y.DefaultValue == null);
                 var hasSpreadParameter = parameterCount > 0 && x.Parameters[^1].IsSpread;
