@@ -5,7 +5,6 @@ using Compiler.Ast.Visitors;
 using Compiler.CodeGeneration.Artifacts;
 using Compiler.Interpreter;
 using Compiler.Lexer;
-using System;
 using System.Diagnostics;
 using System.Text;
 
@@ -42,6 +41,8 @@ namespace Compiler.CodeGeneration
         public Module CurrentModule => contextStack.OfType<Module>().First();
 
         public Function CurrentFunction => contextStack.OfType<Function>().First();
+
+        private Expression? implicitContext;
 
         private readonly List<GenericTypeAstReference> genericTypeAstReferences;
         private readonly List<ConcreteTypeAstReference> concreteTypeAstReferences;
@@ -701,6 +702,9 @@ namespace Compiler.CodeGeneration
             for (var i = 0; i < expression.Expressions.Count; i++)
             {
                 var expr = expression.Expressions[i];
+
+                implicitContext = null;
+
                 var retStorage = expr.Accept(this);
                 if (expr is FatArrowStatement)
                     return retStorage;
@@ -946,24 +950,29 @@ namespace Compiler.CodeGeneration
                 AssignmentRHS = prevAsnSrc;
                 BinOpLHS = lhs;
 
-                if (lhs != null)
+                if (lhs?.Type.Tag is not IScopeContext context)
                 {
-                    if (lhs.Type.Tag is StructType structType)
-                    {
-                        if (structType.PopulateConcretizedStructIfRequired())
-                            concreteTypeAstReferences.Add(new ConcreteTypeAstReference(structType.HACK_PendingSuperType, structType));
-                    }
-                    else if (lhs.Type.Tag is TupleType tupleType)
-                    {
-                        if (tupleType.PopulateConcretizedTupleIfRequired())
-                            concreteTypeAstReferences.Add(new ConcreteTypeAstReference(tupleType.HACK_PendingSuperType, tupleType));
-                    }
-                    
-                    contextStack.Push((IScopeContext)lhs.Type.Tag);
+                    messages.Add(Message.CannotDereferenceContext, expression, lhs?.Type.ToString() ?? "(null)");
+                    return null;
                 }
 
+                if (context is StructType structType)
+                {
+                    if (structType.PopulateConcretizedStructIfRequired())
+                        concreteTypeAstReferences.Add(new ConcreteTypeAstReference(structType.HACK_PendingSuperType, structType));
+                }
+                else if (context is TupleType tupleType)
+                {
+                    if (tupleType.PopulateConcretizedTupleIfRequired())
+                        concreteTypeAstReferences.Add(new ConcreteTypeAstReference(tupleType.HACK_PendingSuperType, tupleType));
+                }
+
+                implicitContext = expression.Left;
+                contextStack.Push(context);
+
                 var rhs = expression.Right.Accept(this);
-                if (lhs != null) contextStack.Pop();
+                
+                contextStack.Pop();
                 lhs?.Free();
 
                 BinOpLHS = null;
@@ -1109,21 +1118,51 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(PrefixOperatorExpression expression)
         {
-            var right = expression.Right.Accept(this);
-            var c = CurrentFunction.AllocateRegisterStorage(right.Type);
-
             // TODO Support rhs logical !
             if (expression.Operator == TokenType.Not && conditionalStack != 0) // Logical !
             {
-                CurrentFunction.Body.Emit(Opcode.Not, c.Operand, right.Operand);
+                var b = expression.Right.Accept(this);
+                var c = CurrentFunction.AllocateRegisterStorage(b.Type);
+
+                CurrentFunction.Body.Emit(Opcode.Not, c.Operand, b.Operand);
+
+                b.Free();
+
+                return c;
             }
             else if (expression.Operator == TokenType.Spread)
             {
                 // This is an error, cannot spread outside of array literals
                 // TODO message.Add()
             }
+            else if (expression.Operator == TokenType.Dot)
+            {
+                if (implicitContext == null)
+                {
+                    messages.Add(Message.CannotDereferenceContext, expression, "(null)");
+                    return null;
+                }
+
+                var prevAsnSrc = AssignmentRHS;
+                AssignmentRHS = null;
+                var lhs = implicitContext.Accept(this);
+                AssignmentRHS = prevAsnSrc;
+                BinOpLHS = lhs;
+
+                contextStack.Push((IScopeContext)lhs!.Type.Tag!);
+                var b = expression.Right.Accept(this);
+                contextStack.Pop();
+
+                lhs.Free();
+                BinOpLHS = null;
+
+                return b;
+            }
             else
             {
+                var b = expression.Right.Accept(this);
+                var c = CurrentFunction.AllocateRegisterStorage(b.Type);
+
                 var opcode = expression.Operator switch
                 {
                     TokenType.BitNot => Opcode.BitNot, // TODO Return to using ! instead of ~?
@@ -1131,12 +1170,14 @@ namespace Compiler.CodeGeneration
                     _ => throw new ArgumentOutOfRangeException(nameof(expression))
                 };
 
-                CurrentFunction.Body.Emit(opcode, c.Operand, right.Operand);
+                CurrentFunction.Body.Emit(opcode, c.Operand, b.Operand);
+
+                b.Free();
+
+                return c;
             }
 
-            right.Free();
-
-            return c;
+            return null;
         }
 
         public Storage? Visit(PostfixOperatorExpression expression)

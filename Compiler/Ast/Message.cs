@@ -295,6 +295,8 @@ namespace Compiler.Ast
 
         public static Def CannotMatchNotPattern { get; } = new(MessageType.Error, "Cannot pattern match 'is not' against multiple patterns");
 
+        public static Def CannotDereferenceContext { get; } = new(MessageType.Error, "Cannot '.' dereference '{0}' context");
+
         public sealed record Def(
             MessageType Type,
             string Content,

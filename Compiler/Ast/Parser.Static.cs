@@ -68,6 +68,7 @@ namespace Compiler.Ast
             Register(TokenType.NilErrorCoalesce, new BinaryOperatorParselet(PrecedenceTable.Coalesce));
             Register(TokenType.Subtract, new PrefixOperatorParselet(PrecedenceTable.Unary));
             Register(TokenType.Spread, new PrefixOperatorParselet(PrecedenceTable.Unary));
+            Register(TokenType.Dot, new PrefixOperatorParselet(PrecedenceTable.Unary));
 
             Register(TokenType.Generic, new BinaryOperatorParselet(PrecedenceTable.GenericType));
 
