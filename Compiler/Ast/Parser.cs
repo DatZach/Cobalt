@@ -87,8 +87,12 @@ namespace Compiler.Ast
         {
             var expressions = new List<Expression>();
 
-            while(!Match(TokenType.EndOfStream))
-                expressions.Add(ParseBlock());
+            Expression? expr = null;
+            while (!Match(TokenType.EndOfStream) && expr is not EmptyExpression)
+            {
+                expr = ParseBlock();
+                expressions.Add(expr);
+            }
 
             return new ScriptExpression(Take(), expressions);
         }
@@ -104,6 +108,13 @@ namespace Compiler.Ast
                     type = Take(TokenType.Error);
                 else if (Match(TokenType.Nil))
                     type = Take(TokenType.Nil);
+                else if (Match(TokenType.Function))
+                {
+                    typeName += Take(TokenType.Function).Value;
+                    typeName += Take(TokenType.LeftParen).Value;
+                    typeName += Take(TokenType.RightParen).Value;
+                    break;
+                }
                 else
                     type = Take(TokenType.Identifier);
 

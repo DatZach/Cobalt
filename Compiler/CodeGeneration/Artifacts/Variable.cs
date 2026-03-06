@@ -100,6 +100,8 @@ namespace Compiler.CodeGeneration.Artifacts
             }
             else if (Value is long srcLongValue)
                 value = srcLongValue;
+            else if (Value is Function srcFunction)
+                value = srcFunction;
             else if (Value == null)
                 value = null;
             else
@@ -287,6 +289,10 @@ namespace Compiler.CodeGeneration.Artifacts
                 type = new CobType(eCobType.Float, int.Parse(typeName[1..]));
             else if (Aliases.TryGetValue(typeName, out var aliasType))
                 type = aliasType;
+            else if (typeName.StartsWith("func"))
+            {
+                type = new CobType(eCobType.Function, tag: new FunctionSignature());
+            }
             else if (context is StructType structType && (aliasType = structType.FindGenericType(typeName)) != null)
                 type = aliasType;
             else if (context is TupleType tupleType && (aliasType = tupleType.FindGenericType(typeName)) != null)
@@ -662,6 +668,10 @@ namespace Compiler.CodeGeneration.Artifacts
             if (srcType == eCobType.Error && dstType.HasErrorFlag)
                 return true;
 
+            // TODO HACK Not implemented correctly; Check signature
+            if (srcType == eCobType.Function && dstType == eCobType.Function && dstType.Tag is FunctionSignature)
+                return true;
+
             // TODO Distant aliases
             // NOTE Immediate aliases should be functional as their type is directly encoded
 
@@ -759,5 +769,10 @@ namespace Compiler.CodeGeneration.Artifacts
         {
             return false;
         }
+    }
+
+    public sealed class FunctionSignature
+    {
+
     }
 }

@@ -1468,12 +1468,28 @@ namespace Compiler.CodeGeneration
 
             // RESOLVE FUNCTION
             Function? function;
+            Storage? functionStorage;
             if (candidatesStorage?.Type.Tag is FunctionCandidates tagCandidates)
+            {
                 function = tagCandidates.ResolveSingle(arguments.Select(x => x.Type).ToList());
+                functionStorage = function?.Parent.EmitGetForSymbol(function)!;
+            }
             else if (candidatesStorage?.Type.Tag is Function tagFunction)
+            {
                 function = tagFunction;
+                functionStorage = function?.Parent.EmitGetForSymbol(function)!;
+            }
+            else if (candidatesStorage?.Type.Tag is FunctionSignature tagSignature)
+            {
+                function = new Function("$anonymous", CurrentModule, this, CallingConvention.Default,
+                    new Function.Parameter[0], CobType.None);
+                functionStorage = candidatesStorage;
+            }
             else
+            {
                 function = null;
+                functionStorage = null;
+            }
 
             if (function == null)
             {
@@ -1567,6 +1583,10 @@ namespace Compiler.CodeGeneration
                 if (argument.Type != parameter.Type)
                     argument = EmitCast(argument, parameter.Type);
 
+                // TODO HACK Resolve function candidates to matching signature
+                if (argument.Operand == Operand.None && argument.Type.Tag is FunctionCandidates argumentCandidates)
+                    argument = function.Parent.EmitGetForSymbol(argumentCandidates.ResolveSingle(null));
+
                 if (i < arguments.Count)
                     arguments[i] = argument;
                 else
@@ -1574,8 +1594,6 @@ namespace Compiler.CodeGeneration
             }
 
             // EMIT CALL
-            var functionStorage = function.Parent.EmitGetForSymbol(function)!;
-
             var retStorage = function.ReturnType != eCobType.None
                 ? CurrentFunction.AllocateRegisterStorage(function.ReturnType)
                 : null;
@@ -1980,6 +1998,10 @@ namespace Compiler.CodeGeneration
                 //return source with { Type = dstType };
             }
             else if (srcType == eCobType.Struct && dstType == eCobType.Trait)
+            {
+                return source; // TODO ??
+            }
+            else if (srcType == eCobType.Function && dstType == eCobType.Function)
             {
                 return source; // TODO ??
             }
