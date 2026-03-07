@@ -1,6 +1,7 @@
 ﻿using System.Buffers;
 using System.Diagnostics;
 using System.Text;
+using Compiler.Ast.Expressions;
 
 namespace Compiler.CodeGeneration.Artifacts
 {
@@ -291,7 +292,43 @@ namespace Compiler.CodeGeneration.Artifacts
                 type = aliasType;
             else if (typeName.StartsWith("func"))
             {
-                type = new CobType(eCobType.Function, tag: new FunctionSignature());
+                var parameters = new List<Function.Parameter>();
+
+                typeName = typeName[4..]; // func
+                typeName = typeName[1..]; // (
+                int i = 0, j = 0;
+                string paramName = null;
+                string paramTypeName = null;
+                for (; i < typeName.Length; ++i)
+                {
+                    var ch = typeName[i];
+                    if (ch == ':')
+                    {
+                        paramName = typeName.Substring(j, i - j);
+                        j = i + 1;
+                    }
+                    else if (ch == ',' || ch == ')')
+                    {
+                        if (paramName != null)
+                            paramTypeName = typeName.Substring(j, i - j);
+                        j = i + 1;
+
+                        if (paramName != null)
+                            parameters.Add(new Function.Parameter(paramName, FromString(paramTypeName, context), false, null));
+
+                        paramName = null;
+                        paramTypeName = null;
+
+                        if (ch == ')')
+                        {
+                            ++i;
+                            break;
+                        }
+                    }
+                }
+                typeName = typeName[i..]; // )
+                var returnType = typeName.Length > 0 ? FromString(typeName, context) : None;
+                type = new CobType(eCobType.Function, tag: new FunctionSignature { ReturnType = returnType, Parameters = parameters });
             }
             else if (context is StructType structType && (aliasType = structType.FindGenericType(typeName)) != null)
                 type = aliasType;
@@ -771,8 +808,10 @@ namespace Compiler.CodeGeneration.Artifacts
         }
     }
 
-    public sealed class FunctionSignature
+    internal sealed class FunctionSignature
     {
+        public CobType ReturnType { get; init; }
 
+        public IReadOnlyList<Function.Parameter> Parameters { get; init; }
     }
 }

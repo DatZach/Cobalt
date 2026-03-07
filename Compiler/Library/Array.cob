@@ -52,6 +52,32 @@ struct Array `T {
         }
     }
 
+    func Where(predicate: func(element: T) bool) T[] {
+        var result = [];
+
+        var i: int;
+        for (i in ..Length) {
+            const element = this[i];
+            if (predicate(element))
+                result.Add(element);
+        }
+
+        return result;
+    }
+
+    func Select(predicate: func(element: T) T) T[] {
+        var result = [];
+
+        var i: int;
+        for (i in ..Length) {
+            var element = this[i];
+            element = predicate(element);
+            result.Add(element);
+        }
+
+        return result;
+    }
+
     func Slice(range: Range) Lens`T! {
         var length = (range.End < 0) :: { true => Length - ~range.End, false => range.Length };
         if (range.Start < 0 || length < 0 || length > Length) return error.OutOfBounds;

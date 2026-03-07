@@ -1481,8 +1481,11 @@ namespace Compiler.CodeGeneration
             }
             else if (candidatesStorage?.Type.Tag is FunctionSignature tagSignature)
             {
-                function = new Function("$anonymous", CurrentModule, this, CallingConvention.Default,
-                    new Function.Parameter[0], CobType.None);
+                function = new Function(
+                    "$anonymous", CurrentModule, this, CallingConvention.Default,
+                    tagSignature.Parameters,
+                    tagSignature.ReturnType
+                );
                 functionStorage = candidatesStorage;
             }
             else

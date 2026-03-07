@@ -112,7 +112,14 @@ namespace Compiler.Ast
                 {
                     typeName += Take(TokenType.Function).Value;
                     typeName += Take(TokenType.LeftParen).Value;
+                    while (!Match(TokenType.RightParen))
+                    {
+                        typeName += Take(TokenType.Identifier).Value;
+                        typeName += Take(TokenType.Colon).Value;
+                        typeName += ParseTypeName();
+                    }
                     typeName += Take(TokenType.RightParen).Value;
+                    typeName += ParseTypeName();
                     break;
                 }
                 else
