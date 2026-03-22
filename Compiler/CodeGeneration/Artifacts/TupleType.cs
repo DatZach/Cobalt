@@ -1,5 +1,4 @@
-﻿using Compiler.Ast.Expressions;
-using Compiler.Ast.Expressions.Statements;
+﻿using Compiler.Ast.Expressions.Statements;
 using System.Diagnostics;
 
 namespace Compiler.CodeGeneration.Artifacts
@@ -22,8 +21,8 @@ namespace Compiler.CodeGeneration.Artifacts
 
         private readonly List<GenericDefinition> generics;
         private readonly List<TraitType> traits;
-        private readonly List<Field> fields;
         private readonly List<Function> functions;
+        private readonly List<Field> fields;
 
         private readonly Compiler compiler;
 
@@ -35,8 +34,8 @@ namespace Compiler.CodeGeneration.Artifacts
 
             generics = new List<GenericDefinition>();
             traits = new List<TraitType>();
-            fields = new List<Field>(4);
             functions = new List<Function>(4);
+            fields = new List<Field>(4);
         }
 
         public Variable ToVariable()

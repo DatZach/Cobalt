@@ -1,4 +1,5 @@
-﻿using Compiler.Ast;
+﻿using System.Collections;
+using Compiler.Ast;
 using Compiler.Ast.Expressions;
 using Compiler.Ast.Expressions.Statements;
 using Compiler.Ast.Visitors;
@@ -2091,20 +2092,6 @@ namespace Compiler.CodeGeneration
         private sealed record GenericTypeAstReference(IScopeContext Generic, Expression Expression, Stack<IScopeContext> ContextStack);
 
         private sealed record ConcreteTypeAstReference(IScopeContext Generic, IScopeContext Concrete);
-    }
-
-    internal sealed record Import
-    {
-        public string Library { get; init; }
-
-        public string? SymbolName { get; init; }
-
-        public Function? Function { get; init; }
-    }
-
-    internal sealed record Export
-    {
-        public Function Function { get; init; }
     }
 
     internal interface IScopeContext

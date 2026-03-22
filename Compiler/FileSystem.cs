@@ -6,6 +6,22 @@ namespace Compiler
     {
         private static readonly Dictionary<string, string> Cache = new (StringComparer.OrdinalIgnoreCase);
 
+        public static void WriteAllBytes(string path, byte[] bytes)
+        {
+            //if (Cache.ContainsKey(path))
+            //    Cache[path] = contents;
+
+            try
+            {
+                stopwatch.Start();
+                File.WriteAllBytes(path, bytes);
+            }
+            finally
+            {
+                stopwatch.Stop();
+            }
+        }
+
         public static void WriteAllText(string path, string contents)
         {
             if (Cache.ContainsKey(path))

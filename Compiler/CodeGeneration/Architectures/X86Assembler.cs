@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.Text;
 using Compiler.CodeGeneration.Artifacts;
 
-namespace Compiler.CodeGeneration.Platform
+namespace Compiler.CodeGeneration.Architectures
 {
     internal sealed class X86Assembler : ArtifactAssembler
     {

@@ -1,7 +1,6 @@
 ﻿using System.Buffers;
 using System.Diagnostics;
 using System.Text;
-using Compiler.Ast.Expressions;
 
 namespace Compiler.CodeGeneration.Artifacts
 {
@@ -462,6 +461,7 @@ namespace Compiler.CodeGeneration.Artifacts
                     case eCobType.Boolean:
                     case eCobType.Error:
                     case eCobType.Nil:
+                    case eCobType.Generic:
                         // None
                         break;
                     case eCobType.Union:
