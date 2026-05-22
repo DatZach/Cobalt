@@ -18,6 +18,7 @@ namespace Compiler.Ast.Visitors
         T Visit(StructDeclStatement expression);
         T Visit(FactoryDeclStatement expression);
         T Visit(FunctionDeclStatement expression);
+        T Visit(MixinDeclStatement expression);
         T Visit(VariableDeclStatement expression);
         
         T Visit(IfStatement expression);

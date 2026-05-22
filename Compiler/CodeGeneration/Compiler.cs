@@ -368,6 +368,13 @@ namespace Compiler.CodeGeneration
             );
         }
 
+        public Storage? Visit(MixinDeclStatement expression)
+        {
+            expression.Function?.Accept(this);
+            //expression.Field?.GetterExpression
+            return null;
+        }
+
         public Storage? Visit(VariableDeclStatement expression)
         {
             for (var i = 0; i < expression.Declarations.Count; ++i)

@@ -113,6 +113,7 @@ namespace Compiler.Ast
             Register(TokenType.Tuple, new TupleDeclParselet());
             Register(TokenType.Struct, new StructDeclParselet());
             Register(TokenType.Factory, new FactoryDeclParselet());
+            Register(TokenType.Mixin, new MixinParselet());
             Register(TokenType.Const, new VariableDeclParselet());
             Register(TokenType.Var, new VariableDeclParselet());
             Register(TokenType.Import, new ImportParselet());

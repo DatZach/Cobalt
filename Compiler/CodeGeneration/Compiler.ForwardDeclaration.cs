@@ -422,6 +422,24 @@ namespace Compiler.CodeGeneration
             return Unit.Value;
         }
 
+        public Unit Visit(MixinDeclStatement expression)
+        {
+            if (Phase != DeclPhase.Functions)
+                return Unit.Value;
+
+            var context = CurrentContext.FindSymbol(expression.TargetTypeName) as IScopeContext;
+            if (context != null)
+            {
+                contextStack.Push(context);
+                expression.Function?.Accept(this);
+                contextStack.Pop();
+            }
+            else
+                messages.Add(Message.UndeclaredIdentifier, expression, expression.TargetTypeName);
+
+            return Unit.Value;
+        }
+
         public Unit Visit(VariableDeclStatement expression)
         {
             // NOTE We do not dive function bodies in this visitor so any VarExpressions we visit will be
