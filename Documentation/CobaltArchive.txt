@@ -1,0 +1,133 @@
+COMMAND LINE UTILITY
+====================
+
+car pack <archive> <src>+ [--raw]
+	echo "Wow, neat!" > car pack stdout stdin --raw
+car unpack <archive> <dir> [--verify]
+car touch <archive>
+car browse <archive>
+car ls <archive> <ar-dir>
+car cat <archive> <ar-path> [--verify]
+car add <archive> <ar-dir> <src>+
+car rm <archive> <ar-path/dir>
+car stat <archive> <ar-path> [--verify]
+
+TODO These commands need to be unified with the final shell commands
+
+ARCHIVE FILE FORMAT
+===================
+
+HEADER {
+	4	Magic		CARV
+	4	Length
+	2	Version		0x0100
+	1	Flags
+	1	RESERVED
+	4	RESERVED
+	X	Root Directory <MapEntry> {
+		; Attributes = Directory
+		; Name is used as a name/description for the archive
+		; Timestamps used to track changes
+	}
+	
+	MapEntry {
+		1	Attributes
+		4	CreationTime
+		4	LastAccessTime
+		4	LastModificationTime
+		i	NameSize				IN BYTES
+		?	Name					UTF-8
+		
+		if Attributes & Directory {
+			i	Count
+			for Count {
+				<MapEntry>
+			}
+		}
+		else {
+			4	OriginalCRC32
+			i	OriginalSize			IN BYTES
+			i	BlobEntryOffset			To DATA
+		}
+	}
+}
+
+BLOB {
+	4	Magic		BLOB
+	4	Length
+	4	Count
+	for Count <BlobEntry> {
+		i	BlobSize
+		?	BLOB
+	}
+}
+
+Attributes (Bit flags)
+	Directory		0x01
+	Reserved0		0x02
+	Reserved1		0x04
+	Reserved2		0x08
+	Reserved3		0x10
+	Reserved4		0x20
+	Reserved5		0x40
+	Reserved6		0x80
+	
+
+COBPRESSION ALGORITHM
+=====================
+
+All values are expressed as bits and read/written via a bitstream.
+
+Entropy Encoded via Huffman Coding.
+Stream is tokenized via MtF Transform, RLEs, and Back References.
+A compressed stream is: <prefix><huffman table><padding><stream>
+
+Prefix
+	A single bit 1 is used to signify this is a raw Cobpression stream.
+	Since tooling supports de/compressing archives AND streams we use the magic 'CARV' to
+	signify an archive (MSB is 0), and then a 1 in the MSB to signify a raw stream.
+	Then a single 0 is written. This is reserved for future use.
+	
+	The full prefix bits are: 10
+	
+Symbol Indices (320)
+	0-255		Move-to-Front Transform Indices
+	256			Run Length Encoding
+	257-262		Back Reference (4, 7, 9, 12, 16, 24)
+	263-320		RESERVED
+
+Huffman Table
+	The Huffman Tree is encoded as a Canonical Huffman Tree. The presence of a code for an Symbol is
+	encoded in the presence bitmap. Followed by a delta encoding for the length of each Symbol's code.
+	The intial Offset for the Delta Encoding is provided prior to the delta encoding stream.
+	
+	Presence Bitmap; for each symbol:
+		1 <Bitmap, 16-bits>
+		0 <Value, 1bit> <Log2 Len, 2bits (16, 32, 64, 128)>
+
+		Lengths are truncatable beyond 320 symbols
+
+	<Offset, 5bits>
+	Symbol Length; for each symbol:
+		0								+0
+		1 X 0							+1, -1
+		1 X 1 XX 0						s3 -4..+3
+		1 X 1 XX 1 XX 0					s5 -16..+15
+		1 X 1 XX 1 XX 1 XXXX 0			s9 -256..+255
+
+Padding
+	Padded to align the <Stream> to a whole byte on the tail, not the head.
+	This means a EoS token does not need to be encoded, saving a little overhead.
+	
+	Padded with 1 then 0 to indicate padding is terminated.
+
+Stream
+	Huffman Codes encoding Symbols
+	
+	0-255		Perform MtF Transformation
+	256			RLE
+					4 LEN		1 << (int)(stream.Read(4) + (uint)Math.Log2(8))
+					? CODE		Huffman Coding of Symbol to Repeat for LEN
+	257-262		Back Reference
+					4,7,9,12,16,24 OFFSET	As UInt; stream.Position - OFFSET
+					4,7,9,12,16,24 LEN		As UInt; emit LEN symbols from OFFSET
