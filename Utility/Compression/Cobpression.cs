@@ -468,9 +468,9 @@ namespace Compression
 
                         lx = source[i];
 
-                        UpdateHash(source[i + 1], i + 1);
-                        UpdateHash(source[i + 2], i + 2);
-                        UpdateHash(source[i + 3], i + 3);
+                        if (i + 1 < source.Length) UpdateHash(source[i + 1], i + 1);
+                        if (i + 2 < source.Length) UpdateHash(source[i + 2], i + 2);
+                        if (i + 3 < source.Length) UpdateHash(source[i + 3], i + 3);
                         continue;
                     }
                 }

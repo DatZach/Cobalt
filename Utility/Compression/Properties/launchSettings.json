@@ -2,7 +2,7 @@
   "profiles": {
     "Compression": {
       "commandName": "Project",
-      "commandLineArgs": "unpack wow.car C:\\Temp\\CobpressionTest_Out"
+      "commandLineArgs": "cat wow.car /CobpressionTest/LoremIpsum.txt"
     }
   }
 }
