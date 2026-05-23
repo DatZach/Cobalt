@@ -1,6 +1,6 @@
-﻿using System.IO.Hashing;
+﻿using Compression.Utility;
+using System.IO.Hashing;
 using System.Text;
-using Compression.Utility;
 
 namespace Compression
 {
@@ -16,6 +16,8 @@ namespace Compression
 
         public FileStream Stream { get; private set; }
 
+        public FileAccess Access { get; private set; }
+
         public void Dispose()
         {
             Stream.Dispose();
@@ -26,20 +28,12 @@ namespace Compression
             await Stream.DisposeAsync();
         }
 
-        public static void Pack(string archivePath, IReadOnlyList<string>? sourcePathOrDirectories)
+        public void Commit()
         {
-            using var fileStream = File.OpenWrite(archivePath);
             using var headerStream = new MemoryStream();
             using var header = new BinaryWriter(headerStream);
             using var blobStream = new MemoryStream();
             using var blob = new BinaryWriter(blobStream);
-
-            int count = 0;
-
-            // Blob
-            blob.Write(BlobMagic);
-            blob.Write((uint)0);        // length
-            blob.Write((uint)0);        // count
 
             // Header
             header.Write(HeaderMagic);
@@ -49,16 +43,12 @@ namespace Compression
             header.Write((byte)0);      // RESERVED
             header.Write((uint)0);      // RESERVED
 
-            header.Write((byte)0x01);
-            header.Write((uint)DateTime.UtcNow.ToCobaltTime());
-            header.Write((uint)DateTime.UtcNow.ToCobaltTime());
-            header.Write((uint)DateTime.UtcNow.ToCobaltTime());
-            header.Write(""); // TODO Could use to name/describe archive
+            // Blob
+            blob.Write(BlobMagic);
+            blob.Write((uint)0);        // length
+            blob.Write((uint)0);        // count
 
-            header.Write7BitEncodedInt(sourcePathOrDirectories.Count);
-
-            foreach (var topSourcePathOrDirectory in sourcePathOrDirectories)
-                SerializeMapEntry(topSourcePathOrDirectory);
+            Root.Serialize(header, blob);
 
             // Flush, Finalize, Write to Disk
             header.Flush();
@@ -67,6 +57,7 @@ namespace Compression
             header.BaseStream.Position = 4;
             header.Write((uint)(header.BaseStream.Length - 8));
 
+            var count = CountAndDive(Root);
             blob.BaseStream.Position = 4;
             blob.Write((uint)(blob.BaseStream.Length - 8));
             blob.Write(count);
@@ -74,45 +65,40 @@ namespace Compression
             header.Flush();
             blob.Flush();
 
-            fileStream.Write(headerStream.ToArray());
-            fileStream.Write(blobStream.ToArray());
-            fileStream.Flush();
+            Stream.Position = 0;
+            Stream.Write(headerStream.ToArray());
+            Stream.Write(blobStream.ToArray());
+            Stream.Flush();
+            return;
 
-            void SerializeMapEntry(string sourcePathOrDirectory)
+            static int CountAndDive(MapEntry entry)
             {
-                var info = new FileInfo(sourcePathOrDirectory);
-                var isDirectory = info.Attributes.HasFlag(FileAttributes.Directory);
-
-                header.Write((byte)(isDirectory ? 0x01 : 0x00));
-                header.Write((uint)info.CreationTimeUtc.ToCobaltTime());
-                header.Write((uint)info.LastAccessTimeUtc.ToCobaltTime());
-                header.Write((uint)info.LastWriteTimeUtc.ToCobaltTime());
-                header.Write(info.Name);
-
-                if (isDirectory)
+                int sum = 0;
+                if (entry.IsDirectory)
                 {
-                    var entries = Directory.EnumerateFileSystemEntries(sourcePathOrDirectory).ToList();
-
-                    header.Write7BitEncodedInt(entries.Count);
-                    foreach (var sourcePath in entries)
-                        SerializeMapEntry(sourcePath);
+                    foreach (var subEntry in entry.Entries)
+                        sum += CountAndDive(subEntry);
                 }
                 else
-                {
-                    var srcBuffer = File.ReadAllBytes(info.FullName);
-                    var dstBuffer = Cobpression.Encode(srcBuffer);
+                    ++sum;
 
-                    var blobOffset = blob.BaseStream.Position;
-                    blob.Write7BitEncodedInt(dstBuffer.Length);
-                    blob.Write(dstBuffer);
-
-                    header.Write(Crc32.HashToUInt32(srcBuffer));
-                    header.Write7BitEncodedInt(srcBuffer.Length);
-                    header.Write7BitEncodedInt((int)blobOffset);
-
-                    ++count;
-                }
+                return sum;
             }
+        }
+
+        public static Archive OpenCreate(string archivePath, string? comment)
+        {
+            var fileStream = File.OpenWrite(archivePath);
+
+            var archive = new Archive
+            {
+                Stream = fileStream,
+                Access = FileAccess.Write
+            };
+
+            archive.Root = MapEntry.NewDirectory(comment ?? "", archive);
+
+            return archive;
         }
 
         public static Archive OpenRead(string archivePath)
@@ -136,6 +122,7 @@ namespace Compression
             var archive = new Archive
             {
                 Stream = fileStream,
+                Access = FileAccess.Read,
                 BlobSectionOffset = blobSectionOffset
             };
 
@@ -156,13 +143,43 @@ namespace Compression
 
             public string Name { get; init; }
 
-            public IReadOnlyList<MapEntry>? Entries { get; init; }
+            private List<MapEntry>? entries;
+            public IReadOnlyList<MapEntry>? Entries => entries;
 
             public uint OriginalChecksumCRC32 { get; init; }
 
-            public int BlobOffset { get; init; }
+            private int BlobOffset { get; init; }
 
             public int UncompressedSize { get; set; }
+
+            private byte[]? uncompressedBuffer;
+            public byte[]? UncompressedBuffer
+            {
+                get => uncompressedBuffer;
+                set => uncompressedBuffer = value;
+            }
+
+            private byte[]? compressedBuffer;
+            public byte[]? CompressedBuffer
+            {
+                get
+                {
+                    if (IsDirectory)
+                        return null;
+
+                    if (compressedBuffer == null && archive.Access.HasFlag(FileAccess.Read))
+                    {
+                        using var reader = new BinaryReader(archive.Stream, Encoding.UTF8, true);
+                        reader.BaseStream.Position = archive.BlobSectionOffset + BlobOffset;
+                        var size = reader.Read7BitEncodedInt();
+                        compressedBuffer = reader.ReadBytes(size);
+                    }
+
+                    return compressedBuffer;
+                }
+
+                set => compressedBuffer = value;
+            }
 
             private Archive archive { get; init; }
 
@@ -194,7 +211,10 @@ namespace Compression
                 else
                 {
                     var path = Path.Combine(destinationPathOrDirectory, Name);
-                    var compressedBuffer = GetCompressedBuffer();
+                    var compressedBuffer = CompressedBuffer;
+                    if (compressedBuffer == null)
+                        throw new InvalidDataException("Compressed stream is non-existent");
+
                     var uncompressedBuffer = Cobpression.Decode(compressedBuffer);
 
                     // TODO Verify
@@ -203,18 +223,6 @@ namespace Compression
                 }
             }
 
-            public byte[]? GetCompressedBuffer()
-            {
-                if (IsDirectory)
-                    return null;
-
-                using var reader = new BinaryReader(archive.Stream, Encoding.UTF8, true);
-                reader.BaseStream.Position = archive.BlobSectionOffset + BlobOffset;
-                var size = reader.Read7BitEncodedInt();
-                var buffer = reader.ReadBytes(size);
-
-                return buffer;
-            }
 
             public static MapEntry Deserialize(BinaryReader reader, Archive archive)
             {
@@ -241,7 +249,7 @@ namespace Compression
                         LastAccessTimeUtc = lastAccessTimeUtc,
                         LastModifiedTimeUtc = lastModifiedTimeUtc,
                         Name = name,
-                        Entries = entries,
+                        entries = entries,
                         archive = archive
                     };
                 }
@@ -264,6 +272,114 @@ namespace Compression
                         archive = archive
                     };
                 }
+            }
+
+            public void Serialize(BinaryWriter header, BinaryWriter blob)
+            {
+                header.Write((byte)(IsDirectory ? 0x01 : 0x00));
+                header.Write((uint)CreationTimeUtc.ToCobaltTime());
+                header.Write((uint)LastAccessTimeUtc.ToCobaltTime());
+                header.Write((uint)LastModifiedTimeUtc.ToCobaltTime());
+                header.Write(Name);
+
+                if (IsDirectory)
+                {
+                    header.Write7BitEncodedInt(Entries.Count);
+                    foreach (var entry in Entries)
+                        entry.Serialize(header, blob);
+                }
+                else
+                {
+                    var srcBuffer = UncompressedBuffer;
+                    var dstBuffer = Cobpression.Encode(srcBuffer);
+
+                    var blobOffset = blob.BaseStream.Position;
+                    blob.Write7BitEncodedInt(dstBuffer.Length);
+                    blob.Write(dstBuffer);
+
+                    header.Write(Crc32.HashToUInt32(srcBuffer));
+                    header.Write7BitEncodedInt(srcBuffer.Length);
+                    header.Write7BitEncodedInt((int)blobOffset);
+                }
+            }
+
+            public void Add(string pathOrDirectory) => Add(NewFromFileSystem(pathOrDirectory));
+
+            public void Add(MapEntry entry)
+            {
+                if (!IsDirectory || entries == null)
+                    throw new InvalidOperationException("Cannot add entry to a non-Directory");
+
+                var existingEntry = entries.FirstOrDefault(x => string.Equals(x.Name, entry.Name));
+                if (existingEntry != null)
+                    throw new InvalidOperationException("Cannot overwrite existing entry of the same name");
+
+                entries.Add(entry);
+            }
+
+            public static MapEntry NewDirectory(string name, Archive archive)
+            {
+                var nowUtc = DateTime.UtcNow;
+                return new MapEntry
+                {
+                    IsDirectory = true,
+                    CreationTimeUtc = nowUtc,
+                    LastAccessTimeUtc = nowUtc,
+                    LastModifiedTimeUtc = nowUtc,
+                    Name = name,
+                    entries = new List<MapEntry>(),
+                    archive = archive
+                };
+            }
+
+            public static MapEntry NewFile(string name, Archive archive)
+            {
+                var nowUtc = DateTime.UtcNow;
+                return new MapEntry
+                {
+                    IsDirectory = false,
+                    CreationTimeUtc = nowUtc,
+                    LastAccessTimeUtc = nowUtc,
+                    LastModifiedTimeUtc = nowUtc,
+                    Name = name,
+                    OriginalChecksumCRC32 = 0,
+                    BlobOffset = -1,
+                    UncompressedSize = -1,
+                    archive = archive
+                };
+            }
+
+            public static MapEntry NewFromFileSystem(string sourcePathOrDirectory)
+            {
+                var info = new FileInfo(sourcePathOrDirectory);
+                var isDirectory = info.Attributes.HasFlag(FileAttributes.Directory);
+
+                var entry = new MapEntry
+                {
+                    IsDirectory = isDirectory,
+                    CreationTimeUtc = info.CreationTimeUtc,
+                    LastAccessTimeUtc = info.LastAccessTimeUtc,
+                    LastModifiedTimeUtc = info.LastWriteTimeUtc,
+                    Name = info.Name
+                };
+
+                if (isDirectory)
+                {
+                    entry.entries = new List<MapEntry>();
+
+                    var sourceEntries = Directory.EnumerateFileSystemEntries(sourcePathOrDirectory).ToList();
+                    foreach (var sourcePath in sourceEntries)
+                    {
+                        var subEntry = NewFromFileSystem(sourcePath);
+                        entry.entries.Add(subEntry);
+                    }
+                }
+                else
+                {
+                    entry.UncompressedBuffer = File.ReadAllBytes(info.FullName);
+                }
+
+                return entry;
             }
         }
     }

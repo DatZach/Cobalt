@@ -19,8 +19,13 @@ namespace Compression
             switch (Config.Operation)
             {
                 case Operation.Pack:
-                    Archive.Pack(Config.ArchivePath, Config.SourcePathOrDirectories);
+                {
+                    using var archive = Archive.OpenCreate(Config.ArchivePath, Config.Comment);
+                    foreach (var pathOrDirectory in Config.SourcePathOrDirectories)
+                        archive.Root.Add(pathOrDirectory);
+                    archive.Commit();
                     break;
+                }
                 case Operation.Unpack:
                 {
                     using var archive = Archive.OpenRead(Config.ArchivePath);
@@ -28,7 +33,12 @@ namespace Compression
                     break;
                 }
                 case Operation.Touch:
+                {
+                    // TODO Not needed: car pack dest.car --comment="This works"
+                    using var archive = Archive.OpenCreate(Config.ArchivePath, Config.Comment);
+                    archive.Commit();
                     break;
+                }
                 case Operation.Ls:
                 {
                     using var archive = Archive.OpenRead(Config.ArchivePath);
@@ -127,10 +137,10 @@ namespace Compression
                         return;
                     }
 
-                    var compressedBuffer = node.GetCompressedBuffer();
+                    var compressedBuffer = node.CompressedBuffer;
                     if (compressedBuffer == null)
                     {
-                        Console.WriteLine("Unable to read compressed buffer");
+                        Console.WriteLine("Compressed stream is non-existent");
                         return;
                     }
 
