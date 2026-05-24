@@ -12,8 +12,6 @@
 
         public bool Raw { get; init; }
 
-        public bool Verify { get; init; }
-
         public bool Details { get; init; }
 
         public string? Comment { get; init; }
@@ -50,7 +48,6 @@
             }
 
             var raw = OptionalArgument("--raw", false);
-            var verify = OptionalArgument("--verify", false);
             var details = OptionalArgument("--details", false);
             var comment = OptionalArgument<string>("--comment", null);
             var statisticsVerboseOutputLevel = OptionalArgument("--stats-verbose", 0);
@@ -64,7 +61,6 @@
                 Details = details,
                 Comment = comment,
                 Raw = raw,
-                Verify = verify,
                 StatisticsVerboseOutputLevel = statisticsVerboseOutputLevel
             };
 
@@ -88,12 +84,14 @@
                 $"Cobalt ARchive / Cobpression (v{Archive.Version:X4})\r\n" +
                 "car pack <archive> <src>* [--raw] [--comment=\"\"]\r\n" +
                 "\techo \"Wow, neat!\" > car pack stdout stdin --raw\r\n" +
-                "car unpack <archive> <host-dir> [--verify]\r\n" +
-                "car ls <archive> <virt-dir>\r\n" +
-                "car cat <archive> <virt-path> [--verify]\r\n" +
+                "car unpack <archive> <host-dir>\r\n" +
+                "car ls <archive> <virt-dir> [--details]\r\n" +
+                "car cat <archive> <virt-path>\r\n" +
                 "car add <archive> <virt-dir> <src>+\r\n" +
                 "car rm <archive> <virt-path/dir>\r\n" +
-                "car stat <archive> <virt-path> [--verify]"
+                "car stat <archive> <virt-path>\r\n" +
+                "\r\n" +
+                "\t--stats-verbose=<int>\t\tStatistics Verbosity (0-1)"
             );
         }
     }

@@ -3,12 +3,12 @@ COMMAND LINE UTILITY
 
 car pack <archive> <src>* [--raw] [--comment=""]
 	echo "Wow, neat!" > car pack stdout stdin --raw
-car unpack <archive> <host-dir> [--verify]
+car unpack <archive> <host-dir>
 car ls <archive> <virt-dir>
-car cat <archive> <virt-path> [--verify]
+car cat <archive> <virt-path>
 car add <archive> <virt-dir> <src>+
 car rm <archive> <virt-path/dir>
-car stat <archive> <virt-path> [--verify]
+car stat <archive> <virt-path>
 
 TODO These commands need to be unified with the final shell commands
 

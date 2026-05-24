@@ -14,16 +14,20 @@ namespace Compression
 
         public long BlobSectionOffset { get; private init; }
 
-        public FileStream Stream { get; private init; }
+        public Stream Stream { get; private init; }
+
+        private bool ownsStream;
 
         public void Dispose()
         {
-            Stream.Dispose();
+            if (ownsStream)
+                Stream.Dispose();
         }
 
         public async ValueTask DisposeAsync()
         {
-            await Stream.DisposeAsync();
+            if (ownsStream)
+                await Stream.DisposeAsync();
         }
 
         public void Commit()
@@ -84,13 +88,18 @@ namespace Compression
             }
         }
 
-        public static Archive OpenCreateNew(string archivePath, string? comment)
+        public static Archive OpenCreateNew(string path, string? comment)
         {
-            var fileStream = File.OpenWrite(archivePath);
+            var stream = File.OpenWrite(path);
+            return OpenCreateNew(stream, comment, true);
+        }
 
+        public static Archive OpenCreateNew(Stream stream, string? comment, bool disposeStream)
+        {
             var archive = new Archive
             {
-                Stream = fileStream
+                Stream = stream,
+                ownsStream = disposeStream
             };
 
             archive.Root = Entry.NewDirectory(comment ?? "", archive);
@@ -257,9 +266,11 @@ namespace Compression
                     if (buffer == null)
                         throw new InvalidDataException("Unable to aquired decompressed stream");
 
-                    // TODO Verify
-
                     File.WriteAllBytes(path, buffer);
+
+                    var checksum = Crc32.HashToUInt32(buffer);
+                    if (OriginalChecksumCRC32 != checksum)
+                        Console.WriteLine($"Warning: {Name} checksum mismatch, {OriginalChecksumCRC32} != {checksum}");
                 }
             }
 

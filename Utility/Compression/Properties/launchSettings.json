@@ -2,7 +2,7 @@
   "profiles": {
     "Compression": {
       "commandName": "Project",
-      "commandLineArgs": "ls empty.car /"
+      "commandLineArgs": "unpack raw.bin something2.txt"
     }
   }
 }

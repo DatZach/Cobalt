@@ -1,6 +1,7 @@
-﻿using System.IO.Hashing;
-using System.Text;
+﻿using System.Diagnostics;
 using Compression.Utility;
+using System.IO.Hashing;
+using System.Text;
 
 namespace Compression
 {
@@ -16,6 +17,8 @@ namespace Compression
                 RuntimeConfig.PrintHelp();
                 return;
             }
+
+            var t1 = Stopwatch.StartNew();
 
             try
             {
@@ -36,24 +39,107 @@ namespace Compression
             {
                 Console.WriteLine($"{ex.Message}");
             }
+
+            t1.Stop();
+
+            if (Config.StatisticsVerboseOutputLevel > 0)
+            {
+                Console.WriteLine($"Completed in {t1.ElapsedMilliseconds}ms");
+                // TODO Could be more statistics here: Entropy, Symbols encoded, etc.
+            }
         }
 
         private static void Pack()
         {
-            using var archive = Archive.OpenCreateNew(Config.ArchivePath, Config.Comment);
-            foreach (var sourcePathOrDirectory in Config.SourcePathOrDirectories)
+            var isStdOut = string.Equals(Config.ArchivePath, "stdout", StringComparison.OrdinalIgnoreCase);
+
+            using Stream outStream = isStdOut ? new MemoryStream() : File.OpenWrite(Config.ArchivePath);
+
+            if (Config.Raw)
             {
-                var entry = Archive.Entry.NewFromFileSystem(sourcePathOrDirectory);
-                archive.Root.Add(entry);
+                foreach (var sourcePathOrDirectory in Config.SourcePathOrDirectories)
+                {
+                    var isStdIn = string.Equals(sourcePathOrDirectory, "stdin", StringComparison.OrdinalIgnoreCase);
+                    using var inStream = isStdIn ? Console.OpenStandardInput() : File.OpenRead(sourcePathOrDirectory);
+                    using var ms = new MemoryStream();
+                    inStream.CopyTo(ms);
+                    var buffer = ms.ToArray();
+
+                    var result = Cobpression.Encode(buffer);
+                    outStream.Write(result);
+                }
+
+                outStream.Flush();
+            }
+            else
+            {
+                using var archive = Archive.OpenCreateNew(outStream, Config.Comment, false);
+                foreach (var sourcePathOrDirectory in Config.SourcePathOrDirectories)
+                {
+                    Archive.Entry? entry;
+                    var isStdIn = string.Equals(sourcePathOrDirectory, "stdin", StringComparison.OrdinalIgnoreCase);
+                    if (isStdIn)
+                    {
+                        using var stdin = Console.OpenStandardInput();
+                        using var ms = new MemoryStream();
+                        stdin.CopyTo(ms);
+                        var buffer = ms.ToArray();
+
+                        entry = Archive.Entry.NewFile("stdin", null);
+                        entry.UncompressedBuffer = buffer;
+                    }
+                    else
+                        entry = Archive.Entry.NewFromFileSystem(sourcePathOrDirectory);
+                    
+                    archive.Root.Add(entry);
+                }
+
+                archive.Commit();
             }
 
-            archive.Commit();
+            if (isStdOut)
+            {
+                using var stdout = Console.OpenStandardOutput();
+                outStream.Position = 0;
+                outStream.CopyTo(stdout);
+            }
         }
 
         private static void Unpack()
         {
-            using var archive = Archive.OpenExisting(Config.ArchivePath);
-            archive.Root.Extract(Config.SourcePathOrDirectories[0]);
+            int type; // 0 Raw, 1 Archive, 2 Unknown
+            using (var fs = File.OpenRead(Config.ArchivePath))
+            {
+                var b0 = fs.ReadByte();
+                if ((b0 & 0x80) != 0)
+                    type = 0;
+                else if (b0 == 0x43)
+                {
+                    var b1 = fs.ReadByte();
+                    var b2 = fs.ReadByte();
+                    var b3 = fs.ReadByte();
+                    if (b1 == 0x41 && b2 == 0x52 && b3 == 0x56)
+                        type = 1;
+                    else
+                        type = 2;
+                }
+                else
+                    type = 2;
+            }
+
+            if (type == 0)
+            {
+                var buffer = File.ReadAllBytes(Config.ArchivePath);
+                buffer = Cobpression.Decode(buffer);
+                File.WriteAllBytes(Config.VirtualPathOrDirectory, buffer);
+            }
+            else if (type == 1)
+            {
+                using var archive = Archive.OpenExisting(Config.ArchivePath);
+                archive.Root.Extract(Config.VirtualPathOrDirectory);
+            }
+            else
+                throw new Exception("Unrecognized file format. Not a Cobalt ARchive, nor a Raw Cobpression Stream.");
         }
 
         private static void Ls()
