@@ -8,15 +8,13 @@ namespace Compression
     {
         private const uint HeaderMagic = 0x56524143;
         private const uint BlobMagic = 0x424F4C42;
-        private const ushort Version = 0x0100;
+        public const ushort Version = 0x0100;
 
-        public MapEntry Root { get; private set; }
+        public Entry Root { get; private set; }
 
-        public long BlobSectionOffset { get; private set; }
+        public long BlobSectionOffset { get; private init; }
 
-        public FileStream Stream { get; private set; }
-
-        public FileAccess Access { get; private set; }
+        public FileStream Stream { get; private init; }
 
         public void Dispose()
         {
@@ -71,7 +69,7 @@ namespace Compression
             Stream.Flush();
             return;
 
-            static int CountAndDive(MapEntry entry)
+            static int CountAndDive(Entry entry)
             {
                 int sum = 0;
                 if (entry.IsDirectory)
@@ -86,24 +84,23 @@ namespace Compression
             }
         }
 
-        public static Archive OpenCreate(string archivePath, string? comment)
+        public static Archive OpenCreateNew(string archivePath, string? comment)
         {
             var fileStream = File.OpenWrite(archivePath);
 
             var archive = new Archive
             {
-                Stream = fileStream,
-                Access = FileAccess.Write
+                Stream = fileStream
             };
 
-            archive.Root = MapEntry.NewDirectory(comment ?? "", archive);
+            archive.Root = Entry.NewDirectory(comment ?? "", archive);
 
             return archive;
         }
 
-        public static Archive OpenRead(string archivePath)
+        public static Archive OpenExisting(string archivePath)
         {
-            var fileStream = File.OpenRead(archivePath);
+            var fileStream = File.Open(archivePath, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite);
             using var reader = new BinaryReader(fileStream, Encoding.UTF8, true);
 
             if (reader.ReadUInt32() != HeaderMagic)
@@ -122,17 +119,18 @@ namespace Compression
             var archive = new Archive
             {
                 Stream = fileStream,
-                Access = FileAccess.Read,
                 BlobSectionOffset = blobSectionOffset
             };
 
-            archive.Root = MapEntry.Deserialize(reader, archive);
+            archive.Root = Entry.Deserialize(reader, archive);
 
             return archive;
         }
 
-        public sealed class MapEntry
+        public sealed class Entry
         {
+            // TODO EntryAttributes instead
+
             public bool IsDirectory { get; init; }
 
             public DateTime CreationTimeUtc { get; init; }
@@ -143,47 +141,70 @@ namespace Compression
 
             public string Name { get; init; }
 
-            private List<MapEntry>? entries;
-            public IReadOnlyList<MapEntry>? Entries => entries;
-
-            public uint OriginalChecksumCRC32 { get; init; }
-
-            private int BlobOffset { get; init; }
-
-            public int UncompressedSize { get; set; }
+            private List<Entry>? entries;
+            public IReadOnlyList<Entry>? Entries => entries;
 
             private byte[]? uncompressedBuffer;
             public byte[]? UncompressedBuffer
-            {
-                get => uncompressedBuffer;
-                set => uncompressedBuffer = value;
-            }
-
-            private byte[]? compressedBuffer;
-            public byte[]? CompressedBuffer
             {
                 get
                 {
                     if (IsDirectory)
                         return null;
 
-                    if (compressedBuffer == null && archive.Access.HasFlag(FileAccess.Read))
+                    if (uncompressedBuffer == null && archive.BlobSectionOffset > 0 && blobOffset > 0)
                     {
                         using var reader = new BinaryReader(archive.Stream, Encoding.UTF8, true);
-                        reader.BaseStream.Position = archive.BlobSectionOffset + BlobOffset;
+                        reader.BaseStream.Position = archive.BlobSectionOffset + blobOffset;
                         var size = reader.Read7BitEncodedInt();
-                        compressedBuffer = reader.ReadBytes(size);
+                        var compressedBuffer = reader.ReadBytes(size);
+
+                        uncompressedBuffer = Cobpression.Decode(compressedBuffer);
                     }
+
+                    return uncompressedBuffer;
+                }
+
+                set
+                {
+                    uncompressedBuffer = value;
+                    if (uncompressedBuffer != null)
+                    {
+                        UncompressedSize = uncompressedBuffer.Length;
+                        OriginalChecksumCRC32 = Crc32.HashToUInt32(uncompressedBuffer);
+                    }
+                    else
+                    {
+                        UncompressedSize = 0;
+                        OriginalChecksumCRC32 = 0;
+                    }
+                }
+            }
+
+            public int UncompressedSize { get; private set; }
+
+            public uint OriginalChecksumCRC32 { get; private set; }
+
+            public byte[]? CompressedBuffer
+            {
+                get
+                {
+                    if (IsDirectory || blobOffset <= 0 || archive.BlobSectionOffset <= 0)
+                        return null;
+
+                    using var reader = new BinaryReader(archive.Stream, Encoding.UTF8, true);
+                    reader.BaseStream.Position = archive.BlobSectionOffset + blobOffset;
+                    var size = reader.Read7BitEncodedInt();
+                    var compressedBuffer = reader.ReadBytes(size);
 
                     return compressedBuffer;
                 }
-
-                set => compressedBuffer = value;
             }
 
-            private Archive archive { get; init; }
+            private int blobOffset;
+            private Archive archive;
 
-            public MapEntry? Find(string path)
+            public Entry? Find(string path)
             {
                 var parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
                 var node = this;
@@ -196,6 +217,26 @@ namespace Compression
                 }
 
                 return node;
+            }
+
+            public void Add(Entry entry)
+            {
+                if (!IsDirectory || entries == null)
+                    throw new InvalidOperationException("Cannot add entry to a non-Directory");
+
+                var existingEntry = entries.FirstOrDefault(x => string.Equals(x.Name, entry.Name));
+                if (existingEntry != null)
+                    throw new InvalidOperationException("Cannot overwrite existing entry of the same name");
+
+                entries.Add(entry);
+            }
+
+            public void Remove(string name)
+            {
+                if (!IsDirectory || entries == null)
+                    throw new InvalidOperationException("Cannot remove entry from a non-Directory");
+
+                entries.RemoveAll(x => string.Equals(x.Name, name));
             }
 
             public void Extract(string destinationPathOrDirectory)
@@ -211,20 +252,18 @@ namespace Compression
                 else
                 {
                     var path = Path.Combine(destinationPathOrDirectory, Name);
-                    var compressedBuffer = CompressedBuffer;
-                    if (compressedBuffer == null)
-                        throw new InvalidDataException("Compressed stream is non-existent");
-
-                    var uncompressedBuffer = Cobpression.Decode(compressedBuffer);
+                    
+                    var buffer = UncompressedBuffer;
+                    if (buffer == null)
+                        throw new InvalidDataException("Unable to aquired decompressed stream");
 
                     // TODO Verify
 
-                    File.WriteAllBytes(path, uncompressedBuffer);
+                    File.WriteAllBytes(path, buffer);
                 }
             }
 
-
-            public static MapEntry Deserialize(BinaryReader reader, Archive archive)
+            public static Entry Deserialize(BinaryReader reader, Archive archive)
             {
                 var attributes = reader.ReadByte();
                 var creationTimeUtc = reader.ReadInt32().FromCobaltTime();
@@ -235,21 +274,23 @@ namespace Compression
                 if ((attributes & 0x01) != 0)
                 {
                     var count = reader.Read7BitEncodedInt();
-                    var entries = new List<MapEntry>(count);
+                    var entries = new List<Entry>(count);
                     while (count-- > 0)
                     {
                         var entry = Deserialize(reader, archive);
                         entries.Add(entry);
                     }
 
-                    return new MapEntry
+                    return new Entry
                     {
                         IsDirectory = true,
                         CreationTimeUtc = creationTimeUtc,
                         LastAccessTimeUtc = lastAccessTimeUtc,
                         LastModifiedTimeUtc = lastModifiedTimeUtc,
                         Name = name,
+
                         entries = entries,
+
                         archive = archive
                     };
                 }
@@ -259,16 +300,18 @@ namespace Compression
                     var uncompressedSize = reader.Read7BitEncodedInt();
                     var blobOffset = reader.Read7BitEncodedInt();
 
-                    return new MapEntry
+                    return new Entry
                     {
                         IsDirectory = false,
                         CreationTimeUtc = creationTimeUtc,
                         LastAccessTimeUtc = lastAccessTimeUtc,
                         LastModifiedTimeUtc = lastModifiedTimeUtc,
                         Name = name,
-                        OriginalChecksumCRC32 = uncompressedChecksum,
-                        BlobOffset = blobOffset,
+
                         UncompressedSize = uncompressedSize,
+                        OriginalChecksumCRC32 = uncompressedChecksum,
+                        blobOffset = blobOffset,
+
                         archive = archive
                     };
                 }
@@ -303,39 +346,25 @@ namespace Compression
                 }
             }
 
-            public void Add(string pathOrDirectory) => Add(NewFromFileSystem(pathOrDirectory));
-
-            public void Add(MapEntry entry)
-            {
-                if (!IsDirectory || entries == null)
-                    throw new InvalidOperationException("Cannot add entry to a non-Directory");
-
-                var existingEntry = entries.FirstOrDefault(x => string.Equals(x.Name, entry.Name));
-                if (existingEntry != null)
-                    throw new InvalidOperationException("Cannot overwrite existing entry of the same name");
-
-                entries.Add(entry);
-            }
-
-            public static MapEntry NewDirectory(string name, Archive archive)
+            public static Entry NewDirectory(string name, Archive archive)
             {
                 var nowUtc = DateTime.UtcNow;
-                return new MapEntry
+                return new Entry
                 {
                     IsDirectory = true,
                     CreationTimeUtc = nowUtc,
                     LastAccessTimeUtc = nowUtc,
                     LastModifiedTimeUtc = nowUtc,
                     Name = name,
-                    entries = new List<MapEntry>(),
+                    entries = new List<Entry>(),
                     archive = archive
                 };
             }
 
-            public static MapEntry NewFile(string name, Archive archive)
+            public static Entry NewFile(string name, Archive archive)
             {
                 var nowUtc = DateTime.UtcNow;
-                return new MapEntry
+                return new Entry
                 {
                     IsDirectory = false,
                     CreationTimeUtc = nowUtc,
@@ -343,18 +372,18 @@ namespace Compression
                     LastModifiedTimeUtc = nowUtc,
                     Name = name,
                     OriginalChecksumCRC32 = 0,
-                    BlobOffset = -1,
+                    blobOffset = -1,
                     UncompressedSize = -1,
                     archive = archive
                 };
             }
 
-            public static MapEntry NewFromFileSystem(string sourcePathOrDirectory)
+            public static Entry NewFromFileSystem(string sourcePathOrDirectory)
             {
                 var info = new FileInfo(sourcePathOrDirectory);
                 var isDirectory = info.Attributes.HasFlag(FileAttributes.Directory);
 
-                var entry = new MapEntry
+                var entry = new Entry
                 {
                     IsDirectory = isDirectory,
                     CreationTimeUtc = info.CreationTimeUtc,
@@ -365,7 +394,7 @@ namespace Compression
 
                 if (isDirectory)
                 {
-                    entry.entries = new List<MapEntry>();
+                    entry.entries = new List<Entry>();
 
                     var sourceEntries = Directory.EnumerateFileSystemEntries(sourcePathOrDirectory).ToList();
                     foreach (var sourcePath in sourceEntries)

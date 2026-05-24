@@ -2,7 +2,7 @@
   "profiles": {
     "Compression": {
       "commandName": "Project",
-      "commandLineArgs": "cat wow.car /CobpressionTest/LoremIpsum.txt"
+      "commandLineArgs": "ls empty.car /"
     }
   }
 }

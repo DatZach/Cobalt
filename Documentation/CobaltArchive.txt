@@ -1,16 +1,14 @@
 COMMAND LINE UTILITY
 ====================
 
-car pack <archive> <src>+ [--raw]
+car pack <archive> <src>* [--raw] [--comment=""]
 	echo "Wow, neat!" > car pack stdout stdin --raw
-car unpack <archive> <dir> [--verify]
-car touch <archive>
-car browse <archive>
-car ls <archive> <ar-dir>
-car cat <archive> <ar-path> [--verify]
-car add <archive> <ar-dir> <src>+
-car rm <archive> <ar-path/dir>
-car stat <archive> <ar-path> [--verify]
+car unpack <archive> <host-dir> [--verify]
+car ls <archive> <virt-dir>
+car cat <archive> <virt-path> [--verify]
+car add <archive> <virt-dir> <src>+
+car rm <archive> <virt-path/dir>
+car stat <archive> <virt-path> [--verify]
 
 TODO These commands need to be unified with the final shell commands
 
