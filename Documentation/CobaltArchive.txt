@@ -4,7 +4,7 @@ COMMAND LINE UTILITY
 car pack <archive> <src>* [--raw] [--comment=""]
 	echo "Wow, neat!" > car pack stdout stdin --raw
 car unpack <archive> <host-dir>
-car ls <archive> <virt-dir>
+car ls <archive> <virt-dir> [--details]
 car cat <archive> <virt-path>
 car add <archive> <virt-dir> <src>+
 car rm <archive> <virt-path/dir>
