@@ -370,8 +370,46 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(MixinDeclStatement expression)
         {
+            var context = CurrentModule.FindSymbol(expression.TargetTypeName) as IScopeContext;
+            contextStack.Push(context);
+
             expression.Function?.Accept(this);
-            //expression.Field?.GetterExpression
+
+            if (expression.Field != null)
+            {
+                Field? field;
+                if (context is StructType structType)
+                    field = structType.FindField(expression.Field.Name);
+                else if (context is TupleType tupleType)
+                    field = tupleType.FindField(expression.Field.Name);
+                else
+                    field = null;
+
+                if (field?.Getter != null && expression.Field.GetterExpression != null)
+                {
+                    contextStack.Push(field.Getter);
+
+                    var retStorage = expression.Field.GetterExpression?.Accept(this);
+                    if (retStorage != null)
+                    {
+                        CurrentFunction.Body.Emit(Opcode.Return, retStorage.Operand);
+                        retStorage.Free();
+                    }
+
+                    contextStack.Pop();
+                }
+                    
+                if (field?.Setter != null && expression.Field.SetterExpression != null)
+                {
+                    contextStack.Push(field.Setter);
+                    expression.Field.SetterExpression?.Accept(this)?.Free();
+                    CurrentFunction.Body.Emit(Opcode.Return, Operand.ImmediateUnsigned(0));
+                    contextStack.Pop();
+                }
+            }
+
+            contextStack.Pop();
+
             return null;
         }
 

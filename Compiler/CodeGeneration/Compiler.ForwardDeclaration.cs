@@ -427,11 +427,23 @@ namespace Compiler.CodeGeneration
             if (Phase != DeclPhase.Functions)
                 return Unit.Value;
 
-            var context = CurrentContext.FindSymbol(expression.TargetTypeName) as IScopeContext;
+            var context = CurrentModule.FindSymbol(expression.TargetTypeName) as IScopeContext;
             if (context != null)
             {
                 contextStack.Push(context);
                 expression.Function?.Accept(this);
+
+                if (expression.Field != null)
+                {
+                    var fieldType = CobType.FromString(expression.Field.TypeName, CurrentContext);
+                    if (context is StructType structType)
+                        structType.AllocateField(expression.Field.Name, fieldType, expression.Field.GetterExpression != null, expression.Field.SetterExpression != null);
+                    else if (context is TupleType tupleType)
+                        tupleType.AllocateField(expression.Field.Name, fieldType, expression.Field.GetterExpression != null, expression.Field.SetterExpression != null);
+                    else
+                        messages.Add(Message.CannotDeclareSymbolHere, expression);
+                }
+                
                 contextStack.Pop();
             }
             else
