@@ -18,6 +18,9 @@
     <None Update="Library\Heap.cob">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Update="Library\Lens.cob">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Update="Library\Library.cob">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

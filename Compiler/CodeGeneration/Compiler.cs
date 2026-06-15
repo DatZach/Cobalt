@@ -2080,9 +2080,18 @@ namespace Compiler.CodeGeneration
 
                 // PASS 0 - Forward Declarations
                 Intrinsics.InitializeForPass0(compiler);
-                var pass0 = new ForwardDeclaration(compiler, messages);
-                ast.Accept(pass0);
 
+                for (var phase = ForwardDeclaration.DeclPhase.Begin;
+                     phase < ForwardDeclaration.DeclPhase.Complete;
+                     ++phase
+                ) {
+                    var pass0 = new ForwardDeclaration(phase, compiler, messages);
+
+                    for (var i = 0; i < compiler.Scripts.Count; ++i)
+                        compiler.Scripts[i].Accept(pass0);
+
+                    ast.Accept(pass0);
+                }
 
                 // PASS 1 - Compilation
                 // NOTE We must compile all imported scripts before we compile this script; list is in import order

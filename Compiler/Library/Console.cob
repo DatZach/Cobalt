@@ -11,11 +11,6 @@ import kernel32 ReadConsoleA func (hConsoleOutput: HANDLE, lpBuffer: LPVOID, nNu
 const hStdOut: HANDLE = GetStdHandle(STD_OUTPUT_HANDLE);
 const hStdIn: HANDLE = GetStdHandle(STD_INPUT_HANDLE);
 
-//func WriteLine(value: string) {
-//    WriteConsoleA(hStdOut, value, value.Length, NULL, NULL);
-//    WriteConsoleA(hStdOut, "^n", 1, NULL, NULL);
-//}
-
 func Write(value: string) {
     WriteConsoleA(hStdOut, value.Address, value.Length, NULL, NULL);
 }
@@ -26,9 +21,9 @@ func WriteLine(value: string) {
 }
 
 func ReadLine() string {
-    var buffer = Alloc(16); // TODO Replace with u8 [...16][..(.Capacity)]; ?
+    var buffer = Heap.Alloc(16); // TODO Replace with u8 [...16][..(.Capacity)]; ?
     //var length: DWORD;
-    var length = Alloc(8); // TODO Replace with lens
+    var length = Heap.Alloc(8); // TODO Replace with lens
 
     ReadConsoleA(hStdIn, buffer.Address, buffer.Length - 1, length.Address, NULL);
     

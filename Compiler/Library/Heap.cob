@@ -1,7 +1,7 @@
 // https://github.com/microsoft/Windows-classic-samples/blob/main/Samples/EapHostSupplicant/cpp/memory.cpp
 
-// TODO Uncomment
-//module Heap;
+//module Standard.Heap;
+module Heap;
 
 error {
     OutOfBounds
@@ -30,63 +30,3 @@ func ReAlloc(ptr: Lens`u8, size: DWORD) Lens`u8 {
 func Free(ptr: Lens`u8) {
     HeapFree(heap, 0, ptr.Address);
 }
-
-// TODO Should be in its own file?
-tuple Lens `T (
-    Address: LPVOID;
-    Length: uint;
-
-    // NOTE Implemented in Compiler as an intrinsic
-    [uint]: T! {
-        get {
-            if (key < 0 || key >= Length) return error.OutOfBounds;
-            
-            machine cobil "Lens_Get";
-            // machine cobil "
-            //     GetField    r1, a0, 0
-            //     Add         r1, r1 a1
-            //     Peek        r0, r1, 1
-            //     Return      r0
-            // "
-        }
-
-        set {
-            if (key < 0 || key >= Length) return error.OutOfBounds;
-            
-            machine cobil "Lens_Set";
-
-            // machine cobil "
-            //     GetField    r1, a0, 0
-            //     Add         r1, r1 a1
-            //     Poke        r1, 1, a2
-            //     Return
-            // "
-        }
-    }
-
-    // TODO Slices for Lens
-    // TODO Enumerator
-    // TODO Slice
-    // TODO GetEnumerator
-
-    func GetEnumerator() LensEnumerator`T => LensEnumerator`T ( this[0], this, 0 );
-)
-
-tuple LensEnumerator `T (
-    Current: T;
-    parent: Lens`T;
-    current: u64;
-
-    func MoveNext() bool {
-        if (current < parent.Length) {
-            Current = parent[current];
-            current += 1;
-            return true;
-        }
-
-        return false;
-    }
-)
-
-type string     Lens`u8;
-type cstring    LPVOID;

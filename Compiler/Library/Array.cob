@@ -1,3 +1,5 @@
+//module Standard;
+
 struct Array `T {
     Length: uint; // , const
     data: Lens`T;
@@ -17,13 +19,13 @@ struct Array `T {
         
         return This {
             Length = 0,
-            data = Alloc(_capacity) // TODO * T.Size)
+            data = Heap.Alloc(_capacity) // TODO * T.Size)
         };
     }
 
     func Add(value: T) {
         if (Length >= data.Length) {
-            data = ReAlloc(data, data.Length << 1);
+            data = Heap.ReAlloc(data, data.Length << 1);
         }
 
         data[Length] = value;

@@ -1,12 +1,4 @@
-// module System;
-
-// TODO These need to be namespaced appropriately
-type HANDLE     u64;
-type BOOL       u32;
-type DWORD      u32;
-type LPDWORD    u64;
-type LPVOID     uint;
-type SIZE_T     uint;
+//module Standard;
 
 tuple Range (
     Start: u64;

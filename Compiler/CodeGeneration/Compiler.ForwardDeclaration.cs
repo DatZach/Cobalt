@@ -10,18 +10,18 @@ namespace Compiler.CodeGeneration
 {
     internal sealed class ForwardDeclaration : IExpressionVisitor<Unit>
     {
-        public DeclPhase Phase { get; private set; }
-
         private Module CurrentModule => contextStack.OfType<Module>().First();
 
         private IScopeContext CurrentContext => contextStack.Peek();
 
         private readonly Stack<IScopeContext> contextStack;
+        private readonly DeclPhase phase;
         private readonly Compiler compiler;
         private readonly MessageCollection messages;
 
-        public ForwardDeclaration(Compiler compiler, MessageCollection messages)
+        public ForwardDeclaration(DeclPhase phase, Compiler compiler, MessageCollection messages)
         {
+            this.phase = phase;
             this.compiler = compiler;
             this.messages = messages;
 
@@ -30,17 +30,24 @@ namespace Compiler.CodeGeneration
 
         public Unit Visit(ScriptExpression expression)
         {
-            for (var phase = DeclPhase.Begin; phase < DeclPhase.Complete; ++phase)
-            {
-                contextStack.Clear();
-                contextStack.Push(compiler.RootModule);
+            contextStack.Clear();
+            contextStack.Push(compiler.RootModule);
 
-                Phase = phase;
+            var expressions = expression.Expressions;
+            for (int i = 0; i < expressions.Count; ++i)
+                expressions[i].Accept(this);
 
-                var expressions = expression.Expressions;
-                for (int i = 0; i < expressions.Count; ++i)
-                    expressions[i].Accept(this);
-            }
+            //for (var phase = DeclPhase.Begin; phase < DeclPhase.Complete; ++phase)
+            //{
+            //    contextStack.Clear();
+            //    contextStack.Push(compiler.RootModule);
+
+            //    Phase = phase;
+
+            //    var expressions = expression.Expressions;
+            //    for (int i = 0; i < expressions.Count; ++i)
+            //        expressions[i].Accept(this);
+            //}
 
             return Unit.Value;
         }
@@ -69,7 +76,7 @@ namespace Compiler.CodeGeneration
 
         private Unit VisitImportModule(ImportStatement expression)
         {
-            if (Phase != DeclPhase.ModuleImports)
+            if (phase != DeclPhase.ModuleImports)
                 return Unit.Value;
 
             var paths = new List<string>(4);
@@ -105,7 +112,7 @@ namespace Compiler.CodeGeneration
 
                 // NOTE We perform a full forward declaration scan on any imported scripts meaning we incrementally
                 //      pass through the declphase as we find imports
-                var pass0 = new ForwardDeclaration(compiler, messages);
+                var pass0 = new ForwardDeclaration(phase, compiler, messages);
                 ast.Accept(pass0);
 
                 compiler.Scripts.Add(ast);
@@ -116,7 +123,7 @@ namespace Compiler.CodeGeneration
 
         private Unit VisitImportSymbol(ImportStatement expression)
         {
-            if (Phase != DeclPhase.Functions)
+            if (phase != DeclPhase.Functions)
                 return Unit.Value;
 
             // Symbol import
@@ -155,7 +162,7 @@ namespace Compiler.CodeGeneration
 
         public Unit Visit(ArtifactStatement expression)
         {
-            if (Phase != DeclPhase.Modules)
+            if (phase != DeclPhase.Modules)
                 return Unit.Value;
 
             var containerParameters = new Dictionary<string, Variable>();
@@ -194,9 +201,9 @@ namespace Compiler.CodeGeneration
         public Unit Visit(ModuleStatement expression)
         {
             Module module;
-            if (Phase == DeclPhase.Modules)
+            if (phase == DeclPhase.Modules)
                 module = CurrentModule.FindOrAllocateModule(expression.Name);
-            else if (Phase > DeclPhase.Modules)
+            else if (phase > DeclPhase.Modules)
                 module = CurrentModule.FindModule(expression.Name)!;
             else
                 return Unit.Value;
@@ -214,7 +221,7 @@ namespace Compiler.CodeGeneration
 
         public Unit Visit(TypeAliasStatement expression)
         {
-            if (Phase != DeclPhase.Types)
+            if (phase != DeclPhase.Types)
                 return Unit.Value;
 
             var typeName = CobType.FromString(expression.TypeName);
@@ -226,7 +233,7 @@ namespace Compiler.CodeGeneration
 
         public Unit Visit(TraitStatement expression)
         {
-            if (Phase == DeclPhase.Types)
+            if (phase == DeclPhase.Types)
             {
                 var traitType = CurrentModule.AllocateTraitType(expression.Name);
                 var cobType = new CobType(eCobType.Trait, tag: traitType);
@@ -234,7 +241,7 @@ namespace Compiler.CodeGeneration
                 if (!CobType.TryAddAlias(expression.Name, cobType))
                     messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
             }
-            else if (Phase > DeclPhase.Types)
+            else if (phase > DeclPhase.Types)
             {
                 var traitType = CurrentModule.FindTraitType(expression.Name)!;
                 contextStack.Push(traitType);
@@ -250,7 +257,7 @@ namespace Compiler.CodeGeneration
 
         public Unit Visit(ErrorStatement expression)
         {
-            if (Phase == DeclPhase.Types)
+            if (phase == DeclPhase.Types)
             {
                 foreach (var x in expression.Members)
                     compiler.Errors.AllocateGlobal(x, CobType.Error, false);
@@ -261,7 +268,7 @@ namespace Compiler.CodeGeneration
 
         public Unit Visit(TupleDeclStatement expression)
         {
-            if (Phase == DeclPhase.Types)
+            if (phase == DeclPhase.Types)
             {
                 var tupleType = CurrentModule.AllocateTupleType(expression.Name);
                 var cobType = new CobType(eCobType.Tuple, tag: tupleType);
@@ -272,7 +279,7 @@ namespace Compiler.CodeGeneration
                 if (!CobType.TryAddAlias(expression.Name, cobType))
                     messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
             }
-            else if (Phase > DeclPhase.Types)
+            else if (phase > DeclPhase.Types)
             {
                 var tupleType = CurrentModule.FindTupleType(expression.Name)!;
                 contextStack.Push(tupleType);
@@ -280,7 +287,7 @@ namespace Compiler.CodeGeneration
                 for (var i = 0; i < expression.Functions.Count; ++i)
                     expression.Functions[i].Accept(this);
 
-                if (Phase == DeclPhase.Fields)
+                if (phase == DeclPhase.Fields)
                 {
                     foreach (var field in expression.Fields)
                     {
@@ -305,7 +312,7 @@ namespace Compiler.CodeGeneration
 
         public Unit Visit(StructDeclStatement expression)
         {
-            if (Phase == DeclPhase.Types)
+            if (phase == DeclPhase.Types)
             {
                 var structType = CurrentModule.AllocateStructType(expression.Name);
 
@@ -324,7 +331,7 @@ namespace Compiler.CodeGeneration
                 if (expression.Name == "Array")
                     Intrinsics.Array = structType;
             }
-            else if (Phase > DeclPhase.Types)
+            else if (phase > DeclPhase.Types)
             {
                 var structType = CurrentModule.FindStructType(expression.Name)!;
                 contextStack.Push(structType);
@@ -335,7 +342,7 @@ namespace Compiler.CodeGeneration
                 for (var i = 0; i < expression.Functions.Count; ++i)
                     expression.Functions[i].Accept(this);
 
-                if (Phase == DeclPhase.Fields)
+                if (phase == DeclPhase.Fields)
                 {
                     foreach (var field in expression.Fields)
                     {
@@ -360,7 +367,7 @@ namespace Compiler.CodeGeneration
 
         public Unit Visit(FactoryDeclStatement expression)
         {
-            if (Phase != DeclPhase.Functions)
+            if (phase != DeclPhase.Functions)
                 return Unit.Value;
 
             var parameters = expression.Parameters.Select(
@@ -379,7 +386,7 @@ namespace Compiler.CodeGeneration
 
         public Unit Visit(FunctionDeclStatement expression)
         {
-            if (Phase != DeclPhase.Functions)
+            if (phase != DeclPhase.Functions)
                 return Unit.Value;
 
             var parameters = expression.Parameters.Select(
@@ -424,7 +431,7 @@ namespace Compiler.CodeGeneration
 
         public Unit Visit(MixinDeclStatement expression)
         {
-            if (Phase != DeclPhase.Functions)
+            if (phase != DeclPhase.Functions)
                 return Unit.Value;
 
             var context = CurrentModule.FindSymbol(expression.TargetTypeName) as IScopeContext;
@@ -457,7 +464,7 @@ namespace Compiler.CodeGeneration
             // NOTE We do not dive function bodies in this visitor so any VarExpressions we visit will be
             //      module-level declarations
 
-            if (Phase != DeclPhase.Fields)
+            if (phase != DeclPhase.Fields)
                 return Unit.Value;
 
             var mutable = expression.Type == TokenType.Var;

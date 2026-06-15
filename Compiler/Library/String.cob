@@ -1,3 +1,6 @@
+type string     Lens`u8;
+//type cstring    LPVOID;
+
 func string(value: int, radix: int = 10) string {
     var result = [];
     
