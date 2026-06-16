@@ -32,8 +32,6 @@ namespace Compiler.Ast.Expressions.Statements
 
             public string? TypeName { get; }
 
-            public CobType? Type => TypeName != null ? CobType.FromString(TypeName) : null;
-
             public Expression? Initializer { get; }
 
             public string Name => Token.Value!;

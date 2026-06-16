@@ -234,6 +234,8 @@ namespace Compiler.CodeGeneration.Artifacts
             return left.Type == right;
         }
 
+        // TODO Deprecate context = null, it's simply a holdover which is now buggy
+        // TODO Return CobType? and have consumers check if null for proper error reporting
         public static CobType FromString(string? typeName, IScopeContext? context = null)
         {
             if (string.IsNullOrEmpty(typeName))
@@ -253,7 +255,7 @@ namespace Compiler.CodeGeneration.Artifacts
 
             // SIMPLE TYPE
             CobType type;
-            CobType bType = null;
+            CobType? bType = null, aliasType = null;
 
             var isError = typeName.EndsWith('!');
             if (isError)
@@ -278,7 +280,6 @@ namespace Compiler.CodeGeneration.Artifacts
                 //type = new CobType(eCobType.Array, elementType: elementType);
                 var tag = Intrinsics.Array.FindConcretizedStruct(elementType) ?? Intrinsics.Array.AllocateConcretizedStruct(elementType);
 
-
                 return new CobType(eCobType.Struct, tag: tag);
             }
             else if (typeName.Length >= 2 && typeName[0] == 's' && char.IsDigit(typeName[1]))
@@ -287,8 +288,20 @@ namespace Compiler.CodeGeneration.Artifacts
                 type = new CobType(eCobType.Unsigned, int.Parse(typeName[1..]));
             else if (typeName.Length >= 2 &&  typeName[0] == 'f' && char.IsDigit(typeName[1]))
                 type = new CobType(eCobType.Float, int.Parse(typeName[1..]));
-            else if (Aliases.TryGetValue(typeName, out var aliasType))
-                type = aliasType;
+            else if (typeName == "any")
+                type = Any;
+            else if (typeName == "bool")
+                type = Boolean;
+            else if (typeName == "int")
+                type = Int;
+            else if (typeName == "uint")
+                type = UInt;
+            else if (typeName == "float")
+                type = Float;
+            else if (typeName == "error")
+                type = Error;
+            else if (typeName == "nil")
+                type = Nil;
             else if (typeName.StartsWith("func"))
             {
                 var parameters = new List<Function.Parameter>();
@@ -329,12 +342,44 @@ namespace Compiler.CodeGeneration.Artifacts
                 var returnType = typeName.Length > 0 ? FromString(typeName, context) : None;
                 type = new CobType(eCobType.Function, tag: new FunctionSignature { ReturnType = returnType, Parameters = parameters });
             }
-            else if (context is StructType structType && (aliasType = structType.FindGenericType(typeName)) != null)
-                type = aliasType;
-            else if (context is TupleType tupleType && (aliasType = tupleType.FindGenericType(typeName)) != null)
-                type = aliasType;
             else
-                throw new Exception($"The typename '{typeName}' is not valid");
+            {
+                var dbgContext = context;
+                type = null!;
+                while (context != null && type == null)
+                {
+                    if (context is Module module)
+                    {
+                        TraitType? traitType;
+                        StructType? structType;
+                        TupleType? tupleType;
+                        DistinctType? distinctType;
+                        if ((traitType = module.FindTraitType(typeName)) != null)
+                            type = new CobType(eCobType.Trait, tag: traitType);
+                        else if ((structType = module.FindStructType(typeName)) != null)
+                            type = new CobType(eCobType.Struct, tag: structType);
+                        else if ((tupleType = module.FindTupleType(typeName)) != null)
+                            type = new CobType(eCobType.Tuple, tag: tupleType);
+                        else if ((distinctType = module.FindDistinctType(typeName)) != null)
+                            type = distinctType.SubType;
+                    }
+                    else if (context is StructType structType)
+                    {
+                        if ((aliasType = structType.FindGenericType(typeName)) != null)
+                            type = aliasType;
+                    }
+                    else if (context is TupleType tupleType)
+                    {
+                        if ((aliasType = tupleType.FindGenericType(typeName)) != null)
+                            type = aliasType;
+                    }
+
+                    context = context.Parent;
+                }
+
+                if (type == null)
+                    throw new Exception($"The typename '{typeName}' is not valid");
+            }
 
             if (bType != null)
             {
@@ -364,11 +409,11 @@ namespace Compiler.CodeGeneration.Artifacts
         }
 
         // TODO Wow, what a horrible implementation
-        public static bool TryParse(string typeName, out CobType result)
+        public static bool TryParse(string typeName, IScopeContext? context, out CobType result)
         {
             try
             {
-                result = FromString(typeName);
+                result = FromString(typeName, context);
                 return true;
             }
             catch
@@ -713,31 +758,6 @@ namespace Compiler.CodeGeneration.Artifacts
             // NOTE Immediate aliases should be functional as their type is directly encoded
 
             return false;
-        }
-
-        private readonly static Dictionary<string, CobType> Aliases = new();
-
-        public static bool TryAddAlias(string name, CobType type)
-        {
-            if (Aliases.ContainsKey(name))
-                return false;
-
-            Aliases.Add(name, type);
-            return true;
-        }
-
-        static CobType()
-        {
-            TryAddAlias("any", Any);
-            TryAddAlias("bool", Boolean);
-            TryAddAlias("int", Int);
-            TryAddAlias("uint", UInt);
-            TryAddAlias("float", Float);
-            TryAddAlias("error", Error);
-            TryAddAlias("nil", Nil);
-
-            TryAddAlias("char", Char);
-            //TryAddAlias("string", String);
         }
     }
 

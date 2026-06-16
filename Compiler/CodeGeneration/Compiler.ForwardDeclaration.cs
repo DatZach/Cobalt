@@ -37,18 +37,6 @@ namespace Compiler.CodeGeneration
             for (int i = 0; i < expressions.Count; ++i)
                 expressions[i].Accept(this);
 
-            //for (var phase = DeclPhase.Begin; phase < DeclPhase.Complete; ++phase)
-            //{
-            //    contextStack.Clear();
-            //    contextStack.Push(compiler.RootModule);
-
-            //    Phase = phase;
-
-            //    var expressions = expression.Expressions;
-            //    for (int i = 0; i < expressions.Count; ++i)
-            //        expressions[i].Accept(this);
-            //}
-
             return Unit.Value;
         }
 
@@ -224,9 +212,14 @@ namespace Compiler.CodeGeneration
             if (phase != DeclPhase.Types)
                 return Unit.Value;
 
-            var typeName = CobType.FromString(expression.TypeName);
-            if (!CobType.TryAddAlias(expression.Name, typeName))
+            if (CurrentModule.FindDistinctType(expression.Name) != null)
+            {
                 messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
+                return Unit.Value;
+            }
+
+            var typeName = CobType.FromString(expression.TypeName, CurrentModule);
+            CurrentModule.AllocateDistinctType(expression.Name, typeName);
 
             return Unit.Value;
         }
@@ -235,11 +228,13 @@ namespace Compiler.CodeGeneration
         {
             if (phase == DeclPhase.Types)
             {
-                var traitType = CurrentModule.AllocateTraitType(expression.Name);
-                var cobType = new CobType(eCobType.Trait, tag: traitType);
-
-                if (!CobType.TryAddAlias(expression.Name, cobType))
+                if (CurrentModule.FindTraitType(expression.Name) != null)
+                {
                     messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
+                    return Unit.Value;
+                }
+
+                CurrentModule.AllocateTraitType(expression.Name);
             }
             else if (phase > DeclPhase.Types)
             {
@@ -270,14 +265,16 @@ namespace Compiler.CodeGeneration
         {
             if (phase == DeclPhase.Types)
             {
+                if (CurrentModule.FindTupleType(expression.Name) != null)
+                {
+                    messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
+                    return Unit.Value;
+                }
+
                 var tupleType = CurrentModule.AllocateTupleType(expression.Name);
-                var cobType = new CobType(eCobType.Tuple, tag: tupleType);
 
                 foreach (var generic in expression.Generics)
                     tupleType.AttachGeneric(generic);
-
-                if (!CobType.TryAddAlias(expression.Name, cobType))
-                    messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
             }
             else if (phase > DeclPhase.Types)
             {
@@ -314,6 +311,12 @@ namespace Compiler.CodeGeneration
         {
             if (phase == DeclPhase.Types)
             {
+                if (CurrentModule.FindStructType(expression.Name) != null)
+                {
+                    messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
+                    return Unit.Value;
+                }
+
                 var structType = CurrentModule.AllocateStructType(expression.Name);
 
                 foreach (var generic in expression.Generics)
@@ -324,9 +327,6 @@ namespace Compiler.CodeGeneration
                     var traitType = CobType.FromString(traitTypeName);
                     structType.AttachTrait((TraitType)traitType.Tag);
                 }
-                
-                if (!CobType.TryAddAlias(expression.Name, new CobType(eCobType.Struct, tag: structType)))
-                    messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
 
                 if (expression.Name == "Array")
                     Intrinsics.Array = structType;
@@ -470,7 +470,8 @@ namespace Compiler.CodeGeneration
             var mutable = expression.Type == TokenType.Var;
             foreach (var decl in expression.Declarations)
             {
-                CurrentModule.AllocateGlobal(decl.Name, decl.Type, mutable);
+                var type = CobType.FromString(decl.TypeName, CurrentContext);
+                CurrentModule.AllocateGlobal(decl.Name, type, mutable);
             }
 
             return Unit.Value;

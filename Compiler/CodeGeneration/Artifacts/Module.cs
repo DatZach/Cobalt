@@ -17,6 +17,7 @@ namespace Compiler.CodeGeneration.Artifacts
         private readonly List<TraitType> traitTypes;
         private readonly List<TupleType> tupleTypes;
         private readonly List<StructType> structTypes;
+        private readonly List<DistinctType> distinctTypes;
         private readonly List<Function> functions;
         private readonly List<Variable> globals;
         private readonly Compiler compiler;
@@ -31,6 +32,7 @@ namespace Compiler.CodeGeneration.Artifacts
             traitTypes = new List<TraitType>();
             tupleTypes = new List<TupleType>();
             structTypes = new List<StructType>();
+            distinctTypes = new List<DistinctType>();
             functions = new List<Function>();
             globals = new List<Variable>();
 
@@ -100,6 +102,19 @@ namespace Compiler.CodeGeneration.Artifacts
         public StructType? FindStructType(string name)
         {
             return structTypes.FirstOrDefault(x => x.Name == name);
+        }
+
+        public DistinctType AllocateDistinctType(string name, CobType subType)
+        {
+            var distinctType = new DistinctType(name, subType);
+            distinctTypes.Add(distinctType);
+
+            return distinctType;
+        }
+
+        public DistinctType? FindDistinctType(string name)
+        {
+            return distinctTypes.FirstOrDefault(x => x.Name == name);
         }
 
         public Function AllocateFunction(

@@ -419,7 +419,7 @@ namespace Compiler.CodeGeneration
             {
                 var decl = expression.Declarations[i];
                 var mutable = expression.Type == TokenType.Var;
-                var type = decl.Type;
+                var type = CobType.FromString(decl.TypeName, CurrentContext);
 
                 Storage? rhs;
                 if (decl.Initializer != null)
@@ -427,7 +427,7 @@ namespace Compiler.CodeGeneration
                     rhs = decl.Initializer.Accept(this);
                     if (rhs == null)
                         messages.Add(Message.TypeMismatch, expression, "any", "none");
-                    else if (type != null && !CobType.IsCastable(rhs.Type, type))
+                    else if (type != eCobType.None && !CobType.IsCastable(rhs.Type, type))
                         messages.Add(Message.TypeMismatch, expression, type, rhs.Type);
                     else
                         type = rhs.Type;
@@ -435,8 +435,8 @@ namespace Compiler.CodeGeneration
                 else
                     rhs = null;
 
-                if ((decl.Type == null && decl.Initializer == null)
-                ||  type == null)
+                if ((decl.TypeName == null && decl.Initializer == null)
+                ||  type == eCobType.None)
                 {
                     messages.Add(Message.MalformedVarDeclaration, expression);
                     continue;
@@ -994,6 +994,7 @@ namespace Compiler.CodeGeneration
                 AssignmentRHS = null;
                 var lhs = expression.Left.Accept(this);
                 AssignmentRHS = prevAsnSrc;
+                var prevBinOpLHS = BinOpLHS;
                 BinOpLHS = lhs;
 
                 if (lhs?.Type.Tag is not IScopeContext context)
@@ -1021,7 +1022,7 @@ namespace Compiler.CodeGeneration
                 contextStack.Pop();
                 lhs?.Free();
 
-                BinOpLHS = null;
+                BinOpLHS = prevBinOpLHS;
                 return rhs;
             }
             else if (expression.Operator == TokenType.BitPack) // BitPack <<|
@@ -1193,6 +1194,7 @@ namespace Compiler.CodeGeneration
                 AssignmentRHS = null;
                 var lhs = implicitContext.Accept(this);
                 AssignmentRHS = prevAsnSrc;
+                var prevBinOpLHS = BinOpLHS;
                 BinOpLHS = lhs;
 
                 contextStack.Push((IScopeContext)lhs!.Type.Tag!);
@@ -1200,7 +1202,7 @@ namespace Compiler.CodeGeneration
                 contextStack.Pop();
 
                 lhs.Free();
-                BinOpLHS = null;
+                BinOpLHS = prevBinOpLHS;
 
                 return b;
             }
@@ -1453,7 +1455,7 @@ namespace Compiler.CodeGeneration
             if (expression.FunctionExpression is not IdentifierExpression ie)
                 return null;
             
-            if (!CobType.TryParse(ie.Value, out var castType)
+            if (!CobType.TryParse(ie.Value, CurrentContext, out var castType)
             ||  castType.Type == eCobType.Tuple
             ||  castType.Type == eCobType.Struct
             ||  castType.Type == eCobType.None)
@@ -1849,12 +1851,13 @@ namespace Compiler.CodeGeneration
 
             if (expression.Assignments != null)
             {
+                var prevBinOpLHS = BinOpLHS;
                 BinOpLHS = storage;
                 contextStack.Push(structType);
                 for (var i = 0; i < expression.Assignments.Count; ++i)
                     expression.Assignments[i].Accept(this);
                 contextStack.Pop();
-                BinOpLHS = null;
+                BinOpLHS = prevBinOpLHS;
             }
 
             return storage;
