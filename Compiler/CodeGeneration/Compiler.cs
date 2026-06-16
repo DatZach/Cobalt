@@ -867,7 +867,7 @@ namespace Compiler.CodeGeneration
                 // TODO Support T in function bodies to remove the hack below
                 var aType = lhs?.Type;
                 //var bType = CobType.FromString(rhs.Value);
-                var bType = rhs.Value == "T" ? CobType.U8 : CobType.FromString(rhs.Value); // HACK TODO THIS IS ENTIRELY INCORRECT
+                var bType = rhs.Value == "T" ? CobType.U8 : CobType.FromString(rhs.Value, CurrentContext); // HACK TODO THIS IS ENTIRELY INCORRECT
                 CobType cType;
 
                 if (aType?.Tag is TupleType tupleType)
@@ -1266,7 +1266,7 @@ namespace Compiler.CodeGeneration
 
             if (expression.RightSingle != null)
             {
-                var type = expression.RightSingle.Type;
+                var type = CobType.FromString(expression.RightSingle.TypeName, CurrentContext);
 
                 var c = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
 
@@ -1321,8 +1321,8 @@ namespace Compiler.CodeGeneration
 
                         type = value.Type;
                     }
-                    else if (branch.Type != null)
-                        type = branch.Type;
+                    else if (branch.TypeName != null)
+                        type = CobType.FromString(branch.TypeName, CurrentContext);
                     else
                     {
                         messages.Add(Message.IllegalPattern, branch.Token);

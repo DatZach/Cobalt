@@ -1,21 +1,19 @@
 ﻿using Compiler.Ast.Visitors;
-using Compiler.CodeGeneration;
 using Compiler.Lexer;
 using System.Diagnostics;
-using Compiler.CodeGeneration.Artifacts;
 
 namespace Compiler.Ast.Expressions
 {
     internal sealed class LensExpression : Expression
     {
-        public CobType ElementType { get; }
+        public string ElementTypeName { get; }
 
         public Expression Expression { get; }
 
-        public LensExpression(Token token, CobType elementType, Expression expression)
+        public LensExpression(Token token, string elementTypeName, Expression expression)
             : base(token)
         {
-            ElementType = elementType;
+            ElementTypeName = elementTypeName;
             Expression = expression;
         }
 

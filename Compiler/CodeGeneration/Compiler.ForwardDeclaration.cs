@@ -324,7 +324,7 @@ namespace Compiler.CodeGeneration
 
                 foreach (var traitTypeName in expression.TraitTypeNames)
                 {
-                    var traitType = CobType.FromString(traitTypeName);
+                    var traitType = CobType.FromString(traitTypeName, CurrentContext);
                     structType.AttachTrait((TraitType)traitType.Tag);
                 }
 

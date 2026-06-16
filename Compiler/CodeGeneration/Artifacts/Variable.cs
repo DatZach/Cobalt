@@ -234,9 +234,8 @@ namespace Compiler.CodeGeneration.Artifacts
             return left.Type == right;
         }
 
-        // TODO Deprecate context = null, it's simply a holdover which is now buggy
         // TODO Return CobType? and have consumers check if null for proper error reporting
-        public static CobType FromString(string? typeName, IScopeContext? context = null)
+        public static CobType FromString(string? typeName, IScopeContext? context)
         {
             if (string.IsNullOrEmpty(typeName))
                 return None;

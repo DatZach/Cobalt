@@ -41,7 +41,8 @@ namespace Compiler.Ast.Parselets.Statements
                 }
                 else
                 {
-                    symbolType = CobType.FromString(parser.ParseTypeName());
+                    // TODO Might not be right, null context is always sketchy
+                    symbolType = CobType.FromString(parser.ParseTypeName(), null);
                     functionSignature = null;
                 }
             }

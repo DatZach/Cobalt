@@ -1,6 +1,4 @@
 ﻿using Compiler.Ast.Expressions;
-using Compiler.CodeGeneration;
-using Compiler.CodeGeneration.Artifacts;
 using Compiler.Lexer;
 
 namespace Compiler.Ast.Parselets
@@ -9,10 +7,10 @@ namespace Compiler.Ast.Parselets
     {
         public Expression Parse(Parser parser, Token token)
         {
-            var elementType = CobType.FromString(parser.ParseTypeName());
+            var elementTypeName = parser.ParseTypeName();
             var expression = parser.ParseExpression();
 
-            return new LensExpression(token, elementType, expression);
+            return new LensExpression(token, elementTypeName, expression);
         }
     }
 }
