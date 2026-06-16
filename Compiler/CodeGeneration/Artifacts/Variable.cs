@@ -15,7 +15,7 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public object? Value { get; set; }
 
-        public Variable[] StructValue
+        public Variable[] RecordValue
         {
             get => Value as Variable[] ?? throw new InvalidDataException();
             set => Value = value;
@@ -277,7 +277,7 @@ namespace Compiler.CodeGeneration.Artifacts
             {
                 var elementType = FromString(typeName[..^2], context);
                 //type = new CobType(eCobType.Array, elementType: elementType);
-                var tag = Intrinsics.Array.FindConcretizedStruct(elementType) ?? Intrinsics.Array.AllocateConcretizedStruct(elementType);
+                var tag = Intrinsics.Array.FindConcretizedRecord(elementType) ?? Intrinsics.Array.AllocateConcretizedRecord(elementType);
 
                 return new CobType(eCobType.Struct, tag: tag);
             }
@@ -350,26 +350,18 @@ namespace Compiler.CodeGeneration.Artifacts
                     if (context is Module module)
                     {
                         TraitType? traitType;
-                        StructType? structType;
-                        TupleType? tupleType;
+                        RecordType? recordType;
                         DistinctType? distinctType;
                         if ((traitType = module.FindTraitType(typeName)) != null)
                             type = new CobType(eCobType.Trait, tag: traitType);
-                        else if ((structType = module.FindStructType(typeName)) != null)
-                            type = new CobType(eCobType.Struct, tag: structType);
-                        else if ((tupleType = module.FindTupleType(typeName)) != null)
-                            type = new CobType(eCobType.Tuple, tag: tupleType);
+                        else if ((recordType = module.FindRecordType(typeName)) != null)
+                            type = recordType.ThisType;
                         else if ((distinctType = module.FindDistinctType(typeName)) != null)
                             type = distinctType.SubType;
                     }
-                    else if (context is StructType structType)
+                    else if (context is RecordType recordType)
                     {
-                        if ((aliasType = structType.FindGenericType(typeName)) != null)
-                            type = aliasType;
-                    }
-                    else if (context is TupleType tupleType)
-                    {
-                        if ((aliasType = tupleType.FindGenericType(typeName)) != null)
+                        if ((aliasType = recordType.FindGenericType(typeName)) != null)
                             type = aliasType;
                     }
 
@@ -382,16 +374,11 @@ namespace Compiler.CodeGeneration.Artifacts
 
             if (bType != null)
             {
-                if (type.Tag is TupleType tupleType)
+                if (type.Tag is RecordType recordType)
                 {
                     // TODO Might be better to just merge these methods into a single one
-                    var tag = tupleType.FindConcretizedTuple(bType) ?? tupleType.AllocateConcretizedTuple(bType);
-                    type = new CobType(eCobType.Tuple, tag: tag);
-                } 
-                else if (type.Tag is StructType structType)
-                {
-                    var tag = structType.FindConcretizedStruct(bType) ?? structType.AllocateConcretizedStruct(bType);
-                    type = new CobType(eCobType.Struct, tag: tag);
+                    var tag = recordType.FindConcretizedRecord(bType) ?? recordType.AllocateConcretizedRecord(bType);
+                    type = tag.ThisType;
                 }
                 else
                     throw new Exception($"The typename '{typeName}' is not valid");
@@ -431,15 +418,10 @@ namespace Compiler.CodeGeneration.Artifacts
                 return bType;
             else if (this == eCobType.Union)
                 return new CobType(eCobType.Union, unionedTypes: UnionedTypes.Select(x => x.ToConcreteType(bType)).ToList());
-            else if (Tag is TupleType tupleType && tupleType.IsGeneric)
+            else if (Tag is RecordType recordType && recordType.IsGeneric)
             {
-                var tag = tupleType.FindConcretizedTuple(bType) ?? tupleType.AllocateConcretizedTuple(bType);
-                return new CobType(Type, tag: tag);
-            }
-            else if (Tag is StructType structType && structType.IsGeneric)
-            {
-                var tag = structType.FindConcretizedStruct(bType) ?? structType.AllocateConcretizedStruct(bType);
-                return new CobType(Type, tag: tag);
+                var tag = recordType.FindConcretizedRecord(bType) ?? recordType.AllocateConcretizedRecord(bType);
+                return tag.ThisType; // new CobType(Type, tag: tag);
             }
             else
                 return this;
@@ -537,11 +519,11 @@ namespace Compiler.CodeGeneration.Artifacts
                         break;
                     case eCobType.Struct:
                         // ArtifactIndex = SSSS SSSS SSSS
-                        result |= ((uint)artifact.StructTypes.IndexOf((StructType)type.Tag!) & 0xFFFFFF) << i; i += 12;
+                        result |= ((uint)artifact.RecordTypes.IndexOf((RecordType)type.Tag!) & 0xFFFFFF) << i; i += 12;
                         break;
                     case eCobType.Tuple:
                         // ArtifactIndex = SSSS SSSS SSSS
-                        result |= ((uint)artifact.TupleTypes.IndexOf((TupleType)type.Tag!) & 0xFFFFFF) << i; i += 12;
+                        result |= ((uint)artifact.RecordTypes.IndexOf((RecordType)type.Tag!) & 0xFFFFFF) << i; i += 12;
                         break;
                     case eCobType.Function:
                         // ArtifactIndex = SSSS SSSS SSSS
@@ -613,14 +595,14 @@ namespace Compiler.CodeGeneration.Artifacts
                     {
                         // ArtifactIndex = SSSS SSSS SSSS
                         var idx = (int)((ulong)(value >> i) & 0xFFFFFF); i += 12;
-                        var tag = artifact.StructTypes[idx];
+                        var tag = artifact.RecordTypes[idx];
                         return new CobType(type, tag: tag);
                     }
                     case eCobType.Tuple:
                     {
                         // ArtifactIndex = SSSS SSSS SSSS
                         var idx = (int)((ulong)(value >> i) & 0xFFFFFF); i += 12;
-                        var tag = artifact.TupleTypes[idx];
+                        var tag = artifact.RecordTypes[idx];
                         return new CobType(type, tag: tag);
                     }
                     case eCobType.Function:
@@ -735,15 +717,10 @@ namespace Compiler.CodeGeneration.Artifacts
                 return true;
             }
 
-            if (srcType.Type == eCobType.Struct && dstType.Type == eCobType.Trait)
+            if (srcType.Type is eCobType.Tuple or eCobType.Struct && dstType.Type == eCobType.Trait)
             {
-                var structType = srcType.Tag as StructType;
-                return structType?.HasTrait(dstType.Tag as TraitType) ?? false;
-            }
-            else if (srcType.Type == eCobType.Tuple && dstType.Type == eCobType.Trait)
-            {
-                var tupleType = srcType.Tag as TupleType;
-                return tupleType?.HasTrait(dstType.Tag as TraitType) ?? false;
+                var recordType = srcType.Tag as RecordType;
+                return recordType?.HasTrait(dstType.Tag as TraitType) ?? false;
             }
 
             if (srcType == eCobType.Error && dstType.HasErrorFlag)
@@ -771,7 +748,7 @@ namespace Compiler.CodeGeneration.Artifacts
         Boolean,
         Array, // TODO Remove
         Trait,
-        Struct,
+        Struct, // TODO Merge Struct+Tuple -> Record?
         Tuple,
         Lens,
         Function,

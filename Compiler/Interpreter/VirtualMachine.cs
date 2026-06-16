@@ -45,10 +45,8 @@ namespace Compiler.Interpreter
                         {
                             var virtFunc = ReadOperand(inst.A!).Type.TagFunction!;
                             var @this = ReadOperand(inst.D![0]).Type.Tag;
-                            if (@this is StructType structType)
-                                callee = structType.FindVirtualFunction(virtFunc)!;
-                            else if (@this is TupleType tupleType)
-                                callee = tupleType.FindVirtualFunction(virtFunc)!;
+                            if (@this is RecordType recordType)
+                                callee = recordType.FindVirtualFunction(virtFunc)!;
                             else
                                 throw new InvalidOperationException();
                         }
@@ -101,10 +99,10 @@ namespace Compiler.Interpreter
                             if (obj.Value is byte[])
                                 fieldValue = new Variable("$imm", CobType.U64, false, obj.BufferValue.Length);
                             else
-                                fieldValue = obj.StructValue[0];
+                                fieldValue = obj.RecordValue[0];
                         }
                         else
-                            fieldValue = obj.StructValue[fieldIdx];
+                            fieldValue = obj.RecordValue[fieldIdx];
 
                         WriteOperand(inst.A!, fieldValue);
                         break;
@@ -114,7 +112,7 @@ namespace Compiler.Interpreter
                         var obj = ReadOperand(inst.A!);
                         var fieldIdx = inst.B!.Value;
                         var value = ReadOperand(inst.C!);
-                        obj.StructValue[fieldIdx] = value;
+                        obj.RecordValue[fieldIdx] = value;
                         break;
                     }
                     case Opcode.GetElem:
@@ -165,10 +163,8 @@ namespace Compiler.Interpreter
                     {
                         var type = ReadOperand(inst.B!).Type;
                         Variable obj;
-                        if (type.Tag is TupleType tupleType)
-                            obj = tupleType.ToVariable();
-                        else if (type.Tag is StructType structType)
-                            obj = structType.ToVariable();
+                        if (type.Tag is RecordType recordType)
+                            obj = recordType.ToVariable();
                         else
                             throw new InvalidOperationException($"Cannot allocate type {type.Tag?.GetType().Name}");
 

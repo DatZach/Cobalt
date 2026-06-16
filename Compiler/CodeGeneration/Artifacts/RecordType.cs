@@ -3,47 +3,53 @@ using System.Diagnostics;
 
 namespace Compiler.CodeGeneration.Artifacts
 {
-    [DebuggerDisplay("Tuple '{Name}'")]
-    internal sealed class TupleType : IScopeContext, ISymbol
+    [DebuggerDisplay("Record {Type} '{Name}'")]
+    internal sealed class RecordType : IScopeContext, ISymbol
     {
         public string Name { get; }
+
+        public eRecordType Type { get; }
 
         public IScopeContext Parent { get; }
 
         public Indexer? Indexer { get; private set; }
 
-        public TupleType? HACK_PendingSuperType => pendingSuperType;
-
         public bool IsGeneric => generics.Count > 0;
 
-        private TupleType? pendingSuperType;
+        public CobType ThisType => new (Type == eRecordType.Struct ? eCobType.Struct : eCobType.Tuple, tag: this);
+
+        // TODO  HACK Fix this nonsense
+        private RecordType? pendingSuperType;
         private CobType? pendingBType;
+        public RecordType? HACK_PendingSuperType => pendingSuperType;
 
         private readonly List<GenericDefinition> generics;
         private readonly List<TraitType> traits;
+        private readonly List<Function> factories;
         private readonly List<Function> functions;
         private readonly List<Field> fields;
 
         private readonly Compiler compiler;
 
-        public TupleType(string name, IScopeContext parent, Compiler compiler)
+        public RecordType(string name, eRecordType type, IScopeContext parent, Compiler compiler)
         {
             Name = name;
+            Type = type;
             Parent = parent;
             this.compiler = compiler;
 
             generics = new List<GenericDefinition>();
             traits = new List<TraitType>();
-            functions = new List<Function>(4);
             fields = new List<Field>(4);
+            factories = new List<Function>(4);
+            functions = new List<Function>(4);
         }
 
         public Variable ToVariable()
         {
-            var type = new CobType(eCobType.Tuple, tag: this);
-            var variable = new Variable("$tuple", type, false)
+            var variable = new Variable("$record", ThisType, false)
             {
-                StructValue = fields.Select(x => new Variable(x.Name, x.Type)).ToArray()
+                RecordValue = fields.Select(x => new Variable(x.Name, x.Type)).ToArray()
             };
 
             return variable;
@@ -64,13 +70,31 @@ namespace Compiler.CodeGeneration.Artifacts
             return traitType != null && traits.Contains(traitType);
         }
 
+        public Function AllocateFactory(string name, IReadOnlyList<Function.Parameter> parameters)
+        {
+            // TODO Not sure that this should be enforced
+            if (Type != eRecordType.Struct)
+                throw new InvalidOperationException("Only structs may allocate factories");
+
+            var function = new Function(name, this, compiler, CallingConvention.Default, parameters, ThisType);
+            factories.Add(function);
+            compiler.Functions.Add(function);
+
+            return function;
+        }
+
+        public Function? FindFactory(string name)
+        {
+            return factories.FirstOrDefault(x => x.Name == name);
+        }
+
         public Function AllocateFunction(
             string name,
             IReadOnlyList<Function.Parameter> parameters,
             CobType returnType
         ) {
             var lParameters = new List<Function.Parameter>();
-            lParameters.Add(new Function.Parameter("this", new CobType(eCobType.Tuple, tag: this), false));
+            lParameters.Add(new Function.Parameter("this", ThisType, false));
             lParameters.AddRange(parameters);
 
             var function = new Function(name, this, compiler, CallingConvention.ThisCall, lParameters, returnType);
@@ -90,6 +114,14 @@ namespace Compiler.CodeGeneration.Artifacts
             var key = virtFunc.Name;
             var result = FindFunction(key);
             return result;
+        }
+
+        public FunctionCandidates? FindFunctionCandidates(string name)
+        {
+            var candidates = functions.Where(x => x.Name == name).ToList();
+            return candidates.Count > 0
+                ? new FunctionCandidates(candidates)
+                : null;
         }
 
         public Field AllocateField(string name, CobType type, bool hasGetter, bool hasSetter)
@@ -140,7 +172,7 @@ namespace Compiler.CodeGeneration.Artifacts
             return new CobType(eCobType.Generic);
         }
 
-        public TupleType? FindConcretizedTuple(CobType bType)
+        public RecordType? FindConcretizedRecord(CobType bType)
         {
             if (bType == eCobType.Generic)
                 return this;
@@ -151,10 +183,10 @@ namespace Compiler.CodeGeneration.Artifacts
 
             var concreteName = $"{Name}`{bType}";
 
-            return module.FindTupleType(concreteName);
+            return module.FindRecordType(concreteName);
         }
 
-        public TupleType AllocateConcretizedTuple(CobType bType)
+        public RecordType AllocateConcretizedRecord(CobType bType)
         {
             var module = Parent as Module;
             if (module == null)
@@ -162,16 +194,16 @@ namespace Compiler.CodeGeneration.Artifacts
 
             var concreteName = $"{Name}`{bType}";
 
-            var concreteTupleType = module.AllocateTupleType(concreteName);
+            var concreteRecordType = module.AllocateRecordType(concreteName, Type);
 
             // HACK Really should be able to do this in a single pass when algebraic type resolution is implemented
-            concreteTupleType.pendingSuperType = this;
-            concreteTupleType.pendingBType = bType;
+            concreteRecordType.pendingSuperType = this;
+            concreteRecordType.pendingBType = bType;
 
-            return concreteTupleType;
+            return concreteRecordType;
         }
 
-        public bool PopulateConcretizedTupleIfRequired()
+        public bool PopulateConcretizedRecordIfRequired()
         {
             if (pendingSuperType == null || pendingBType == null)
                 return false;
@@ -179,6 +211,15 @@ namespace Compiler.CodeGeneration.Artifacts
             foreach (var trait in pendingSuperType.traits)
             {
                 AttachTrait(trait);
+            }
+
+            foreach (var x in pendingSuperType.factories)
+            {
+                var parameters = x.Parameters.Select(
+                    y => new Function.Parameter(y.Name, y.Type.ToConcreteType(pendingBType), y.IsSpread)
+                ).ToList();
+
+                AllocateFactory(x.Name, parameters);
             }
 
             foreach (var x in pendingSuperType.functions)
@@ -213,24 +254,34 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public ISymbol? FindSymbol(string name)
         {
+            if (name == "This")
+                return this;
+
             Field? field;
-            if ((field = fields.FirstOrDefault(x => x.Name == name)) != null)
+            if ((field = FindField(name)) != null)
                 return field;
 
-            Function? function;
-            if ((function = functions.FirstOrDefault(x => x.Name == name)) != null)
-                return function;
+            Function? factory;
+            if ((factory = FindFactory(name)) != null)
+                return factory;
+
+            FunctionCandidates? candidates;
+            if ((candidates = FindFunctionCandidates(name)) != null)
+                return candidates;
 
             return null;
         }
 
         public Storage? EmitGetForSymbol(ISymbol symbol)
         {
+            if (symbol == this)
+                return new Storage(ThisType, Operand.None);
+
             if (symbol is Field field)
             {
                 var idx = fields.IndexOf(field);
                 var fieldType = field.Type;
-
+                
                 var @this = compiler.BinOpLHS == null ? Operand.This : compiler.BinOpLHS.Operand;
 
                 if (field.Getter != null)
@@ -268,6 +319,14 @@ namespace Compiler.CodeGeneration.Artifacts
                 );
             }
 
+            if (symbol is FunctionCandidates candidates)
+            {
+                return new Storage(
+                    new CobType(eCobType.Function, tag: candidates),
+                    Operand.None
+                );
+            }
+
             return null;
         }
 
@@ -275,6 +334,7 @@ namespace Compiler.CodeGeneration.Artifacts
         {
             if (symbol is Field field)
             {
+                // TODO Setter
                 var idx = fields.IndexOf(field);
                 var @this = compiler.BinOpLHS == null ? Operand.This : compiler.BinOpLHS.Operand;
                 
@@ -290,9 +350,26 @@ namespace Compiler.CodeGeneration.Artifacts
             return false;
         }
 
-        public bool IsVisibleTo(IScopeContext context) => Compiler.IsSymbolVisible(context, Parent, Name);
+        public bool IsVisibleTo(IScopeContext? context) => Compiler.IsSymbolVisible(context, Parent, Name);
 
         public override string ToString() => Name;
+    }
+
+    internal enum eRecordType
+    {
+        Struct,
+        Tuple
+    }
+
+    internal sealed class Indexer
+    {
+        public CobType KeyType { get; init; }
+
+        public CobType ReturnType { get; init; }
+
+        public Function? Getter { get; init; }
+
+        public Function? Setter { get; init; }
     }
 
     internal sealed record Field : Variable

@@ -44,10 +44,8 @@ namespace Compiler.CodeGeneration.Architectures
                 Serialize(writer, module);
             else if (source is TraitType traitType)
                 Serialize(writer, traitType);
-            else if (source is TupleType tupleType)
-                Serialize(writer, tupleType);
-            else if (source is StructType structType)
-                Serialize(writer, structType);
+            else if (source is RecordType recordType)
+                Serialize(writer, recordType);
             else if (source is Function function)
                 Serialize(writer, function);
             else if (source is Function.Parameter parameter)
@@ -76,8 +74,7 @@ namespace Compiler.CodeGeneration.Architectures
             writer.WriteSection(AsMagic('E', 'P', 'R', 'T'), writer => { writer.WriteList(this, artifact.Exports); });
             writer.WriteSection(AsMagic('M', 'O', 'D', 'U'), writer => { writer.WriteList(this, artifact.Modules); });
             writer.WriteSection(AsMagic('T', 'R', 'A', 'I'), writer => { writer.WriteList(this, artifact.TraitTypes); });
-            writer.WriteSection(AsMagic('T', 'U', 'P', 'L'), writer => { writer.WriteList(this, artifact.TupleTypes); });
-            writer.WriteSection(AsMagic('S', 'T', 'R', 'C'), writer => { writer.WriteList(this, artifact.StructTypes); });
+            writer.WriteSection(AsMagic('R', 'E', 'C', 'D'), writer => { writer.WriteList(this, artifact.RecordTypes); });
             writer.WriteSection(AsMagic('F', 'U', 'N', 'C'), writer => { writer.WriteList(this, artifact.Functions); });
             writer.WriteSection(AsMagic('G', 'L', 'O', 'B'), writer => { writer.WriteList(this, artifact.Globals); });
             writer.WriteSection(AsMagic('T', 'Y', 'P', 'E'), writer => { writer.WriteList(this, artifact.Types); });
@@ -109,8 +106,7 @@ namespace Compiler.CodeGeneration.Architectures
         {
             var modules = FieldOf<IReadOnlyList<object>>(module, "modules");
             var traitTypes = FieldOf<IReadOnlyList<object>>(module, "traitTypes");
-            var tupleTypes = FieldOf<IReadOnlyList<object>>(module, "tupleTypes");
-            var structTypes = FieldOf<IReadOnlyList<object>>(module, "structTypes");
+            var recordTypes = FieldOf<IReadOnlyList<object>>(module, "recordTypes");
             var functions = FieldOf<IReadOnlyList<object>>(module, "functions");
             var globals = FieldOf<IReadOnlyList<object>>(module, "globals");
 
@@ -119,8 +115,7 @@ namespace Compiler.CodeGeneration.Architectures
             writer.Write7BitEncodedInt(artifact.Functions.IndexOf(module.InitializerFunction));
             writer.WriteLookupList(modules, artifact.Modules);
             writer.WriteLookupList(traitTypes, artifact.TraitTypes);
-            writer.WriteLookupList(tupleTypes, artifact.TupleTypes);
-            writer.WriteLookupList(structTypes, artifact.StructTypes);
+            writer.WriteLookupList(recordTypes, artifact.RecordTypes);
             writer.WriteLookupList(functions, artifact.Functions);
             writer.WriteLookupList(globals, artifact.Globals);
         }
@@ -132,61 +127,27 @@ namespace Compiler.CodeGeneration.Architectures
             writer.WriteLookupList(traitType.Functions, artifact.Functions);
         }
 
-        private void Serialize(BinaryWriter writer, TupleType tupleType)
+        private void Serialize(BinaryWriter writer, RecordType recordType)
         {
-            var generics = FieldOf<IReadOnlyList<GenericDefinition>>(tupleType, "generics");
-            var traits = FieldOf<IReadOnlyList<TraitType>>(tupleType, "traits");
-            var functions = FieldOf<IReadOnlyList<Function>>(tupleType, "functions");
-            var fields = FieldOf<IReadOnlyList<Field>>(tupleType, "fields");
+            var generics = FieldOf<IReadOnlyList<GenericDefinition>>(recordType, "generics");
+            var traits = FieldOf<IReadOnlyList<TraitType>>(recordType, "traits");
+            var factories = FieldOf<IReadOnlyList<Function>>(recordType, "factories");
+            var functions = FieldOf<IReadOnlyList<Function>>(recordType, "functions");
+            var fields = FieldOf<IReadOnlyList<Field>>(recordType, "fields");
 
-            writer.Write(AsFlags(tupleType.Indexer != null, generics.Count > 0, traits.Count > 0, functions.Count > 0, fields.Count > 0));
-            writer.Write(tupleType.Name);
-            WriteScopeParentIndex(writer, tupleType.Parent);
+            writer.Write(AsFlags(recordType.Indexer != null, generics.Count > 0, traits.Count > 0, factories.Count > 0, functions.Count > 0, fields.Count > 0, recordType.Type == eRecordType.Struct));
+            writer.Write(recordType.Name);
+            WriteScopeParentIndex(writer, recordType.Parent);
 
-            if (tupleType.Indexer != null)
+            if (recordType.Indexer != null)
             {
-                writer.Write(AsFlags(tupleType.Indexer.Getter != null, tupleType.Indexer.Setter != null));
-                Serialize(writer, tupleType.Indexer.KeyType);
-                Serialize(writer, tupleType.Indexer.ReturnType);
-                if (tupleType.Indexer.Getter != null)
-                    writer.Write7BitEncodedInt(artifact.Functions.IndexOf(tupleType.Indexer.Getter));
-                if (tupleType.Indexer.Setter != null)
-                    writer.Write7BitEncodedInt(artifact.Functions.IndexOf(tupleType.Indexer.Setter));
-            }
-
-            writer.WriteList(generics, x =>
-            {
-                writer.Write(AsFlags(x.ConstraintTypeName != null));
-                writer.Write(x.Name);
-                if (x.ConstraintTypeName != null)
-                    writer.Write(x.ConstraintTypeName);
-            });
-            writer.WriteLookupList(traits, artifact.TraitTypes);
-            writer.WriteLookupList(functions, artifact.Functions);
-            writer.WriteList(this, fields);
-        }
-
-        private void Serialize(BinaryWriter writer, StructType structType)
-        {
-            var generics = FieldOf<IReadOnlyList<GenericDefinition>>(structType, "generics");
-            var traits = FieldOf<IReadOnlyList<TraitType>>(structType, "traits");
-            var factories = FieldOf<IReadOnlyList<Function>>(structType, "factories");
-            var functions = FieldOf<IReadOnlyList<Function>>(structType, "functions");
-            var fields = FieldOf<IReadOnlyList<Field>>(structType, "fields");
-
-            writer.Write(AsFlags(structType.Indexer != null, generics.Count > 0, traits.Count > 0, factories.Count > 0, functions.Count > 0, fields.Count > 0));
-            writer.Write(structType.Name);
-            WriteScopeParentIndex(writer, structType.Parent);
-
-            if (structType.Indexer != null)
-            {
-                writer.Write(AsFlags(structType.Indexer.Getter != null, structType.Indexer.Setter != null));
-                Serialize(writer, structType.Indexer.KeyType);
-                Serialize(writer, structType.Indexer.ReturnType);
-                if (structType.Indexer.Getter != null)
-                    writer.Write(artifact.Functions.IndexOf(structType.Indexer.Getter));
-                if (structType.Indexer.Setter != null)
-                    writer.Write(artifact.Functions.IndexOf(structType.Indexer.Setter));
+                writer.Write(AsFlags(recordType.Indexer.Getter != null, recordType.Indexer.Setter != null));
+                Serialize(writer, recordType.Indexer.KeyType);
+                Serialize(writer, recordType.Indexer.ReturnType);
+                if (recordType.Indexer.Getter != null)
+                    writer.Write(artifact.Functions.IndexOf(recordType.Indexer.Getter));
+                if (recordType.Indexer.Setter != null)
+                    writer.Write(artifact.Functions.IndexOf(recordType.Indexer.Setter));
             }
             writer.WriteList(generics, x =>
             {
@@ -314,20 +275,15 @@ namespace Compiler.CodeGeneration.Architectures
                 writer.Write((byte)2);
                 writer.Write7BitEncodedInt(artifact.Modules.IndexOf((Module)value));
             }
-            else if (value is StructType)
+            else if (value is RecordType)
             {
                 writer.Write((byte)3);
-                writer.Write7BitEncodedInt(artifact.StructTypes.IndexOf((StructType)value));
+                writer.Write7BitEncodedInt(artifact.RecordTypes.IndexOf((RecordType)value));
             }
             else if (value is TraitType)
             {
                 writer.Write((byte)4);
                 writer.Write7BitEncodedInt(artifact.TraitTypes.IndexOf((TraitType)value));
-            }
-            else if (value is TupleType)
-            {
-                writer.Write((byte)5);
-                writer.Write7BitEncodedInt(artifact.TupleTypes.IndexOf((TupleType)value));
             }
             else
                 writer.Write((byte)0);

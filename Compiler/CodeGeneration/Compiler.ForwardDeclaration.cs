@@ -265,20 +265,20 @@ namespace Compiler.CodeGeneration
         {
             if (phase == DeclPhase.Types)
             {
-                if (CurrentModule.FindTupleType(expression.Name) != null)
+                if (CurrentModule.FindRecordType(expression.Name) != null)
                 {
                     messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
                     return Unit.Value;
                 }
 
-                var tupleType = CurrentModule.AllocateTupleType(expression.Name);
+                var tupleType = CurrentModule.AllocateRecordType(expression.Name, eRecordType.Tuple);
 
                 foreach (var generic in expression.Generics)
                     tupleType.AttachGeneric(generic);
             }
             else if (phase > DeclPhase.Types)
             {
-                var tupleType = CurrentModule.FindTupleType(expression.Name)!;
+                var tupleType = CurrentModule.FindRecordType(expression.Name)!;
                 contextStack.Push(tupleType);
                 
                 for (var i = 0; i < expression.Functions.Count; ++i)
@@ -311,13 +311,13 @@ namespace Compiler.CodeGeneration
         {
             if (phase == DeclPhase.Types)
             {
-                if (CurrentModule.FindStructType(expression.Name) != null)
+                if (CurrentModule.FindRecordType(expression.Name) != null)
                 {
                     messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
                     return Unit.Value;
                 }
 
-                var structType = CurrentModule.AllocateStructType(expression.Name);
+                var structType = CurrentModule.AllocateRecordType(expression.Name, eRecordType.Struct);
 
                 foreach (var generic in expression.Generics)
                     structType.AttachGeneric(generic);
@@ -333,7 +333,7 @@ namespace Compiler.CodeGeneration
             }
             else if (phase > DeclPhase.Types)
             {
-                var structType = CurrentModule.FindStructType(expression.Name)!;
+                var structType = CurrentModule.FindRecordType(expression.Name)!;
                 contextStack.Push(structType);
 
                 for (var i = 0; i < expression.Factories.Count; ++i)
@@ -374,9 +374,9 @@ namespace Compiler.CodeGeneration
                 x => new Function.Parameter(x.Name, CobType.FromString(x.TypeName, CurrentContext), x.IsSpread, x.DefaultValue)
             ).ToList();
 
-            if (CurrentContext is StructType structType)
+            if (CurrentContext is RecordType recordType)
             {
-                structType.AllocateFactory(expression.Name, parameters);
+                recordType.AllocateFactory(expression.Name, parameters);
             }
             else
                 messages.Add(Message.CannotDeclareSymbolHere, expression);
@@ -403,21 +403,13 @@ namespace Compiler.CodeGeneration
 
                 traitType.AllocateFunction(expression.Name, parameters, returnType);
             }
-            else if (CurrentContext is TupleType tupleType)
+            else if (CurrentContext is RecordType recordType)
             {
                 if (expression.CallingConvention != CallingConvention.Default
                 &&  expression.CallingConvention != CallingConvention.ThisCall)
                     messages.Add(Message.IllegalCallingConvention, expression, expression.CallingConvention);
 
-                tupleType.AllocateFunction(expression.Name, parameters, returnType);
-            }
-            else if (CurrentContext is StructType structType)
-            {
-                if (expression.CallingConvention != CallingConvention.Default
-                &&  expression.CallingConvention != CallingConvention.ThisCall)
-                    messages.Add(Message.IllegalCallingConvention, expression, expression.CallingConvention);
-
-                structType.AllocateFunction(expression.Name, parameters, returnType);
+                recordType.AllocateFunction(expression.Name, parameters, returnType);
             }
             else if (CurrentContext is Module module)
             {
@@ -443,10 +435,8 @@ namespace Compiler.CodeGeneration
                 if (expression.Field != null)
                 {
                     var fieldType = CobType.FromString(expression.Field.TypeName, CurrentContext);
-                    if (context is StructType structType)
-                        structType.AllocateField(expression.Field.Name, fieldType, expression.Field.GetterExpression != null, expression.Field.SetterExpression != null);
-                    else if (context is TupleType tupleType)
-                        tupleType.AllocateField(expression.Field.Name, fieldType, expression.Field.GetterExpression != null, expression.Field.SetterExpression != null);
+                    if (context is RecordType recordType)
+                        recordType.AllocateField(expression.Field.Name, fieldType, expression.Field.GetterExpression != null, expression.Field.SetterExpression != null);
                     else
                         messages.Add(Message.CannotDeclareSymbolHere, expression);
                 }

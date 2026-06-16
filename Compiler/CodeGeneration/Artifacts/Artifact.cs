@@ -12,9 +12,7 @@
 
         public List<TraitType> TraitTypes { get; }
 
-        public List<TupleType> TupleTypes { get; }
-
-        public List<StructType> StructTypes { get; }
+        public List<RecordType> RecordTypes { get; }
 
         public List<Function> Functions { get; }
 
@@ -31,8 +29,7 @@
             Exports = new List<Export>();
             Modules = new List<Module>();
             TraitTypes = new List<TraitType>();
-            TupleTypes = new List<TupleType>();
-            StructTypes = new List<StructType>();
+            RecordTypes = new List<RecordType>();
             Functions = new List<Function>();
             Globals = new List<Variable>();
             Types = new List<CobType>();

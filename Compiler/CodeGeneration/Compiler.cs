@@ -1,5 +1,4 @@
-﻿using System.Collections;
-using Compiler.Ast;
+﻿using Compiler.Ast;
 using Compiler.Ast.Expressions;
 using Compiler.Ast.Expressions.Statements;
 using Compiler.Ast.Visitors;
@@ -23,9 +22,7 @@ namespace Compiler.CodeGeneration
 
         public List<TraitType> TraitTypes => artifact.TraitTypes;
 
-        public List<TupleType> TupleTypes => artifact.TupleTypes;
-
-        public List<StructType> StructTypes => artifact.StructTypes;
+        public List<RecordType> RecordTypes => artifact.RecordTypes;
 
         public List<Function> Functions => artifact.Functions;
 
@@ -142,7 +139,7 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(TupleDeclStatement expression)
         {
-            var tupleType = CurrentModule.FindTupleType(expression.Name)!;
+            var tupleType = CurrentModule.FindRecordType(expression.Name)!;
             if (tupleType.IsGeneric)
             {
                 genericTypeAstReferences.Add(new GenericTypeAstReference(
@@ -218,7 +215,7 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(StructDeclStatement expression)
         {
-            var structType = CurrentModule.FindStructType(expression.Name)!;
+            var structType = CurrentModule.FindRecordType(expression.Name)!;
             if (structType.IsGeneric)
             {
                 genericTypeAstReferences.Add(new GenericTypeAstReference(
@@ -298,8 +295,8 @@ namespace Compiler.CodeGeneration
         public Storage? Visit(FactoryDeclStatement expression)
         {
             Function function;
-            if (CurrentContext is StructType structType)
-                function = structType.FindFactory(expression.Name)!;
+            if (CurrentContext is RecordType recordType)
+                function = recordType.FindFactory(expression.Name)!;
             else
                 throw new InvalidOperationException(); // TODO ??
 
@@ -324,11 +321,10 @@ namespace Compiler.CodeGeneration
             }
 
             // TODO Make a clean API for this
+            // TODO Also, record types have function candidates
             Function function;
-            if (CurrentContext is StructType structType)
-                function = structType.FindFunction(expression.Name)!;
-            else if (CurrentContext is TupleType tupleType)
-                function = tupleType.FindFunction(expression.Name)!;
+            if (CurrentContext is RecordType recordType)
+                function = recordType.FindFunction(expression.Name)!;
             else
             {
                 var candidates = CurrentModule.FindFunctionCandidates(expression.Name)!;
@@ -378,10 +374,8 @@ namespace Compiler.CodeGeneration
             if (expression.Field != null)
             {
                 Field? field;
-                if (context is StructType structType)
-                    field = structType.FindField(expression.Field.Name);
-                else if (context is TupleType tupleType)
-                    field = tupleType.FindField(expression.Field.Name);
+                if (context is RecordType recordType)
+                    field = recordType.FindField(expression.Field.Name);
                 else
                     field = null;
 
@@ -548,17 +542,11 @@ namespace Compiler.CodeGeneration
                 }
 
                 var enumeratorType = getEnumeratorFn.Type.TagFunction.ReturnType;
-                if (enumeratorType.Tag is StructType structType)
+                if (enumeratorType.Tag is RecordType recordType)
                 {
-                    var superType = structType.HACK_PendingSuperType;
-                    if (structType.PopulateConcretizedStructIfRequired())
-                        concreteTypeAstReferences.Add(new ConcreteTypeAstReference(superType, structType));
-                }
-                else if (enumeratorType.Tag is TupleType tupleType)
-                {
-                    var superType = tupleType.HACK_PendingSuperType;
-                    if (tupleType.PopulateConcretizedTupleIfRequired())
-                        concreteTypeAstReferences.Add(new ConcreteTypeAstReference(superType, tupleType));
+                    var superType = recordType.HACK_PendingSuperType;
+                    if (recordType.PopulateConcretizedRecordIfRequired())
+                        concreteTypeAstReferences.Add(new ConcreteTypeAstReference(superType, recordType));
                 }
 
                 var enumeratorStorage = CurrentFunction.AllocateRegisterStorage(enumeratorType);
@@ -870,23 +858,14 @@ namespace Compiler.CodeGeneration
                 var bType = rhs.Value == "T" ? CobType.U8 : CobType.FromString(rhs.Value, CurrentContext); // HACK TODO THIS IS ENTIRELY INCORRECT
                 CobType cType;
 
-                if (aType?.Tag is TupleType tupleType)
+                if (aType?.Tag is RecordType recordType)
                 {
-                    var tag = tupleType.FindConcretizedTuple(bType) ?? tupleType.AllocateConcretizedTuple(bType);
+                    var tag = recordType.FindConcretizedRecord(bType) ?? recordType.AllocateConcretizedRecord(bType);
 
                     cType = new CobType(eCobType.Tuple, tag: tag);
 
-                    if (tag.PopulateConcretizedTupleIfRequired())
-                        concreteTypeAstReferences.Add(new ConcreteTypeAstReference(tupleType, tag));
-                }
-                else if (aType?.Tag is StructType structType)
-                {
-                    var tag = structType.FindConcretizedStruct(bType) ?? structType.AllocateConcretizedStruct(bType);
-
-                    cType = new CobType(eCobType.Struct, tag: tag);
-
-                    if (tag.PopulateConcretizedStructIfRequired())
-                        concreteTypeAstReferences.Add(new ConcreteTypeAstReference(structType, tag));
+                    if (tag.PopulateConcretizedRecordIfRequired())
+                        concreteTypeAstReferences.Add(new ConcreteTypeAstReference(recordType, tag));
                 }
                 else
                 {
@@ -1003,15 +982,10 @@ namespace Compiler.CodeGeneration
                     return null;
                 }
 
-                if (context is StructType structType)
+                if (context is RecordType recordType)
                 {
-                    if (structType.PopulateConcretizedStructIfRequired())
-                        concreteTypeAstReferences.Add(new ConcreteTypeAstReference(structType.HACK_PendingSuperType, structType));
-                }
-                else if (context is TupleType tupleType)
-                {
-                    if (tupleType.PopulateConcretizedTupleIfRequired())
-                        concreteTypeAstReferences.Add(new ConcreteTypeAstReference(tupleType.HACK_PendingSuperType, tupleType));
+                    if (recordType.PopulateConcretizedRecordIfRequired())
+                        concreteTypeAstReferences.Add(new ConcreteTypeAstReference(recordType.HACK_PendingSuperType, recordType));
                 }
 
                 implicitContext = expression.Left;
@@ -1477,7 +1451,8 @@ namespace Compiler.CodeGeneration
         private Storage? VisitTupleLiteralExpression(CallExpression expression, Storage? functionStorage)
         {
             if (functionStorage == null || functionStorage.Type != eCobType.Tuple
-            ||  functionStorage.Type.Tag is not TupleType tupleType)
+            ||  functionStorage.Type.Tag is not RecordType tupleType
+            ||  tupleType.Type != eRecordType.Tuple)
                 return null;
 
             functionStorage.Free();
@@ -1588,10 +1563,10 @@ namespace Compiler.CodeGeneration
                     // RESOLVE TYPE
                     var bType = CobType.U8; // TODO Implement correctly
                     var tag = Intrinsics.Array;
-                    tag = tag.FindConcretizedStruct(bType) ?? tag.AllocateConcretizedStruct(bType);
+                    tag = tag.FindConcretizedRecord(bType) ?? tag.AllocateConcretizedRecord(bType);
                     var cobType = new CobType(eCobType.Struct, tag: tag);
 
-                    if (tag.PopulateConcretizedStructIfRequired())
+                    if (tag.PopulateConcretizedRecordIfRequired())
                         concreteTypeAstReferences.Add(new ConcreteTypeAstReference(Intrinsics.Array, tag));
 
                     // ALLOCATE
@@ -1771,37 +1746,25 @@ namespace Compiler.CodeGeneration
                 messages.Add(Message.CannotIndexType, expression, "none");
             else if (AssignmentRHS != null) // SET
             {
-                if (source.Type == eCobType.Struct && source.Type.Tag is StructType structType
-                                                   && structType.Indexer != null)
+                if ((source.Type == eCobType.Struct || source.Type == eCobType.Tuple)
+                &&  source.Type.Tag is RecordType recordType 
+                &&  recordType.Indexer != null)
                 {
-                    function = structType.Indexer.Setter;
-                    context = structType;
-                    operandArguments = new []{ source.Operand, index.Operand, AssignmentRHS.Operand };
-                }
-                else if (source.Type == eCobType.Tuple && source.Type.Tag is TupleType tupleType
-                                                  && tupleType.Indexer != null)
-                {
-                    function = tupleType.Indexer.Setter;
-                    context = tupleType;
+                    function = recordType.Indexer.Setter;
+                    context = recordType;
                     operandArguments = new []{ source.Operand, index.Operand, AssignmentRHS.Operand };
                 }
             }
             else // GET
             {
-                if (source.Type == eCobType.Struct && source.Type.Tag is StructType structType
-                                                   && structType.Indexer != null)
+                if ((source.Type == eCobType.Struct || source.Type == eCobType.Tuple)
+                &&  source.Type.Tag is RecordType recordType 
+                &&  recordType.Indexer != null)
                 {
                     function = index.Type.Tag == Intrinsics.Range
-                             ? structType.FindFunction("Slice")
-                             : structType.Indexer.Getter;
-                    context = structType;
-                    operandArguments = new []{ source.Operand, index.Operand };
-                }
-                else if (source.Type == eCobType.Tuple && source.Type.Tag is TupleType tupleType
-                                                       && tupleType.Indexer != null)
-                {
-                    function = tupleType.Indexer.Getter;
-                    context = tupleType;
+                             ? recordType.FindFunction("Slice")
+                             : recordType.Indexer.Getter;
+                    context = recordType;
                     operandArguments = new []{ source.Operand, index.Operand };
                 }
             }
@@ -1838,7 +1801,8 @@ namespace Compiler.CodeGeneration
         {
             var structTypeStorage = expression.StructTypeExpression.Accept(this);
             if (structTypeStorage == null || structTypeStorage.Type != eCobType.Struct
-            ||  structTypeStorage.Type.Tag is not StructType structType)
+            ||  structTypeStorage.Type.Tag is not RecordType structType
+            ||  structType.Type != eRecordType.Struct)
             {
                 messages.Add(Message.CannotInstantiateType, expression.StructTypeExpression, structTypeStorage?.Type.ToString() ?? "(null)");
                 return null;
@@ -1880,10 +1844,10 @@ namespace Compiler.CodeGeneration
             // RESOLVE TYPE
             var bType = CobType.U8; // TODO Implement correctly
             var tag = Intrinsics.Array;
-            tag = tag.FindConcretizedStruct(bType) ?? tag.AllocateConcretizedStruct(bType);
+            tag = tag.FindConcretizedRecord(bType) ?? tag.AllocateConcretizedRecord(bType);
             var cobType = new CobType(eCobType.Struct, tag: tag);
 
-            if (tag.PopulateConcretizedStructIfRequired())
+            if (tag.PopulateConcretizedRecordIfRequired())
                 concreteTypeAstReferences.Add(new ConcreteTypeAstReference(Intrinsics.Array, tag));
 
             var storage = CurrentFunction.AllocateRegisterStorage(cobType);
@@ -2001,9 +1965,10 @@ namespace Compiler.CodeGeneration
             var data = new byte[byteCount + 1];
             Encoding.UTF8.GetBytes(expression.Value, 0, expression.Value.Length, data, 0);
 
-            var cobType = new CobType(eCobType.Tuple, tag: Intrinsics.Lens.FindConcretizedTuple(CobType.U8));
+            // TODO Somehow, this should be using a stdlib defined symbol
+            var cobType = new CobType(eCobType.Tuple, tag: Intrinsics.Lens.FindConcretizedRecord(CobType.U8));
             var global = CurrentModule.AllocateGlobal($"string{Globals.Count}", cobType, false);
-            global.StructValue = new[]
+            global.RecordValue = new[]
             {
                 new Variable("Address", CobType.UInt, false, data),
                 new Variable("Length", CobType.UInt, false, byteCount),

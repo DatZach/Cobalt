@@ -15,8 +15,7 @@ namespace Compiler.CodeGeneration.Artifacts
 
         private readonly List<Module> modules;
         private readonly List<TraitType> traitTypes;
-        private readonly List<TupleType> tupleTypes;
-        private readonly List<StructType> structTypes;
+        private readonly List<RecordType> recordTypes;
         private readonly List<DistinctType> distinctTypes;
         private readonly List<Function> functions;
         private readonly List<Variable> globals;
@@ -30,8 +29,7 @@ namespace Compiler.CodeGeneration.Artifacts
 
             modules = new List<Module>();
             traitTypes = new List<TraitType>();
-            tupleTypes = new List<TupleType>();
-            structTypes = new List<StructType>();
+            recordTypes = new List<RecordType>();
             distinctTypes = new List<DistinctType>();
             functions = new List<Function>();
             globals = new List<Variable>();
@@ -76,32 +74,18 @@ namespace Compiler.CodeGeneration.Artifacts
             return traitTypes.FirstOrDefault(x => x.Name == name);
         }
 
-        public TupleType AllocateTupleType(string name)
+        public RecordType AllocateRecordType(string name, eRecordType type)
         {
-            var tupleType = new TupleType(name, this, compiler);
-            tupleTypes.Add(tupleType);
-            compiler.TupleTypes.Add(tupleType);
+            var recordType = new RecordType(name, type, this, compiler);
+            recordTypes.Add(recordType);
+            compiler.RecordTypes.Add(recordType);
 
-            return tupleType;
+            return recordType;
         }
 
-        public TupleType? FindTupleType(string name)
+        public RecordType? FindRecordType(string name)
         {
-            return tupleTypes.FirstOrDefault(x => x.Name == name);
-        }
-
-        public StructType AllocateStructType(string name)
-        {
-            var structType = new StructType(name, this, compiler);
-            structTypes.Add(structType);
-            compiler.StructTypes.Add(structType);
-
-            return structType;
-        }
-
-        public StructType? FindStructType(string name)
-        {
-            return structTypes.FirstOrDefault(x => x.Name == name);
+            return recordTypes.FirstOrDefault(x => x.Name == name);
         }
 
         public DistinctType AllocateDistinctType(string name, CobType subType)
@@ -176,15 +160,10 @@ namespace Compiler.CodeGeneration.Artifacts
             if ((module = FindModule(name)) != null)
                 return module;
 
-            // TUPLE TYPES
-            TupleType? tupleType;
-            if ((tupleType = FindTupleType(name)) != null)
+            // RECORD TYPES
+            RecordType? tupleType;
+            if ((tupleType = FindRecordType(name)) != null)
                 return tupleType;
-
-            // STRUCT TYPES
-            StructType? structType;
-            if ((structType = FindStructType(name)) != null)
-                return structType;
 
             return null;
         }
@@ -230,20 +209,11 @@ namespace Compiler.CodeGeneration.Artifacts
                 );
             }
 
-            // TUPLE TYPES
-            if (symbol is TupleType tupleType)
+            // RECORD TYPES
+            if (symbol is RecordType recordType)
             {
                 return new Storage(
-                    new CobType(eCobType.Tuple, tag: tupleType),
-                    Operand.None
-                );
-            }
-
-            // STRUCT TYPES
-            if (symbol is StructType structType)
-            {
-                return new Storage(
-                    new CobType(eCobType.Struct, tag: structType),
+                    recordType.ThisType,
                     Operand.None
                 );
             }
