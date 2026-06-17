@@ -14,7 +14,7 @@ namespace Compiler.CodeGeneration
 
         public static void InitializeForPass0(Compiler compiler)
         {
-            StringContext.Instance.Compiler = compiler;
+            
         }
 
         public static void InitializeForPass1(Compiler compiler)

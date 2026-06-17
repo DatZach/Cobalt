@@ -506,25 +506,10 @@ namespace Compiler.Interpreter
                 if (native.Function == null)
                     return null;
 
-                long result;
                 var proxy = proxies[native.Library];
                 var methodDelegate = proxy.Functions[native.SymbolName!];
-                if (native.SymbolName == "printf") // HACK!!! REMOVE WHEN FORMATTING IS NATIVE
-                {
-                    Console.Write(
-                        Encoding.UTF8.GetString(parameters[0].BufferValue),
-                        parameters.Skip(1).Select(x =>
-                        {
-                            if (x.Type == CobType.String)
-                                return Encoding.UTF8.GetString(x.BufferValue);
-
-                            return x.Value;
-                        }).ToArray()
-                    );
-                    result = 0;
-                }
-                else
-                    result = methodDelegate(parameters?.ToArray());
+                
+                var result = methodDelegate(parameters?.ToArray());
 
                 return new Variable("$imm", CobType.U64, false, result); // TODO Proxy more types than integers
             }
@@ -559,13 +544,7 @@ namespace Compiler.Interpreter
                         il.Emit(System.Reflection.Emit.OpCodes.Ldarg_0);
                         il.Emit(System.Reflection.Emit.OpCodes.Ldc_I4, i);
                         il.Emit(System.Reflection.Emit.OpCodes.Ldelem_Ref);
-                        if (import.Function.Parameters[i].Type == CobType.String)
-                        {
-                            il.Emit(System.Reflection.Emit.OpCodes.Callvirt, typeof(Variable).GetProperty(nameof(Variable.BufferValue))!.GetGetMethod()!);
-                            il.Emit(System.Reflection.Emit.OpCodes.Call, typeof(NativeLibrariesProxy).GetMethod(nameof(NativeLibrariesProxy.GetString))!);
-                        }
-                        else
-                            il.Emit(System.Reflection.Emit.OpCodes.Callvirt, typeof(Variable).GetProperty(nameof(Variable.IntValue))!.GetGetMethod()!);
+                        il.Emit(System.Reflection.Emit.OpCodes.Callvirt, typeof(Variable).GetProperty(nameof(Variable.IntValue))!.GetGetMethod()!);
                     }
 
                     il.Emit(System.Reflection.Emit.OpCodes.Ldc_I8, address.ToInt64());

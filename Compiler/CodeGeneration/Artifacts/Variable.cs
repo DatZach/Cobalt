@@ -1,6 +1,5 @@
 ﻿using System.Buffers;
 using System.Diagnostics;
-using System.Text;
 
 namespace Compiler.CodeGeneration.Artifacts
 {
@@ -122,12 +121,7 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public override string ToString()
         {
-            string value;
-            if (Type == CobType.String)
-                value = '"' + Encoding.UTF8.GetString(BufferValue).Replace("\n", "^n") + '"';
-            else
-                value = Value?.ToString() ?? "(null)";
-
+            var value = Value?.ToString() ?? "(null)";
             return $"{Name,-25}{Type} = {value}";
         }
 
@@ -165,14 +159,10 @@ namespace Compiler.CodeGeneration.Artifacts
         public readonly static CobType U8 = new (eCobType.Unsigned, 8);
         public readonly static CobType U32 = new(eCobType.Unsigned, 32);
         public readonly static CobType U64 = new(eCobType.Unsigned, 64);
-        public readonly static CobType Char = new(eCobType.Unsigned, 8);// { AliasName = "char" };
-        public readonly static CobType String = new (eCobType.Array, elementType: Char, tag: StringContext.Instance) { AliasName = "string" }; // TODO Remove
         public readonly static CobType Module = eCobType.Module;
         public readonly static CobType Error = eCobType.Error;
         public readonly static CobType Nil = eCobType.Nil;
         public readonly static CobType Generic = eCobType.Generic;
-
-        public string? AliasName { get; init; } // TODO Remove?
 
         public eCobType Type { get; }
 
@@ -458,7 +448,7 @@ namespace Compiler.CodeGeneration.Artifacts
                     128 => typeof(decimal),
                     _ => throw new ArgumentOutOfRangeException()
                 },
-                eCobType.Array => this == String ? typeof(string) : ElementType.ToManagedType().MakeArrayType(),
+                eCobType.Array => ElementType.ToManagedType().MakeArrayType(),
                 eCobType.Struct => Any.ToManagedType().MakeArrayType(), // TODO Not correct
                                                                         // Tag == Intrinsics.Array ? Any.ToManagedType().MakeArrayType() :  throw new NotImplementedException(), // ???
                 eCobType.Tuple => throw new NotImplementedException(), // ???
@@ -580,8 +570,6 @@ namespace Compiler.CodeGeneration.Artifacts
                     {
                         // ElementType = <Type>
                         var elementType = Decode();
-                        if (elementType == Char)
-                            return String;
                         return new CobType(type, elementType: elementType);
                     }
                     case eCobType.Trait:
@@ -654,9 +642,6 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public override string ToString()
         {
-            if (AliasName != null)
-                return AliasName;
-            
             switch (Type)
             {
                 case eCobType.Union:
@@ -759,49 +744,6 @@ namespace Compiler.CodeGeneration.Artifacts
         Generic,
 
         Mask = 0x0F
-    }
-
-    internal sealed class StringContext : IScopeContext
-    {
-        public static readonly StringContext Instance = new ();
-
-        public string Name => "string";
-
-        public IScopeContext? Parent => null;
-
-        public Compiler Compiler { get; set; }
-
-        public ISymbol? FindSymbol(string name)
-        {
-            // TODO Immutable Field!
-            if (name == "Length")
-                return new Field(this, "Length", CobType.UInt, null, null);
-
-            return null;
-        }
-
-        public Storage? EmitGetForSymbol(ISymbol symbol)
-        {
-            if (symbol is Field field && field.Name == "Length")
-            {
-                var storage = Compiler.CurrentFunction.AllocateRegisterStorage(CobType.U64);
-                Compiler.CurrentFunction.Body.Emit(
-                    Opcode.GetField,
-                    storage.Operand,
-                    Compiler.BinOpLHS.Operand,
-                    Operand.ImmediateUnsigned(0)
-                );
-
-                return storage;
-            }
-
-            return null;
-        }
-
-        public bool EmitSetForSymbol(ISymbol symbol)
-        {
-            return false;
-        }
     }
 
     internal sealed class FunctionSignature
