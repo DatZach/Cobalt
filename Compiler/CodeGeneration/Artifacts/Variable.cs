@@ -1,5 +1,6 @@
 ﻿using System.Buffers;
 using System.Diagnostics;
+using Compiler.Lexer;
 
 namespace Compiler.CodeGeneration.Artifacts
 {
@@ -224,6 +225,159 @@ namespace Compiler.CodeGeneration.Artifacts
             return left.Type == right;
         }
 
+        public static CobType FromTypeName(TypeName? typeName, IScopeContext? context)
+        {
+            if (typeName == null)
+                return None;
+
+            CobType type;
+
+            if (typeName.Type == eTypeName.Identifier)
+            {
+                var ident = typeName.Identifier!;
+                if (ident.Length >= 2 && ident[0] == 's' && char.IsDigit(ident[1]))
+                    type = new CobType(eCobType.Signed, int.Parse(ident[1..]));
+                else if (ident.Length >= 2 && ident[0] == 'u' && char.IsDigit(ident[1]))
+                    type = new CobType(eCobType.Unsigned, int.Parse(ident[1..]));
+                else if (ident.Length >= 2 &&  ident[0] == 'f' && char.IsDigit(ident[1]))
+                    type = new CobType(eCobType.Float, int.Parse(ident[1..]));
+                else if (ident == "any")
+                    type = Any;
+                else if (ident == "bool")
+                    type = Boolean;
+                else if (ident == "int")
+                    type = Int;
+                else if (ident == "uint")
+                    type = UInt;
+                else if (ident == "float")
+                    type = Float;
+                else if (ident == "error")
+                    type = Error;
+                else if (ident == "nil")
+                    type = Nil;
+                else // User-defined type identifier
+                {
+                    var dbgContext = context;
+                    type = null!;
+                    while (context != null && type == null)
+                    {
+                        if (context is Module module)
+                        {
+                            TraitType? traitType;
+                            RecordType? recordType;
+                            DistinctType? distinctType;
+                            if ((traitType = module.FindTraitType(ident)) != null)
+                                type = new CobType(eCobType.Trait, tag: traitType);
+                            else if ((recordType = module.FindRecordType(ident)) != null)
+                                type = recordType.ThisType;
+                            else if ((distinctType = module.FindDistinctType(ident)) != null)
+                                type = distinctType.SubType;
+                        }
+                        else if (context is RecordType recordType)
+                        {
+                            CobType? aliasType;
+                            if ((aliasType = recordType.FindGenericType(ident)) != null)
+                                type = aliasType;
+                        }
+
+                        context = context.Parent;
+                    }
+
+                    if (type == null)
+                        throw new Exception($"The typename '{typeName}' is not valid");
+                }
+            }
+            else if (typeName.Type == eTypeName.FunctionSignature)
+            {
+                var parameters = typeName.Function.Parameters.Select(
+                    x => new Function.Parameter(x.Name, FromTypeName(x.TypeName, context), x.IsSpread)
+                ).ToList();
+                var returnType = FromTypeName(typeName.Function.ReturnType, context);
+
+                type = new CobType(eCobType.Function, tag: new FunctionSignature
+                {
+                    Parameters = parameters,
+                    ReturnType = returnType
+                });
+            }
+            else if (typeName.Type == eTypeName.RecordSignature)
+            {
+                // TODO This might be wrong, can allocate records in records
+                Module? module = null;
+                while (context != null && module == null)
+                {
+                    module = context as Module;
+                    context = context.Parent;
+                }
+
+                if (module == null)
+                    throw new Exception("Tuple Signature declaration is not valid here");
+
+                var recordTypeIdentifier = $"InlineTuple'{typeName.Record.UniqueId}";
+                var tupleType = module.FindRecordType(recordTypeIdentifier);
+                if (tupleType == null)
+                {
+                    tupleType = module.AllocateRecordType(recordTypeIdentifier, eRecordType.Tuple);
+
+                    foreach (var x in typeName.Record.Fields)
+                    {
+                        tupleType.AllocateField(x.Name ?? "", FromTypeName(x.TypeName, tupleType), false, false);
+                    }
+                }
+
+                type = new CobType(eCobType.Tuple, tag: tupleType);
+            }
+            else
+                throw new ArgumentOutOfRangeException();
+
+            // Resolve Generic
+
+            CobType bType;
+            if (typeName.Generic != null && typeName.Generic.Count > 0
+            &&  (bType = FromTypeName(typeName.Generic[0], context)) != None)
+            {
+                if (type.Tag is RecordType recordType)
+                {
+                    // TODO Might be better to just merge these methods into a single one
+                    var tag = recordType.FindConcretizedRecord(bType) ?? recordType.AllocateConcretizedRecord(bType);
+                    type = tag.ThisType;
+                }
+                else
+                    throw new Exception($"The typename '{typeName}' is not valid");
+            }
+
+            // Suffixes
+            if (typeName.IsArray)
+            {
+                var tag = Intrinsics.Array.FindConcretizedRecord(type) ?? Intrinsics.Array.AllocateConcretizedRecord(type);
+                type = new CobType(eCobType.Struct, tag: tag);
+            }
+
+            if (typeName.Union != null)
+            {
+                var unionedTypes = new List<CobType> { type };
+                for (var nextType = typeName.Union; nextType != null; nextType = nextType.Union)
+                {
+                    type = FromTypeName(typeName.Union, context);
+                    unionedTypes.Add(type);
+                }
+
+                type = new CobType(
+                    eCobType.Union,
+                    unionedTypes: unionedTypes
+                );
+            }
+            
+            if (typeName.IsErrorable && typeName.IsNillable)
+                return new CobType(eCobType.Union, unionedTypes: new[] { type, Error, Nil });
+            else if (typeName.IsErrorable)
+                return new CobType(eCobType.Union, unionedTypes: new[] { type, Error });
+            else if (typeName.IsNillable)
+                return new CobType(eCobType.Union, unionedTypes: new[] { type, Nil });
+            else
+                return type;
+        }
+
         // TODO Return CobType? and have consumers check if null for proper error reporting
         public static CobType FromString(string? typeName, IScopeContext? context)
         {
@@ -330,6 +484,59 @@ namespace Compiler.CodeGeneration.Artifacts
                 typeName = typeName[i..]; // )
                 var returnType = typeName.Length > 0 ? FromString(typeName, context) : None;
                 type = new CobType(eCobType.Function, tag: new FunctionSignature { ReturnType = returnType, Parameters = parameters });
+            }
+            else if (typeName.StartsWith('('))
+            {
+                var fields = new List<Field>();
+
+                typeName = typeName[1..]; // (
+                int i = 0, j = 0;
+                string fieldName = null;
+                string fieldTypeName = null;
+                for (; i < typeName.Length; ++i)
+                {
+                    var ch = typeName[i];
+                    if (ch == ':')
+                    {
+                        fieldName = typeName.Substring(j, i - j);
+                        j = i + 1;
+                    }
+                    else if (ch == ';' || ch == ')')
+                    {
+                        if (fieldName != null)
+                            fieldTypeName = typeName.Substring(j, i - j);
+                        j = i + 1;
+
+                        if (fieldName != null)
+                            fields.Add(new Field(null, fieldName, FromString(fieldTypeName, context), null, null));
+
+                        fieldName = null;
+                        fieldTypeName = null;
+
+                        if (ch == ')')
+                        {
+                            ++i;
+                            break;
+                        }
+                    }
+                }
+                typeName = typeName[i..]; // )
+
+                Module? module = null;
+                while (context != null && module == null)
+                {
+                    module = context as Module;
+                    context = context.Parent;
+                }
+
+                if (module == null)
+                    throw new Exception("Tuple Signature declaration is not valid here");
+
+                var tupleType = module.AllocateRecordType($"InlineTuple'{Guid.NewGuid():N}", eRecordType.Tuple);
+                foreach (var field in fields)
+                    tupleType.AllocateField(field.Name, field.Type, false, false);
+
+                type = new CobType(eCobType.Tuple, tag: tupleType);
             }
             else
             {
@@ -708,6 +915,20 @@ namespace Compiler.CodeGeneration.Artifacts
                 return recordType?.HasTrait(dstType.Tag as TraitType) ?? false;
             }
 
+            if (srcType.Type == eCobType.Tuple && dstType.Type == eCobType.Tuple)
+            {
+                if (srcType.Tag == dstType.Tag)
+                    return true;
+
+                if (srcType.Tag is RecordType srcRecordType && srcRecordType.IsAnonymous
+                &&  dstType.Tag is RecordType dstRecordType)
+                {
+                    return dstRecordType.IsFieldSignatureMatch(srcRecordType);
+                }
+
+                return false;
+            }
+
             if (srcType == eCobType.Error && dstType.HasErrorFlag)
                 return true;
 
@@ -746,10 +967,16 @@ namespace Compiler.CodeGeneration.Artifacts
         Mask = 0x0F
     }
 
+    // TODO Are "Signatures" the right way to implement this?
     internal sealed class FunctionSignature
     {
         public CobType ReturnType { get; init; }
 
         public IReadOnlyList<Function.Parameter> Parameters { get; init; }
+    }
+
+    internal sealed class TupleSignature
+    {
+        public IReadOnlyList<Field> Fields { get; init; }
     }
 }

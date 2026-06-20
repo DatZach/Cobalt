@@ -143,6 +143,7 @@ namespace Compiler.CodeGeneration.Artifacts
             return globals.FirstOrDefault(x => x.Name == name);
         }
 
+        // TODO FindExplicitSymbol
         public ISymbol? FindSymbol(string name)
         {
             // GLOBAL
@@ -167,6 +168,19 @@ namespace Compiler.CodeGeneration.Artifacts
 
             return null;
         }
+
+        //public ISymbol? FindImplicitSymbol(eCobType containerType, IReadOnlyList<CobType> fieldTypes)
+        //{
+        //    if (containerType == eCobType.Tuple)
+        //    {
+        //        return recordTypes.FirstOrDefault(
+        //            x => x.Type == eRecordType.Tuple
+        //              && x.IsFieldSignatureMatch(fieldTypes)
+        //        );
+        //    }
+            
+        //    return null;
+        //}
 
         public Storage? EmitGetForSymbol(ISymbol symbol)
         {

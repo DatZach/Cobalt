@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Compiler.Ast.Expressions;
+using Compiler.CodeGeneration.Artifacts;
 using Compiler.Lexer;
 
 namespace Compiler.Ast
@@ -97,12 +98,179 @@ namespace Compiler.Ast
             return new ScriptExpression(Take(), expressions);
         }
 
+        public TypeName? ParseTypeName2()
+        {
+            // TODO Don't throw exceptions, log errors
+
+            eTypeName type;
+            string? identifier = null;
+            TypeName.FunctionSignature? function = null;
+            TypeName.RecordSignature? record = null;
+            TypeName? union = null;
+            List<TypeName>? generic = null;
+            bool isArray = false;
+            bool isErrorable = false;
+            bool isNillable = false;
+
+            // Prefix
+            if (Match(TokenType.Generic))
+            {
+                generic = new List<TypeName>();
+                while (MatchAndTakeToken(TokenType.Generic) != null)
+                {
+                    generic.Add(new TypeName { Type = eTypeName.Identifier, Identifier = Take(TokenType.Identifier).Value });
+                }
+            }
+
+            // Body
+            if (Match(TokenType.Identifier) || Match(TokenType.Error) || Match(TokenType.Nil))
+            {
+                type = eTypeName.Identifier;
+                identifier = Take().Value;
+
+                if (Match(TokenType.Generic))
+                {
+                    if (generic != null)
+                        throw new Exception("Illegal type name");
+
+                    generic = new List<TypeName>();
+                    while (MatchAndTakeToken(TokenType.Generic) != null)
+                        generic.Add(new TypeName { Type = eTypeName.Identifier, Identifier = Take(TokenType.Identifier).Value });
+                }
+            }
+            else if (Match(TokenType.Function))
+            {
+                var parameters = new List<TypeName.FunctionSignature.Parameter>();
+
+                Take(TokenType.LeftParen);
+                while (!Match(TokenType.RightParen))
+                {
+                    var isSpread = MatchAndTakeToken(TokenType.Spread) != null;
+                    var parameterName = Take(TokenType.Identifier).Value;
+                    TypeName parameterTypeName;
+                    if (MatchAndTakeToken(TokenType.Colon) != null)
+                        parameterTypeName = ParseTypeName2() ?? throw new Exception("Illegal parameter type");
+                    else
+                        parameterTypeName = TypeName.Any;
+
+                    parameters.Add(new TypeName.FunctionSignature.Parameter
+                    {
+                        Name = parameterName,
+                        TypeName = parameterTypeName,
+                        IsSpread = isSpread
+                    });
+                }
+                Take(TokenType.RightParen);
+
+                var returnType = ParseTypeName2() ?? TypeName.Any;
+
+                type = eTypeName.FunctionSignature;
+                function = new TypeName.FunctionSignature
+                {
+                    Parameters = parameters,
+                    ReturnType = returnType
+                };
+            }
+            else if (Match(TokenType.LeftParen))
+            {
+                Take(TokenType.LeftParen);
+                var fields = new List<TypeName.RecordSignature.Field>();
+
+                while (!Match(TokenType.RightParen))
+                {
+                    string? fieldName;
+                    TypeName fieldTypeName;
+                    if (Peek(1).Type == TokenType.Colon)
+                    {
+                        fieldName = Take(TokenType.Identifier).Value;
+                        Take(TokenType.Colon);
+                        fieldTypeName = ParseTypeName2() ?? throw new Exception("Illegal field type");
+                    }
+                    else
+                    {
+                        fieldName = null;
+                        fieldTypeName = ParseTypeName2() ?? throw new Exception("Illegal field type");
+                    }
+
+                    Take(TokenType.Semicolon);
+
+                    fields.Add(new TypeName.RecordSignature.Field
+                    {
+                        Name = fieldName,
+                        TypeName = fieldTypeName
+                    });
+                }
+                Take(TokenType.RightParen);
+
+                type = eTypeName.RecordSignature;
+                record = new TypeName.RecordSignature
+                {
+                    Type = eRecordType.Tuple,
+                    Fields = fields
+                };
+            }
+            else if (Match(TokenType.LeftBrace))
+            {
+                throw new NotImplementedException();
+            }
+            else
+                return null;
+
+            // Suffixes
+            if (Match(TokenType.LeftSquare))
+            {
+                Take(TokenType.LeftSquare);
+                Take(TokenType.RightSquare);
+                isArray = true;
+            }
+
+            if (Match(TokenType.NilErrorCoalesce))
+            {
+                Take(TokenType.NilErrorCoalesce);
+                isNillable = true;
+                isErrorable = true;
+            }
+
+            if (Match(TokenType.Question))
+            {
+                Take(TokenType.Question);
+                isNillable = true;
+            }
+
+            if (Match(TokenType.Not))
+            {
+                Take(TokenType.Not);
+                isErrorable = true;
+            }
+
+            if (Match(TokenType.BitOr))
+            {
+                Take(TokenType.BitOr);
+                union = ParseTypeName2();
+            }
+
+            return new TypeName
+            {
+                Type = type,
+                Identifier = identifier,
+                Function = function,
+                Record = record,
+                Union = union,
+                Generic = generic,
+                IsArray = isArray,
+                IsErrorable = isErrorable,
+                IsNillable = isNillable
+            };
+        }
+
+        // TODO Return "TypeName" struct?
         public string ParseTypeName()
         {
             string typeName = "";
 
             while (true)
             {
+                // Body
                 Token type;
                 if (Match(TokenType.Error))
                     type = Take(TokenType.Error);
@@ -120,11 +288,25 @@ namespace Compiler.Ast
                     }
                     typeName += Take(TokenType.RightParen).Value;
                     typeName += ParseTypeName();
-                    break;
+                    break; // TODO Not right, cannot support arrays, unions, errors, etc.
+                }
+                else if (Match(TokenType.LeftParen))
+                {
+                    typeName += Take(TokenType.LeftParen).Value;
+                    while (!Match(TokenType.RightParen))
+                    {
+                        typeName += Take(TokenType.Identifier).Value;
+                        typeName += Take(TokenType.Colon).Value;
+                        typeName += ParseTypeName();
+                        typeName += Take(TokenType.Semicolon).Value;
+                    }
+                    typeName += Take(TokenType.RightParen).Value;
+                    break; // TODO Not right, cannot support arrays, unions, errors, etc.
                 }
                 else
                     type = Take(TokenType.Identifier);
 
+                // Suffixes
                 if (Match(TokenType.LeftSquare))
                 {
                     Take(TokenType.LeftSquare);
@@ -212,6 +394,14 @@ namespace Compiler.Ast
                 return Token.EndOfStream;
 
             return tokens[readIndex];
+        }
+
+        public Token Peek(int offset)
+        {
+            if (readIndex + offset >= tokens.Count)
+                return Token.EndOfStream;
+
+            return tokens[readIndex + offset];
         }
 
         private int GetPrecedence(bool isConditional)

@@ -16,6 +16,8 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public bool IsGeneric => generics.Count > 0;
 
+        public bool IsAnonymous => fields.Count > 0 && string.IsNullOrEmpty(fields[0].Name);
+
         public CobType ThisType => new (Type == eRecordType.Struct ? eCobType.Struct : eCobType.Tuple, tag: this);
 
         // TODO  HACK Fix this nonsense
@@ -351,6 +353,20 @@ namespace Compiler.CodeGeneration.Artifacts
         }
 
         public bool IsVisibleTo(IScopeContext? context) => Compiler.IsSymbolVisible(context, Parent, Name);
+
+        public bool IsFieldSignatureMatch(RecordType other)
+        {
+            if (other.fields.Count != fields.Count)
+                return false;
+
+            for (int i = 0; i < fields.Count; ++i)
+            {
+                if (!CobType.IsCastable(other.fields[i].Type, fields[i].Type))
+                    return false;
+            }
+
+            return true;
+        }
 
         public override string ToString() => Name;
     }

@@ -157,6 +157,20 @@ namespace Compiler.CodeGeneration.Artifacts
             return null;
         }
 
+        //public ISymbol? FindImplicitSymbol(eCobType containerType, IReadOnlyList<CobType> fieldTypes)
+        //{
+        //    if (containerType == eCobType.Tuple)
+        //    {
+        //        return Parameters.FirstOrDefault(
+        //            x => x.Type == containerType
+        //              && x.Type.Tag is RecordType recordType
+        //              && recordType.IsFieldSignatureMatch(fieldTypes)
+        //        )?.Type.Tag as ISymbol;
+        //    }
+            
+        //    return null;
+        //}
+
         public Storage? EmitGetForSymbol(ISymbol symbol)
         {
             if (symbol is Parameter parameter)

@@ -328,7 +328,7 @@ namespace Compiler.CodeGeneration
             else
             {
                 var candidates = CurrentModule.FindFunctionCandidates(expression.Name)!;
-                var parameterTypes = expression.Parameters.Select(x => CobType.FromString(x.TypeName, CurrentContext)).ToList();
+                var parameterTypes = expression.Parameters.Select(x => CobType.FromTypeName(x.TypeName, CurrentContext)).ToList();
                 function = candidates.ResolveSingle(parameterTypes)!;
                 //function = CurrentModule.FindFunction(expression.Name)!;
             }
@@ -1797,6 +1797,52 @@ namespace Compiler.CodeGeneration
             return storage;
         }
 
+        public Storage? Visit(TupleLiteralExpression expression)
+        {
+            var fieldStorages = new List<Storage?>(expression.Expressions.Count);
+            for (var i = 0; i < expression.Expressions.Count; ++i)
+            {
+                var fieldStorage = expression.Expressions[i].Accept(this);
+                fieldStorages.Add(fieldStorage);
+            }
+
+            CobType cobType;
+            if (expression.ExplicitTypeName != null)
+                cobType = CobType.FromString(expression.ExplicitTypeName, CurrentContext);
+            else
+            {
+                //var tupleType = CurrentModule.FindTupleTypeViaImplicitTypeMatch(exprStorages);
+                //if (tupleType == null)
+                //{
+                //    messages.Add(Message.NoMatchingTupleCandidate, expression, string.Join(", ", exprStorages.Select(x => x?.Type.ToString())));
+                //    return null;
+                //}
+
+                var tupleType = Intrinsics.FindOrAllocateAnonymousTupleType(
+                    fieldStorages.Select(x => x.Type).ToList(),
+                    this
+                );
+
+                cobType = new CobType(eCobType.Tuple, tag: tupleType);
+            }
+
+            var storage = CurrentFunction.AllocateRegisterStorage(cobType);
+            CurrentFunction.Body.Emit(Opcode.New, storage.Operand, cobType.ToOperand(artifact));
+
+            for (var i = 0; i < expression.Expressions.Count; ++i)
+            {
+                var fieldStorage = fieldStorages[i];
+                CurrentFunction.Body.Emit(
+                    Opcode.SetField,
+                    storage.Operand,
+                    Operand.ImmediateUnsigned(i),
+                    fieldStorage.Operand
+                );
+            }
+
+            return storage;
+        }
+
         public Storage? Visit(StructLiteralExpression expression)
         {
             var structTypeStorage = expression.StructTypeExpression.Accept(this);
@@ -2022,6 +2068,10 @@ namespace Compiler.CodeGeneration
             {
                 return source; // TODO ??
             }
+            else if (srcType == eCobType.Tuple && dstType == eCobType.Tuple)
+            {
+                return source; // TODO Definitely not right
+            }
             else
                 throw new NotImplementedException();
         }
@@ -2122,7 +2172,9 @@ namespace Compiler.CodeGeneration
 
         IScopeContext? Parent { get; }
 
-        ISymbol? FindSymbol(string name);
+        ISymbol? FindSymbol(string name); // TODO FindExplicitSymbol
+
+        //ISymbol? FindImplicitSymbol(eCobType containerType, IReadOnlyList<CobType> fieldTypes);
 
         Storage? EmitGetForSymbol(ISymbol symbol);
 

@@ -25,5 +25,19 @@ namespace Compiler.CodeGeneration
             Lens = stdMod.FindRecordType("Lens") ?? throw new Exception("The symbol 'Lens' is not defined by the Standard Library");
             //Array = compiler.RootModule.FindStructType("Array") ?? throw new Exception("The symbol 'Array' is not defined by the Standard Library");
         }
+
+        public static RecordType FindOrAllocateAnonymousTupleType(IReadOnlyList<CobType> fieldTypes, Compiler compiler)
+        {
+            var typeName = $"AnonTuple'{string.Join('\'', fieldTypes.Select(x => x.ToString()))}";
+            var recordType = compiler.RootModule.FindRecordType(typeName);
+            if (recordType == null)
+            {
+                recordType = compiler.RootModule.AllocateRecordType(typeName, eRecordType.Tuple);
+                foreach (var fieldType in fieldTypes)
+                    recordType.AllocateField(string.Empty, fieldType, false, false);
+            }
+
+            return recordType;
+        }
     }
 }

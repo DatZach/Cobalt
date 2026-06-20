@@ -121,7 +121,7 @@ namespace Compiler.CodeGeneration
                 function = CurrentModule.AllocateFunction(
                     expression.SymbolName,
                     expression.SymbolTypeSignature.CallingConvention,
-                    expression.SymbolTypeSignature.Parameters.Select(x => new Function.Parameter(x.Name, CobType.FromString(x.TypeName, CurrentContext), x.IsSpread)).ToList(),
+                    expression.SymbolTypeSignature.Parameters.Select(x => new Function.Parameter(x.Name, CobType.FromTypeName(x.TypeName, CurrentContext), x.IsSpread)).ToList(),
                     CobType.FromString(expression.SymbolTypeSignature.ReturnTypeName, CurrentContext)
                 );
             }
@@ -371,7 +371,7 @@ namespace Compiler.CodeGeneration
                 return Unit.Value;
 
             var parameters = expression.Parameters.Select(
-                x => new Function.Parameter(x.Name, CobType.FromString(x.TypeName, CurrentContext), x.IsSpread, x.DefaultValue)
+                x => new Function.Parameter(x.Name, CobType.FromTypeName(x.TypeName, CurrentContext), x.IsSpread, x.DefaultValue)
             ).ToList();
 
             if (CurrentContext is RecordType recordType)
@@ -389,8 +389,16 @@ namespace Compiler.CodeGeneration
             if (phase != DeclPhase.Functions)
                 return Unit.Value;
 
+            //var parameters = new List<Function.Parameter>(expression.Parameters.Count);
+            //foreach (var x in expression.Parameters)
+            //{
+            //    var typeName = CobType.FromString(x.TypeName, CurrentContext);
+            //    if (x.TypeName.StartsWith('(')) // HACK Tuple Signature
+            //        typeName = 
+            //}
+
             var parameters = expression.Parameters.Select(
-                x => new Function.Parameter(x.Name, CobType.FromString(x.TypeName, CurrentContext), x.IsSpread, x.DefaultValue)
+                x => new Function.Parameter(x.Name, CobType.FromTypeName(x.TypeName, CurrentContext), x.IsSpread, x.DefaultValue)
             ).ToList();
 
             var returnType = CobType.FromString(expression.ReturnTypeName, CurrentContext);
@@ -552,6 +560,11 @@ namespace Compiler.CodeGeneration
         }
 
         public Unit Visit(IndexerExpression expression)
+        {
+            return Unit.Value;
+        }
+
+        public Unit Visit(TupleLiteralExpression expression)
         {
             return Unit.Value;
         }
