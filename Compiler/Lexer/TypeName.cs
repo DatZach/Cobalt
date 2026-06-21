@@ -25,8 +25,6 @@ namespace Compiler.Lexer
 
         public bool IsArray { get; init; }
 
-        //public bool IsGeneric { get; init; } // `T
-
         public bool IsErrorable { get; init; }
 
         public bool IsNillable { get; init; }

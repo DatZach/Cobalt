@@ -142,6 +142,7 @@ namespace Compiler.Ast
             {
                 var parameters = new List<TypeName.FunctionSignature.Parameter>();
 
+                Take(TokenType.Function);
                 Take(TokenType.LeftParen);
                 while (!Match(TokenType.RightParen))
                 {
