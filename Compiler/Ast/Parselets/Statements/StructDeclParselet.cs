@@ -10,7 +10,7 @@ namespace Compiler.Ast.Parselets.Statements
         {
             var name = parser.Take(TokenType.Identifier);
             var generics = new List<GenericDefinition>();
-            var traits = new List<string>();
+            var traits = new List<TypeName>();
             var fields = new List<FieldDefinition>();
             var functions = new List<FunctionDeclStatement>();
             var factories = new List<FactoryDeclStatement>();
@@ -51,14 +51,14 @@ namespace Compiler.Ast.Parselets.Statements
                 else if (parser.Match(TokenType.LeftSquare)) // Indexer
                 {
                     parser.Take(TokenType.LeftSquare);
-                    var keyType = parser.ParseTypeName();
+                    var keyTypeName = parser.ParseTypeName();
                     parser.Take(TokenType.RightSquare);
                     parser.Take(TokenType.Colon);
-                    var returnType = parser.ParseTypeName();
+                    var returnTypeName = parser.ParseTypeName();
 
                     ParseGetterSetters(parser, out var getterExpression, out var setterExpression);
 
-                    indexerDefinition = new IndexerDefinition(keyType, returnType, getterExpression, setterExpression);
+                    indexerDefinition = new IndexerDefinition(keyTypeName, returnTypeName, getterExpression, setterExpression);
                 }
                 else // Field
                 {

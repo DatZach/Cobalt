@@ -53,7 +53,7 @@ namespace Compiler.CodeGeneration
 
             // X import NativeLibrary SpecificIdentifier Type
 
-            var isNativeImport = expression.SymbolName != null && expression.SymbolTypeSignature != null;
+            var isNativeImport = expression.SymbolName != null && expression.SymbolTypeName != null;
             if (!isNativeImport)
                 return VisitImportModule(expression);
             else
@@ -116,13 +116,13 @@ namespace Compiler.CodeGeneration
 
             // Symbol import
             Function? function;
-            if (expression.SymbolTypeSignature != null)
+            if (expression.SymbolTypeName != null)
             {
                 function = CurrentModule.AllocateFunction(
                     expression.SymbolName,
-                    expression.SymbolTypeSignature.CallingConvention,
-                    expression.SymbolTypeSignature.Parameters.Select(x => new Function.Parameter(x.Name, CobType.FromTypeName(x.TypeName, CurrentContext), x.IsSpread)).ToList(),
-                    CobType.FromString(expression.SymbolTypeSignature.ReturnTypeName, CurrentContext)
+                    expression.SymbolTypeName.Function.CallingConvention,
+                    expression.SymbolTypeName.Function.Parameters.Select(x => new Function.Parameter(x.Name, CobType.FromTypeName(x.TypeName, CurrentContext), x.IsSpread)).ToList(),
+                    CobType.FromTypeName(expression.SymbolTypeName.Function.ReturnTypeName, CurrentContext)
                 );
             }
             else
@@ -218,7 +218,7 @@ namespace Compiler.CodeGeneration
                 return Unit.Value;
             }
 
-            var typeName = CobType.FromString(expression.TypeName, CurrentModule);
+            var typeName = CobType.FromTypeName(expression.TypeName, CurrentModule);
             CurrentModule.AllocateDistinctType(expression.Name, typeName);
 
             return Unit.Value;
@@ -288,14 +288,14 @@ namespace Compiler.CodeGeneration
                 {
                     foreach (var field in expression.Fields)
                     {
-                        var fieldType = CobType.FromString(field.TypeName, CurrentContext);
+                        var fieldType = CobType.FromTypeName(field.TypeName, CurrentContext);
                         tupleType.AllocateField(field.Name, fieldType, field.GetterExpression != null, field.SetterExpression != null);
                     }
 
                     if (expression.Indexer != null)
                     {
-                        var keyType = CobType.FromString(expression.Indexer.KeyTypeName, CurrentContext);
-                        var returnType = CobType.FromString(expression.Indexer.ReturnTypeName, CurrentContext);
+                        var keyType = CobType.FromTypeName(expression.Indexer.KeyTypeName, CurrentContext);
+                        var returnType = CobType.FromTypeName(expression.Indexer.ReturnTypeName, CurrentContext);
 
                         tupleType.AllocateIndexer(keyType, returnType);
                     }
@@ -324,7 +324,7 @@ namespace Compiler.CodeGeneration
 
                 foreach (var traitTypeName in expression.TraitTypeNames)
                 {
-                    var traitType = CobType.FromString(traitTypeName, CurrentContext);
+                    var traitType = CobType.FromTypeName(traitTypeName, CurrentContext);
                     structType.AttachTrait((TraitType)traitType.Tag);
                 }
 
@@ -346,14 +346,14 @@ namespace Compiler.CodeGeneration
                 {
                     foreach (var field in expression.Fields)
                     {
-                        var fieldType = CobType.FromString(field.TypeName, CurrentContext);
+                        var fieldType = CobType.FromTypeName(field.TypeName, CurrentContext);
                         structType.AllocateField(field.Name, fieldType, field.GetterExpression != null, field.SetterExpression != null);
                     }
 
                     if (expression.Indexer != null)
                     {
-                        var keyType = CobType.FromString(expression.Indexer.KeyTypeName, CurrentContext);
-                        var returnType = CobType.FromString(expression.Indexer.ReturnTypeName, CurrentContext);
+                        var keyType = CobType.FromTypeName(expression.Indexer.KeyTypeName, CurrentContext);
+                        var returnType = CobType.FromTypeName(expression.Indexer.ReturnTypeName, CurrentContext);
 
                         structType.AllocateIndexer(keyType, returnType);
                     }
@@ -401,7 +401,7 @@ namespace Compiler.CodeGeneration
                 x => new Function.Parameter(x.Name, CobType.FromTypeName(x.TypeName, CurrentContext), x.IsSpread, x.DefaultValue)
             ).ToList();
 
-            var returnType = CobType.FromString(expression.ReturnTypeName, CurrentContext);
+            var returnType = CobType.FromTypeName(expression.ReturnTypeName, CurrentContext);
 
             if (CurrentContext is TraitType traitType)
             {
@@ -442,7 +442,7 @@ namespace Compiler.CodeGeneration
 
                 if (expression.Field != null)
                 {
-                    var fieldType = CobType.FromString(expression.Field.TypeName, CurrentContext);
+                    var fieldType = CobType.FromTypeName(expression.Field.TypeName, CurrentContext);
                     if (context is RecordType recordType)
                         recordType.AllocateField(expression.Field.Name, fieldType, expression.Field.GetterExpression != null, expression.Field.SetterExpression != null);
                     else
@@ -468,7 +468,7 @@ namespace Compiler.CodeGeneration
             var mutable = expression.Type == TokenType.Var;
             foreach (var decl in expression.Declarations)
             {
-                var type = CobType.FromString(decl.TypeName, CurrentContext);
+                var type = CobType.FromTypeName(decl.TypeName, CurrentContext);
                 CurrentModule.AllocateGlobal(decl.Name, type, mutable);
             }
 

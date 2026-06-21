@@ -30,13 +30,13 @@ namespace Compiler.Ast.Expressions.Statements
         {
             public Token Token { get; }
 
-            public string? TypeName { get; }
+            public TypeName? TypeName { get; }
 
             public Expression? Initializer { get; }
 
             public string Name => Token.Value!;
 
-            public Declaration(Token token, string? typeName, Expression? initializer)
+            public Declaration(Token token, TypeName? typeName, Expression? initializer)
             {
                 Token = token;
                 TypeName = typeName;

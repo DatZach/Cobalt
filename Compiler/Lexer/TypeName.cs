@@ -1,4 +1,5 @@
-﻿using Compiler.CodeGeneration.Artifacts;
+﻿using System.Text;
+using Compiler.CodeGeneration.Artifacts;
 
 namespace Compiler.Lexer
 {
@@ -19,9 +20,9 @@ namespace Compiler.Lexer
 
         public RecordSignature? Record { get; init; }
 
-        public TypeName? Union { get; init; }
-
         public IReadOnlyList<TypeName>? Generic { get; init; } // [Name]`T1`T2
+
+        public TypeName? Union { get; init; }
 
         public bool IsArray { get; init; }
 
@@ -29,11 +30,72 @@ namespace Compiler.Lexer
 
         public bool IsNillable { get; init; }
 
+        public override string ToString()
+        {
+            var sb = new StringBuilder();
+            var type = this;
+            while (type != null)
+            {
+                switch (Type)
+                {
+                    case eTypeName.Identifier:
+                        sb.Append(Identifier);
+                        break;
+
+                    case eTypeName.FunctionSignature:
+                        sb.Append("func(");
+                        for (var i = 0; i < Function.Parameters.Count; ++i)
+                        {
+                            var x = Function.Parameters[i];
+                            sb.Append(x.Name);
+                            sb.Append(": ");
+                            sb.Append(x.TypeName);
+                            if (i < Function.Parameters.Count - 1)
+                                sb.Append(", ");
+                        }
+
+                        sb.Append(')');
+
+                        if (Function.ReturnTypeName != null)
+                        {
+                            sb.Append(' ');
+                            sb.Append(Function.ReturnTypeName);
+                        }
+
+                        if (Function.CallingConvention != CallingConvention.Default)
+                            sb.Append(Function.CallingConvention);
+                        break;
+
+                    case eTypeName.RecordSignature:
+                        sb.Append("record (TODO)");
+                        break;
+
+                    default:
+                        throw new ArgumentOutOfRangeException();
+                }
+
+                if (IsArray)
+                    sb.Append("[]");
+                if (IsNillable)
+                    sb.Append('?');
+                if (IsErrorable)
+                    sb.Append('!');
+
+                type = type.Union;
+                if (type != null)
+                    sb.Append(" | ");
+            }
+
+            return sb.ToString();
+        }
+
         public class FunctionSignature
         {
             public IReadOnlyList<Parameter>? Parameters { get; init; }
 
-            public TypeName? ReturnType { get; init; }
+            public TypeName? ReturnTypeName { get; init; }
+
+            public CallingConvention CallingConvention { get; init; }
 
             public class Parameter
             {

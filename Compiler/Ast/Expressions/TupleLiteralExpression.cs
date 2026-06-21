@@ -6,7 +6,7 @@ namespace Compiler.Ast.Expressions
 {
     internal sealed class TupleLiteralExpression : Expression
     {
-        public string? ExplicitTypeName { get; }
+        public TypeName? ExplicitTypeName { get; }
 
         public IReadOnlyList<Expression> Expressions { get; }
 

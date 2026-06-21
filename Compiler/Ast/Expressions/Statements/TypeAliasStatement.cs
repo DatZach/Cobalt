@@ -8,9 +8,9 @@ namespace Compiler.Ast.Expressions.Statements
     {
         public string Name { get; }
 
-        public string TypeName { get; }
+        public TypeName TypeName { get; }
 
-        public TypeAliasStatement(Token token, string name, string typeName)
+        public TypeAliasStatement(Token token, string name, TypeName typeName)
             : base(token)
         {
             Name = name;

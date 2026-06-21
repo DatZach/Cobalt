@@ -98,7 +98,7 @@ namespace Compiler.Ast
             return new ScriptExpression(Take(), expressions);
         }
 
-        public TypeName? ParseTypeName2()
+        public TypeName? ParseTypeName()
         {
             // TODO Don't throw exceptions, log errors
 
@@ -150,7 +150,7 @@ namespace Compiler.Ast
                     var parameterName = Take(TokenType.Identifier).Value;
                     TypeName parameterTypeName;
                     if (MatchAndTakeToken(TokenType.Colon) != null)
-                        parameterTypeName = ParseTypeName2() ?? throw new Exception("Illegal parameter type");
+                        parameterTypeName = ParseTypeName() ?? throw new Exception("Illegal parameter type");
                     else
                         parameterTypeName = TypeName.Any;
 
@@ -160,16 +160,30 @@ namespace Compiler.Ast
                         TypeName = parameterTypeName,
                         IsSpread = isSpread
                     });
+
+                    if (MatchAndTakeToken(TokenType.Comma) == null)
+                        break;
                 }
                 Take(TokenType.RightParen);
 
-                var returnType = ParseTypeName2() ?? TypeName.Any;
+                var returnType = ParseTypeName();
+
+                CallingConvention callingConvention;
+                if (MatchAndTakeToken(TokenType.CCall) != null)
+                    callingConvention = CallingConvention.CCall;
+                else if (MatchAndTakeToken(TokenType.StdCall) != null)
+                    callingConvention = CallingConvention.StdCall;
+                else if (MatchAndTakeToken(TokenType.NakedCall) != null)
+                    callingConvention = CallingConvention.NakedCall;
+                else
+                    callingConvention = CallingConvention.Default;
 
                 type = eTypeName.FunctionSignature;
                 function = new TypeName.FunctionSignature
                 {
                     Parameters = parameters,
-                    ReturnType = returnType
+                    ReturnTypeName = returnType,
+                    CallingConvention = callingConvention
                 };
             }
             else if (Match(TokenType.LeftParen))
@@ -185,12 +199,12 @@ namespace Compiler.Ast
                     {
                         fieldName = Take(TokenType.Identifier).Value;
                         Take(TokenType.Colon);
-                        fieldTypeName = ParseTypeName2() ?? throw new Exception("Illegal field type");
+                        fieldTypeName = ParseTypeName() ?? throw new Exception("Illegal field type");
                     }
                     else
                     {
                         fieldName = null;
-                        fieldTypeName = ParseTypeName2() ?? throw new Exception("Illegal field type");
+                        fieldTypeName = ParseTypeName() ?? throw new Exception("Illegal field type");
                     }
 
                     Take(TokenType.Semicolon);
@@ -247,7 +261,7 @@ namespace Compiler.Ast
             if (Match(TokenType.BitOr))
             {
                 Take(TokenType.BitOr);
-                union = ParseTypeName2();
+                union = ParseTypeName();
             }
 
             return new TypeName
@@ -262,96 +276,6 @@ namespace Compiler.Ast
                 IsErrorable = isErrorable,
                 IsNillable = isNillable
             };
-        }
-
-        // TODO Return "TypeName" struct?
-        public string ParseTypeName()
-        {
-            string typeName = "";
-
-            while (true)
-            {
-                // Body
-                Token type;
-                if (Match(TokenType.Error))
-                    type = Take(TokenType.Error);
-                else if (Match(TokenType.Nil))
-                    type = Take(TokenType.Nil);
-                else if (Match(TokenType.Function))
-                {
-                    typeName += Take(TokenType.Function).Value;
-                    typeName += Take(TokenType.LeftParen).Value;
-                    while (!Match(TokenType.RightParen))
-                    {
-                        typeName += Take(TokenType.Identifier).Value;
-                        typeName += Take(TokenType.Colon).Value;
-                        typeName += ParseTypeName();
-                    }
-                    typeName += Take(TokenType.RightParen).Value;
-                    typeName += ParseTypeName();
-                    break; // TODO Not right, cannot support arrays, unions, errors, etc.
-                }
-                else if (Match(TokenType.LeftParen))
-                {
-                    typeName += Take(TokenType.LeftParen).Value;
-                    while (!Match(TokenType.RightParen))
-                    {
-                        typeName += Take(TokenType.Identifier).Value;
-                        typeName += Take(TokenType.Colon).Value;
-                        typeName += ParseTypeName();
-                        typeName += Take(TokenType.Semicolon).Value;
-                    }
-                    typeName += Take(TokenType.RightParen).Value;
-                    break; // TODO Not right, cannot support arrays, unions, errors, etc.
-                }
-                else
-                    type = Take(TokenType.Identifier);
-
-                // Suffixes
-                if (Match(TokenType.LeftSquare))
-                {
-                    Take(TokenType.LeftSquare);
-                    Take(TokenType.RightSquare);
-                    typeName += type.Value + "[]";
-                }
-                else
-                    typeName += type.Value;
-
-                if (Match(TokenType.Generic))
-                {
-                    Take(TokenType.Generic);
-                    typeName += '`';
-                    continue;
-                }
-
-                if (Match(TokenType.NilErrorCoalesce))
-                {
-                    Take(TokenType.NilErrorCoalesce);
-                    typeName += "?!";
-                }
-
-                if (Match(TokenType.Question))
-                {
-                    Take(TokenType.Question);
-                    typeName += "?";
-                }
-
-                if (Match(TokenType.Not))
-                {
-                    Take(TokenType.Not);
-                    typeName += "!";
-                }
-
-                if (Match(TokenType.BitOr))
-                {
-                    Take(TokenType.BitOr);
-                    typeName += "|";
-                }
-                else
-                    break;
-            }
-
-            return typeName;
         }
 
         public Token? MatchAndTakeToken(TokenType type)

@@ -43,7 +43,7 @@ namespace Compiler.Ast.Parselets
             PatternMatchExpression.Pattern ParsePattern()
             {
                 Token? token = null;
-                string? typeName = null;
+                TypeName? typeName = null;
                 Expression? valueExpr = null;
                 Expression? right = null;
 

@@ -225,6 +225,7 @@ namespace Compiler.CodeGeneration.Artifacts
             return left.Type == right;
         }
 
+        // TODO Return CobType? and have consumers check if null for proper error reporting
         public static CobType FromTypeName(TypeName? typeName, IScopeContext? context)
         {
             if (typeName == null)
@@ -257,11 +258,11 @@ namespace Compiler.CodeGeneration.Artifacts
                     type = Nil;
                 else // User-defined type identifier
                 {
-                    var dbgContext = context;
                     type = null!;
-                    while (context != null && type == null)
+                    var ctx = context;
+                    while (ctx != null && type == null)
                     {
-                        if (context is Module module)
+                        if (ctx is Module module)
                         {
                             TraitType? traitType;
                             RecordType? recordType;
@@ -273,14 +274,14 @@ namespace Compiler.CodeGeneration.Artifacts
                             else if ((distinctType = module.FindDistinctType(ident)) != null)
                                 type = distinctType.SubType;
                         }
-                        else if (context is RecordType recordType)
+                        else if (ctx is RecordType recordType)
                         {
                             CobType? aliasType;
                             if ((aliasType = recordType.FindGenericType(ident)) != null)
                                 type = aliasType;
                         }
 
-                        context = context.Parent;
+                        ctx = ctx.Parent;
                     }
 
                     if (type == null)
@@ -292,7 +293,7 @@ namespace Compiler.CodeGeneration.Artifacts
                 var parameters = typeName.Function.Parameters.Select(
                     x => new Function.Parameter(x.Name, FromTypeName(x.TypeName, context), x.IsSpread)
                 ).ToList();
-                var returnType = FromTypeName(typeName.Function.ReturnType, context);
+                var returnType = FromTypeName(typeName.Function.ReturnTypeName, context);
 
                 type = new CobType(eCobType.Function, tag: new FunctionSignature
                 {
@@ -304,10 +305,11 @@ namespace Compiler.CodeGeneration.Artifacts
             {
                 // TODO This might be wrong, can allocate records in records
                 Module? module = null;
-                while (context != null && module == null)
+                var ctx = context;
+                while (ctx != null && module == null)
                 {
-                    module = context as Module;
-                    context = context.Parent;
+                    module = ctx as Module;
+                    ctx = ctx.Parent;
                 }
 
                 if (module == null)
@@ -378,225 +380,11 @@ namespace Compiler.CodeGeneration.Artifacts
                 return type;
         }
 
-        // TODO Return CobType? and have consumers check if null for proper error reporting
-        public static CobType FromString(string? typeName, IScopeContext? context)
-        {
-            if (string.IsNullOrEmpty(typeName))
-                return None;
-
-            // UNION TYPE
-            var isUnion = typeName.Contains('|');
-            if (isUnion)
-            {
-                var subTypes = typeName.Split('|', StringSplitOptions.TrimEntries);
-                return new CobType(
-                    eCobType.Union,
-                    unionedTypes: subTypes.Select(x => FromString(x, context)).ToList()
-                );
-            }
-
-
-            // SIMPLE TYPE
-            CobType type;
-            CobType? bType = null, aliasType = null;
-
-            var isError = typeName.EndsWith('!');
-            if (isError)
-                typeName = typeName[..^1];
-
-            var isNil = typeName.EndsWith('?');
-            if (isNil)
-                typeName = typeName[..^1];
-
-            var genericIdx = typeName.IndexOf('`');
-            if (genericIdx != -1)
-            {
-                bType = FromString(typeName[(genericIdx+1)..], context);
-                typeName = typeName[..genericIdx];
-            }
-
-            var isArray = typeName.EndsWith("[]");
-            
-            if (isArray)
-            {
-                var elementType = FromString(typeName[..^2], context);
-                //type = new CobType(eCobType.Array, elementType: elementType);
-                var tag = Intrinsics.Array.FindConcretizedRecord(elementType) ?? Intrinsics.Array.AllocateConcretizedRecord(elementType);
-
-                return new CobType(eCobType.Struct, tag: tag);
-            }
-            else if (typeName.Length >= 2 && typeName[0] == 's' && char.IsDigit(typeName[1]))
-                type = new CobType(eCobType.Signed, int.Parse(typeName[1..]));
-            else if (typeName.Length >= 2 && typeName[0] == 'u' && char.IsDigit(typeName[1]))
-                type = new CobType(eCobType.Unsigned, int.Parse(typeName[1..]));
-            else if (typeName.Length >= 2 &&  typeName[0] == 'f' && char.IsDigit(typeName[1]))
-                type = new CobType(eCobType.Float, int.Parse(typeName[1..]));
-            else if (typeName == "any")
-                type = Any;
-            else if (typeName == "bool")
-                type = Boolean;
-            else if (typeName == "int")
-                type = Int;
-            else if (typeName == "uint")
-                type = UInt;
-            else if (typeName == "float")
-                type = Float;
-            else if (typeName == "error")
-                type = Error;
-            else if (typeName == "nil")
-                type = Nil;
-            else if (typeName.StartsWith("func"))
-            {
-                var parameters = new List<Function.Parameter>();
-
-                typeName = typeName[4..]; // func
-                typeName = typeName[1..]; // (
-                int i = 0, j = 0;
-                string paramName = null;
-                string paramTypeName = null;
-                for (; i < typeName.Length; ++i)
-                {
-                    var ch = typeName[i];
-                    if (ch == ':')
-                    {
-                        paramName = typeName.Substring(j, i - j);
-                        j = i + 1;
-                    }
-                    else if (ch == ',' || ch == ')')
-                    {
-                        if (paramName != null)
-                            paramTypeName = typeName.Substring(j, i - j);
-                        j = i + 1;
-
-                        if (paramName != null)
-                            parameters.Add(new Function.Parameter(paramName, FromString(paramTypeName, context), false, null));
-
-                        paramName = null;
-                        paramTypeName = null;
-
-                        if (ch == ')')
-                        {
-                            ++i;
-                            break;
-                        }
-                    }
-                }
-                typeName = typeName[i..]; // )
-                var returnType = typeName.Length > 0 ? FromString(typeName, context) : None;
-                type = new CobType(eCobType.Function, tag: new FunctionSignature { ReturnType = returnType, Parameters = parameters });
-            }
-            else if (typeName.StartsWith('('))
-            {
-                var fields = new List<Field>();
-
-                typeName = typeName[1..]; // (
-                int i = 0, j = 0;
-                string fieldName = null;
-                string fieldTypeName = null;
-                for (; i < typeName.Length; ++i)
-                {
-                    var ch = typeName[i];
-                    if (ch == ':')
-                    {
-                        fieldName = typeName.Substring(j, i - j);
-                        j = i + 1;
-                    }
-                    else if (ch == ';' || ch == ')')
-                    {
-                        if (fieldName != null)
-                            fieldTypeName = typeName.Substring(j, i - j);
-                        j = i + 1;
-
-                        if (fieldName != null)
-                            fields.Add(new Field(null, fieldName, FromString(fieldTypeName, context), null, null));
-
-                        fieldName = null;
-                        fieldTypeName = null;
-
-                        if (ch == ')')
-                        {
-                            ++i;
-                            break;
-                        }
-                    }
-                }
-                typeName = typeName[i..]; // )
-
-                Module? module = null;
-                while (context != null && module == null)
-                {
-                    module = context as Module;
-                    context = context.Parent;
-                }
-
-                if (module == null)
-                    throw new Exception("Tuple Signature declaration is not valid here");
-
-                var tupleType = module.AllocateRecordType($"InlineTuple'{Guid.NewGuid():N}", eRecordType.Tuple);
-                foreach (var field in fields)
-                    tupleType.AllocateField(field.Name, field.Type, false, false);
-
-                type = new CobType(eCobType.Tuple, tag: tupleType);
-            }
-            else
-            {
-                var dbgContext = context;
-                type = null!;
-                while (context != null && type == null)
-                {
-                    if (context is Module module)
-                    {
-                        TraitType? traitType;
-                        RecordType? recordType;
-                        DistinctType? distinctType;
-                        if ((traitType = module.FindTraitType(typeName)) != null)
-                            type = new CobType(eCobType.Trait, tag: traitType);
-                        else if ((recordType = module.FindRecordType(typeName)) != null)
-                            type = recordType.ThisType;
-                        else if ((distinctType = module.FindDistinctType(typeName)) != null)
-                            type = distinctType.SubType;
-                    }
-                    else if (context is RecordType recordType)
-                    {
-                        if ((aliasType = recordType.FindGenericType(typeName)) != null)
-                            type = aliasType;
-                    }
-
-                    context = context.Parent;
-                }
-
-                if (type == null)
-                    throw new Exception($"The typename '{typeName}' is not valid");
-            }
-
-            if (bType != null)
-            {
-                if (type.Tag is RecordType recordType)
-                {
-                    // TODO Might be better to just merge these methods into a single one
-                    var tag = recordType.FindConcretizedRecord(bType) ?? recordType.AllocateConcretizedRecord(bType);
-                    type = tag.ThisType;
-                }
-                else
-                    throw new Exception($"The typename '{typeName}' is not valid");
-            }
-
-            if (isError && isNil)
-                return new CobType(eCobType.Union, unionedTypes: new[] { type, Error, Nil });
-            else if (isError)
-                return new CobType(eCobType.Union, unionedTypes: new[] { type, Error });
-            else if (isNil)
-                return new CobType(eCobType.Union, unionedTypes: new[] { type, Nil });
-            else
-                return type;
-        }
-
-        // TODO Wow, what a horrible implementation
-        public static bool TryParse(string typeName, IScopeContext? context, out CobType result)
+        public static bool TryParse(TypeName typeName, IScopeContext? context, out CobType result)
         {
             try
             {
-                result = FromString(typeName, context);
+                result = FromTypeName(typeName, context);
                 return true;
             }
             catch

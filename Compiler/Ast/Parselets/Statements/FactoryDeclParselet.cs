@@ -24,7 +24,7 @@ namespace Compiler.Ast.Parselets.Statements
 
                     var paramName = parser.Take(TokenType.Identifier);
                     var paramType = parser.MatchAndTakeToken(TokenType.Colon) != null
-                        ? parser.ParseTypeName2()
+                        ? parser.ParseTypeName()
                         : TypeName.Any;// nameof(CobType.Any);
 
                     var paramDefault = parser.MatchAndTakeToken(TokenType.Assign) != null

@@ -3,6 +3,7 @@ using Compiler.CodeGeneration.Artifacts;
 using Compiler.Utility;
 using System.Collections;
 using System.Reflection;
+using Compiler.Lexer;
 using Module = Compiler.CodeGeneration.Artifacts.Module;
 
 namespace Compiler.CodeGeneration.Architectures
@@ -355,6 +356,65 @@ namespace Compiler.CodeGeneration.Architectures
             writer.Write7BitEncodedInt(list.Count);
             foreach (var item in list)
                 writer.Write7BitEncodedInt(from.IndexOf(item));
+        }
+
+        public static void Write(this BinaryWriter writer, TypeName? typeName)
+        {
+            if (typeName == null)
+                writer.Write((byte)eTypeName.None);
+            else
+            {
+                writer.Write((byte)typeName.Type);
+                writer.Write(CVMAssembler.AsFlags(
+                    typeName.IsArray,
+                    typeName.IsErrorable,
+                    typeName.IsNillable,
+                    typeName.Generic != null,
+                    typeName.Union != null
+                ));
+
+                switch (typeName.Type)
+                {
+                    case eTypeName.Identifier:
+                        writer.Write(typeName.Identifier!);
+                        break;
+                    case eTypeName.FunctionSignature:
+                        writer.Write7BitEncodedInt(typeName.Function.Parameters.Count);
+                        foreach (var parameter in typeName.Function.Parameters)
+                        {
+                            writer.Write(parameter.Name);
+                            writer.Write(parameter.TypeName);
+                            writer.Write(CVMAssembler.AsFlags(parameter.IsSpread));
+                        }
+
+                        writer.Write(typeName.Function.ReturnTypeName);
+                        break;
+                    case eTypeName.RecordSignature:
+                        writer.Write7BitEncodedInt(typeName.Record.UniqueId);
+                        writer.Write((byte)typeName.Record.Type);
+                        writer.Write7BitEncodedInt((byte)typeName.Record.Fields.Count);
+                        foreach (var field in typeName.Record.Fields)
+                        {
+                            writer.Write(CVMAssembler.AsFlags(field.Name != null));
+                            if (field.Name != null)
+                                writer.Write(field.Name);
+                            writer.Write(field.TypeName);
+                        }
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException();
+                }
+
+                if (typeName.Generic != null)
+                {
+                    writer.Write7BitEncodedInt(typeName.Generic.Count);
+                    foreach (var generic in typeName.Generic)
+                        writer.Write(generic);
+                }
+
+                if (typeName.Union != null)
+                    writer.Write(typeName.Union);
+            }
         }
     }
 }

@@ -10,7 +10,7 @@ namespace Compiler.Ast.Expressions.Statements
 
         public IReadOnlyList<GenericDefinition> Generics { get; }
 
-        public IReadOnlyList<string> TraitTypeNames { get; }
+        public IReadOnlyList<TypeName> TraitTypeNames { get; }
 
         public IReadOnlyList<FieldDefinition> Fields { get; }
 
@@ -24,7 +24,7 @@ namespace Compiler.Ast.Expressions.Statements
             Token token,
             string name,
             IReadOnlyList<GenericDefinition> generics,
-            IReadOnlyList<string> traitTypeNames,
+            IReadOnlyList<TypeName> traitTypeNames,
             IReadOnlyList<FieldDefinition> fields,
             IReadOnlyList<FunctionDeclStatement> functions,
             IReadOnlyList<FactoryDeclStatement> factories,
@@ -59,8 +59,8 @@ namespace Compiler.Ast.Expressions.Statements
     }
 
     internal sealed record IndexerDefinition(
-        string KeyTypeName,
-        string ReturnTypeName,
+        TypeName KeyTypeName,
+        TypeName ReturnTypeName,
         Expression? GetterExpression,
         Expression? SetterExpression
     );

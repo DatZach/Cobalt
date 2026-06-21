@@ -4,6 +4,7 @@ using Compiler.Lexer;
 
 namespace Compiler.Ast.Parselets.Statements
 {
+    // TODO Rename this, it doesn't alias anymore
     internal sealed class TypeAliasParselet : IPrefixStatementParselet
     {
         public Expression Parse(Parser parser, Token token)

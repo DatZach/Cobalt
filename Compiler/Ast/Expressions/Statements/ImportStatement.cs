@@ -1,8 +1,6 @@
 ﻿using Compiler.Lexer;
 using Compiler.Ast.Visitors;
 using System.Diagnostics;
-using Compiler.CodeGeneration;
-using Compiler.CodeGeneration.Artifacts;
 
 namespace Compiler.Ast.Expressions.Statements
 {
@@ -12,23 +10,19 @@ namespace Compiler.Ast.Expressions.Statements
 
         public string? SymbolName { get; }
 
-        public CobType? SymbolType { get; }
-
-        public FunctionDeclStatement? SymbolTypeSignature { get; }
+        public TypeName? SymbolTypeName { get; }
 
         public ImportStatement(
             Token token,
             string sourceFile,
             string? symbolName,
-            CobType? symbolType,
-            FunctionDeclStatement? functionSignature
+            TypeName? symbolTypeName
         )
             : base(token)
         {
             SourceFile = sourceFile;
             SymbolName = symbolName;
-            SymbolType = symbolType;
-            SymbolTypeSignature = functionSignature;
+            SymbolTypeName = symbolTypeName;
         }
 
         [DebuggerStepThrough]

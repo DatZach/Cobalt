@@ -25,12 +25,12 @@ namespace Compiler.Ast.Parselets.Statements
             {
                 var fieldName = parser.Take(TokenType.Identifier);
                 parser.Take(TokenType.Colon);
-                var fieldType = parser.ParseTypeName();
+                var fieldTypeName = parser.ParseTypeName();
 
                 StructDeclParselet.ParseGetterSetters(parser, out var getterExpression, out var setterExpression);
 
                 function = null;
-                field = new FieldDefinition(fieldName.Value, fieldType, getterExpression, setterExpression);
+                field = new FieldDefinition(fieldName.Value, fieldTypeName, getterExpression, setterExpression);
             }
 
             return new MixinDeclStatement(token, targetTypeName.Value, function, field);

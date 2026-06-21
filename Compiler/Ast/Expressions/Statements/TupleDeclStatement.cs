@@ -51,12 +51,12 @@ namespace Compiler.Ast.Expressions.Statements
 
     internal sealed record GenericDefinition(
         string Name,
-        string? ConstraintTypeName
+        TypeName? ConstraintTypeName
     );
 
     internal sealed record FieldDefinition(
         string Name,
-        string TypeName,
+        TypeName TypeName,
         Expression? GetterExpression,
         Expression? SetterExpression
     );

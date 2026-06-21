@@ -6,11 +6,11 @@ namespace Compiler.Ast.Expressions
 {
     internal sealed class LensExpression : Expression
     {
-        public string ElementTypeName { get; }
+        public TypeName ElementTypeName { get; }
 
         public Expression Expression { get; }
 
-        public LensExpression(Token token, string elementTypeName, Expression expression)
+        public LensExpression(Token token, TypeName elementTypeName, Expression expression)
             : base(token)
         {
             ElementTypeName = elementTypeName;

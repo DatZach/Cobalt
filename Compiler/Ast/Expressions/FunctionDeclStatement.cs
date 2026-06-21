@@ -11,7 +11,7 @@ namespace Compiler.Ast.Expressions
 
         public bool IsAnonymous { get; }
 
-        public string? ReturnTypeName { get; }
+        public TypeName? ReturnTypeName { get; }
 
         public CallingConvention CallingConvention { get; }
 
@@ -24,7 +24,7 @@ namespace Compiler.Ast.Expressions
             string? name,
             IReadOnlyList<Parameter> parameters,
             Expression? body,
-            string? returnTypeName,
+            TypeName? returnTypeName,
             CallingConvention callingConvention
         )
             : base(token)

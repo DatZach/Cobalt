@@ -2,8 +2,6 @@
 using Compiler.Lexer;
 using Compiler.Ast.Expressions;
 using Compiler.Ast.Expressions.Statements;
-using Compiler.CodeGeneration;
-using Compiler.CodeGeneration.Artifacts;
 
 namespace Compiler.Ast.Parselets.Statements
 {
@@ -29,35 +27,13 @@ namespace Compiler.Ast.Parselets.Statements
             }
 
             var symbolName = parser.MatchAndTakeToken(TokenType.Identifier);
-
-            CobType? symbolType;
-            FunctionDeclStatement? functionSignature;
-            if (symbolName != null)
-            {
-                if (parser.Match(TokenType.Function))
-                {
-                    symbolType = CobType.Func;
-                    functionSignature = parser.ParseExpression() as FunctionDeclStatement;
-                }
-                else
-                {
-                    // TODO Might not be right, null context is always sketchy
-                    symbolType = CobType.FromString(parser.ParseTypeName(), null);
-                    functionSignature = null;
-                }
-            }
-            else
-            {
-                symbolType = null;
-                functionSignature = null;
-            }
+            var symbolTypeName = parser.ParseTypeName();
 
             return new ImportStatement(
                 token,
                 sourceFile.ToString(),
                 symbolName?.Value,
-                symbolType,
-                functionSignature
+                symbolTypeName
             );
         }
     }

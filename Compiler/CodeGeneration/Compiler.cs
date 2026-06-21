@@ -413,7 +413,7 @@ namespace Compiler.CodeGeneration
             {
                 var decl = expression.Declarations[i];
                 var mutable = expression.Type == TokenType.Var;
-                var type = CobType.FromString(decl.TypeName, CurrentContext);
+                var type = CobType.FromTypeName(decl.TypeName, CurrentContext);
 
                 Storage? rhs;
                 if (decl.Initializer != null)
@@ -855,7 +855,9 @@ namespace Compiler.CodeGeneration
                 // TODO Support T in function bodies to remove the hack below
                 var aType = lhs?.Type;
                 //var bType = CobType.FromString(rhs.Value);
-                var bType = rhs.Value == "T" ? CobType.U8 : CobType.FromString(rhs.Value, CurrentContext); // HACK TODO THIS IS ENTIRELY INCORRECT
+                var bType = rhs.Value == "T" // HACK TODO THIS IS ENTIRELY INCORRECT
+                    ? CobType.U8
+                    : CobType.FromTypeName(new TypeName { Type = eTypeName.Identifier, Identifier = rhs.Value }, CurrentContext);
                 CobType cType;
 
                 if (aType?.Tag is RecordType recordType)
@@ -1240,7 +1242,7 @@ namespace Compiler.CodeGeneration
 
             if (expression.RightSingle != null)
             {
-                var type = CobType.FromString(expression.RightSingle.TypeName, CurrentContext);
+                var type = CobType.FromTypeName(expression.RightSingle.TypeName, CurrentContext);
 
                 var c = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
 
@@ -1276,7 +1278,7 @@ namespace Compiler.CodeGeneration
                 {
                     var labelCaseEnd = CurrentFunction.Body.AllocateLabel();
 
-                    var isDefaultBranch = branch.TypeName == "default";
+                    var isDefaultBranch = branch.TypeName?.Identifier == "default";
                     var useDynamicTypeCheck = lhs.Type == eCobType.Union;
 
                     if (isDefaultBranch)
@@ -1296,7 +1298,7 @@ namespace Compiler.CodeGeneration
                         type = value.Type;
                     }
                     else if (branch.TypeName != null)
-                        type = CobType.FromString(branch.TypeName, CurrentContext);
+                        type = CobType.FromTypeName(branch.TypeName, CurrentContext);
                     else
                     {
                         messages.Add(Message.IllegalPattern, branch.Token);
@@ -1428,8 +1430,12 @@ namespace Compiler.CodeGeneration
         {
             if (expression.FunctionExpression is not IdentifierExpression ie)
                 return null;
-            
-            if (!CobType.TryParse(ie.Value, CurrentContext, out var castType)
+
+            // TODO Bit of a hack to create a typename like this
+            //      Probably shouldn't even have to disambiguate the expression at this point in time, should be in
+            //      the AST
+            var typeName = new TypeName { Type = eTypeName.Identifier, Identifier = ie.Value };
+            if (!CobType.TryParse(typeName, CurrentContext, out var castType)
             ||  castType.Type == eCobType.Tuple
             ||  castType.Type == eCobType.Struct
             ||  castType.Type == eCobType.None)
@@ -1808,7 +1814,7 @@ namespace Compiler.CodeGeneration
 
             CobType cobType;
             if (expression.ExplicitTypeName != null)
-                cobType = CobType.FromString(expression.ExplicitTypeName, CurrentContext);
+                cobType = CobType.FromTypeName(expression.ExplicitTypeName, CurrentContext);
             else
             {
                 //var tupleType = CurrentModule.FindTupleTypeViaImplicitTypeMatch(exprStorages);
