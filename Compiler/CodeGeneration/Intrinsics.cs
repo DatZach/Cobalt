@@ -33,8 +33,11 @@ namespace Compiler.CodeGeneration
             if (recordType == null)
             {
                 recordType = compiler.RootModule.AllocateRecordType(typeName, eRecordType.Tuple);
-                foreach (var fieldType in fieldTypes)
-                    recordType.AllocateField(string.Empty, fieldType, false, false);
+                for (var i = 0; i < fieldTypes.Count; ++i)
+                {
+                    var fieldType = fieldTypes[i];
+                    recordType.AllocateField($"'{i}", fieldType, false, false);
+                }
             }
 
             return recordType;

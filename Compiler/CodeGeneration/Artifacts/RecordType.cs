@@ -16,7 +16,7 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public bool IsGeneric => generics.Count > 0;
 
-        public bool IsAnonymous => fields.Count > 0 && string.IsNullOrEmpty(fields[0].Name);
+        public bool IsAnonymous => fields.Count > 0 && fields[0].Name.StartsWith('\'');
 
         public CobType ThisType => new (Type == eRecordType.Struct ? eCobType.Struct : eCobType.Tuple, tag: this);
 
@@ -142,6 +142,11 @@ namespace Compiler.CodeGeneration.Artifacts
             return fields.FirstOrDefault(x => x.Name == name);
         }
 
+        public Field? FindField(int index)
+        {
+            return fields.ElementAtOrDefault(index);
+        }
+
         public Indexer AllocateIndexer(CobType keyType, CobType returnType)
         {
             var getter = AllocateFunction("$Indexer_$get", new [] { new Function.Parameter("key", keyType, false) }, returnType);
@@ -261,6 +266,9 @@ namespace Compiler.CodeGeneration.Artifacts
 
             Field? field;
             if ((field = FindField(name)) != null)
+                return field;
+
+            if (name.StartsWith('\'') && (field = FindField(int.Parse(name[1..]))) != null)
                 return field;
 
             Function? factory;

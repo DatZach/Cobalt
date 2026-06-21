@@ -762,9 +762,4 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public IReadOnlyList<Function.Parameter> Parameters { get; init; }
     }
-
-    internal sealed class TupleSignature
-    {
-        public IReadOnlyList<Field> Fields { get; init; }
-    }
 }
