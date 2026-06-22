@@ -1,8 +1,6 @@
 ﻿using Compiler.Lexer;
 using Compiler.Ast.Visitors;
 using System.Diagnostics;
-using Compiler.CodeGeneration;
-using Compiler.CodeGeneration.Artifacts;
 
 namespace Compiler.Ast.Expressions.Statements
 {
@@ -12,7 +10,7 @@ namespace Compiler.Ast.Expressions.Statements
 
         public IReadOnlyList<Declaration> Declarations { get; }
 
-        public override Token EndToken => Declarations.LastOrDefault()?.Initializer?.EndToken ?? Token;
+        public override Token EndToken => Declarations.LastOrDefault()?.EndToken ?? Token;
 
         public VariableDeclStatement(Token token, IReadOnlyList<Declaration> declarations)
             : base(token)
@@ -26,22 +24,55 @@ namespace Compiler.Ast.Expressions.Statements
             return visitor.Visit(this);
         }
 
-        public sealed class Declaration
+        public sealed class StandardDeclaration : Declaration
         {
-            public Token Token { get; }
+            public string Name { get; }
 
             public TypeName? TypeName { get; }
 
             public Expression? Initializer { get; }
 
-            public string Name => Token.Value!;
+            public override Token? EndToken => Initializer?.EndToken;
 
-            public Declaration(Token token, TypeName? typeName, Expression? initializer)
+            public StandardDeclaration(string name, TypeName? typeName, Expression? initializer)
             {
-                Token = token;
+                Name = name;
                 TypeName = typeName;
                 Initializer = initializer;
             }
+        }
+
+        public sealed class DestructureDeclaration : Declaration
+        {
+            public IReadOnlyList<Field> Fields { get; }
+
+            public Expression? Initializer { get; }
+
+            public override Token? EndToken => Initializer?.EndToken;
+
+            public DestructureDeclaration(IReadOnlyList<Field> fields, Expression? initializer)
+            {
+                Fields = fields;
+                Initializer = initializer;
+            }
+
+            public sealed class Field
+            {
+                public string Name { get; }
+
+                public TypeName? TypeName { get; }
+
+                public Field(string name, TypeName? typeName)
+                {
+                    Name = name;
+                    TypeName = typeName;
+                }
+            }
+        }
+
+        public abstract class Declaration
+        {
+            public abstract Token? EndToken { get; }
         }
     }
 }

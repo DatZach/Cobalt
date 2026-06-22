@@ -12,15 +12,40 @@ namespace Compiler.Ast.Parselets.Statements
             
             do
             {
-                var identifier = parser.Take(TokenType.Identifier);
-                var typeName = parser.MatchAndTakeToken(TokenType.Colon) != null ? parser.ParseTypeName() : null;
-                
-                Expression? initializer = null;
-                if (parser.MatchAndTakeToken(TokenType.Assign) != null)
-                    initializer = parser.ParseExpression(isConditional: true);
+                VariableDeclStatement.Declaration declaration;
+                if (parser.MatchAndTakeToken(TokenType.LeftParen) != null) // Destructure
+                {
+                    var fields = new List<VariableDeclStatement.DestructureDeclaration.Field>();
+                    do
+                    {
+                        var identifier = parser.Take(TokenType.Identifier).Value;
+                        var typeName = parser.MatchAndTakeToken(TokenType.Colon) != null ? parser.ParseTypeName() : null;
 
-                declarations.Add(new VariableDeclStatement.Declaration(identifier, typeName, initializer));
-            } while(parser.Match(TokenType.Comma));
+                        fields.Add(new VariableDeclStatement.DestructureDeclaration.Field(identifier, typeName));
+                    } while (parser.MatchAndTakeToken(TokenType.Comma) != null);
+
+                    parser.Take(TokenType.RightParen);
+
+                    Expression? initializer = null;
+                    if (parser.MatchAndTakeToken(TokenType.Assign) != null)
+                        initializer = parser.ParseExpression(isConditional: true);
+
+                    declaration = new VariableDeclStatement.DestructureDeclaration(fields, initializer);
+                }
+                else // Standard
+                {
+                    var identifier = parser.Take(TokenType.Identifier).Value;
+                    var typeName = parser.MatchAndTakeToken(TokenType.Colon) != null ? parser.ParseTypeName() : null;
+                
+                    Expression? initializer = null;
+                    if (parser.MatchAndTakeToken(TokenType.Assign) != null)
+                        initializer = parser.ParseExpression(isConditional: true);
+
+                    declaration = new VariableDeclStatement.StandardDeclaration(identifier, typeName, initializer);
+                }
+
+                declarations.Add(declaration);
+            } while(parser.MatchAndTakeToken(TokenType.Comma) != null);
 
             return new VariableDeclStatement(token, declarations);
         }

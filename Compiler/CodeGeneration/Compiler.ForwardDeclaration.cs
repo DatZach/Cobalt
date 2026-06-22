@@ -468,8 +468,13 @@ namespace Compiler.CodeGeneration
             var mutable = expression.Type == TokenType.Var;
             foreach (var decl in expression.Declarations)
             {
-                var type = CobType.FromTypeName(decl.TypeName, CurrentContext);
-                CurrentModule.AllocateGlobal(decl.Name, type, mutable);
+                if (decl is VariableDeclStatement.StandardDeclaration stdDecl)
+                {
+                    var type = CobType.FromTypeName(stdDecl.TypeName, CurrentContext);
+                    CurrentModule.AllocateGlobal(stdDecl.Name, type, mutable);
+                }
+                else
+                    messages.Add(Message.CannotDeclareSymbolHere, expression); // idk maybe support some day
             }
 
             return Unit.Value;

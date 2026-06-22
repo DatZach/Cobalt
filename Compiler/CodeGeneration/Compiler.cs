@@ -409,61 +409,104 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(VariableDeclStatement expression)
         {
+            // TODO Idk this is a bit of a mess, both the syntax and the implementation
+
+            var mutable = expression.Type == TokenType.Var;
             for (var i = 0; i < expression.Declarations.Count; ++i)
             {
-                var decl = expression.Declarations[i];
-                var mutable = expression.Type == TokenType.Var;
-                var type = CobType.FromTypeName(decl.TypeName, CurrentContext);
-
-                Storage? rhs;
-                if (decl.Initializer != null)
+                var x = expression.Declarations[i];
+                if (x is VariableDeclStatement.StandardDeclaration stdDecl)
                 {
-                    rhs = decl.Initializer.Accept(this);
-                    if (rhs == null)
-                        messages.Add(Message.TypeMismatch, expression, "any", "none");
-                    else if (type != eCobType.None && !CobType.IsCastable(rhs.Type, type))
-                        messages.Add(Message.TypeMismatch, expression, type, rhs.Type);
+                    var type = CobType.FromTypeName(stdDecl.TypeName, CurrentContext);
+
+                    Storage? rhs;
+                    if (stdDecl.Initializer != null)
+                    {
+                        rhs = stdDecl.Initializer.Accept(this);
+                        if (rhs == null)
+                            messages.Add(Message.TypeMismatch, expression, "any", "none");
+                        else if (type != eCobType.None && !CobType.IsCastable(rhs.Type, type))
+                            messages.Add(Message.TypeMismatch, expression, type, rhs.Type);
+                        else
+                            type = rhs.Type;
+                    }
                     else
-                        type = rhs.Type;
-                }
-                else
-                    rhs = null;
+                        rhs = null;
 
-                if ((decl.TypeName == null && decl.Initializer == null)
-                ||  type == eCobType.None)
-                {
-                    messages.Add(Message.MalformedVarDeclaration, expression);
-                    continue;
-                }
+                    if ((stdDecl.TypeName == null && stdDecl.Initializer == null)
+                    ||  type == eCobType.None)
+                    {
+                        messages.Add(Message.MalformedVarDeclaration, expression);
+                        continue;
+                    }
                 
-                if (CurrentFunction == CurrentModule.InitializerFunction) // Global Decl
-                {
-                    var global = CurrentModule.FindGlobal(decl.Name)!;
-                    var idx = Globals.IndexOf(global);
-                    if (rhs != null)
+                    if (CurrentFunction == CurrentModule.InitializerFunction) // Global Decl
                     {
-                        CurrentFunction.Body.Emit(
-                            Opcode.Move,
-                            Operand.Global(idx),
-                            rhs.Operand
-                        );
+                        var global = CurrentModule.FindGlobal(stdDecl.Name)!;
+                        var idx = Globals.IndexOf(global);
+                        if (rhs != null)
+                        {
+                            CurrentFunction.Body.Emit(
+                                Opcode.Move,
+                                Operand.Global(idx),
+                                rhs.Operand
+                            );
+                        }
                     }
-                }
-                else
-                {
-                    var local = CurrentFunction.AllocateLocal(decl.Name, type, mutable);
-                    var idx = CurrentFunction.FindLocalIndex(local);
-                    if (rhs != null)
+                    else
                     {
-                        CurrentFunction.Body.Emit(
-                            Opcode.Move,
-                            Operand.Local(idx),
-                            rhs.Operand
-                        );
+                        var local = CurrentFunction.AllocateLocal(stdDecl.Name, type, mutable);
+                        var idx = CurrentFunction.FindLocalIndex(local);
+                        if (rhs != null)
+                        {
+                            CurrentFunction.Body.Emit(
+                                Opcode.Move,
+                                Operand.Local(idx),
+                                rhs.Operand
+                            );
+                        }
                     }
-                }
 
-                rhs?.Free();
+                    rhs?.Free();
+                }
+                else if (x is VariableDeclStatement.DestructureDeclaration desDecl)
+                {
+                    Storage? rhs;
+                    if (desDecl.Initializer != null)
+                    {
+                        rhs = desDecl.Initializer.Accept(this);
+                        if (rhs == null)
+                            messages.Add(Message.TypeMismatch, expression, "any", "none");
+                    }
+                    else
+                        rhs = null;
+
+                    var source = rhs.Type.Tag as IScopeContext;
+                    var prevAssignmentRHS = AssignmentRHS;
+                    AssignmentRHS = rhs;
+
+                    for (var j = 0; j < desDecl.Fields.Count; ++j)
+                    {
+                        var prevBinOpLHS = BinOpLHS;
+                        BinOpLHS = rhs;
+                        var srcSymbol = source.FindSymbol($"'{j}");
+                        var srcStorage = source.EmitGetForSymbol(srcSymbol);
+                        BinOpLHS = prevBinOpLHS;
+
+                        CurrentFunction.AllocateLocal(desDecl.Fields[j].Name, srcStorage.Type, mutable);
+
+                        AssignmentRHS = srcStorage;
+                        var dstSymbol = CurrentContext.FindSymbol(desDecl.Fields[j].Name);
+                        CurrentContext.EmitSetForSymbol(dstSymbol);
+                        srcStorage?.Free();
+                    }
+
+                    AssignmentRHS = prevAssignmentRHS;
+
+                    rhs?.Free();
+
+                    return null;
+                }
             }
 
             return null;
@@ -2210,7 +2253,7 @@ namespace Compiler.CodeGeneration
 
         Storage? EmitGetForSymbol(ISymbol symbol);
 
-        bool EmitSetForSymbol(ISymbol symbol);
+        bool EmitSetForSymbol(ISymbol symbol); // TODO EmitSetForSymbol(ISymbol symbol, Storage value)
     }
 
     internal interface ISymbol
