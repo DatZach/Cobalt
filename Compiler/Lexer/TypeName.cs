@@ -43,13 +43,15 @@ namespace Compiler.Lexer
                         break;
 
                     case eTypeName.FunctionSignature:
-                        sb.Append("func(");
+                        sb.Append("function(");
                         for (var i = 0; i < Function.Parameters.Count; ++i)
                         {
                             var x = Function.Parameters[i];
-                            sb.Append(x.Name);
-                            sb.Append(": ");
+                            if (x.IsSpread) sb.Append("...");
                             sb.Append(x.TypeName);
+                            sb.Append(' ');
+                            sb.Append(x.Name);
+                            
                             if (i < Function.Parameters.Count - 1)
                                 sb.Append(", ");
                         }
@@ -63,7 +65,10 @@ namespace Compiler.Lexer
                         }
 
                         if (Function.CallingConvention != CallingConvention.Default)
+                        {
+                            sb.Append(", ");
                             sb.Append(Function.CallingConvention);
+                        }
                         break;
 
                     case eTypeName.RecordSignature:

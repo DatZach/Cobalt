@@ -152,7 +152,7 @@ namespace Compiler.CodeGeneration.Artifacts
     {
         public readonly static CobType None = eCobType.None;
         public readonly static CobType Any = eCobType.Any;
-        public readonly static CobType Func = eCobType.Function;
+        public readonly static CobType Function = eCobType.Function;
         public readonly static CobType Boolean = new(eCobType.Boolean);
         public readonly static CobType Int = new (eCobType.Signed, -1);
         public readonly static CobType UInt = new (eCobType.Unsigned, -1);

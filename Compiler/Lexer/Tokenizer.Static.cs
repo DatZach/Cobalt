@@ -103,7 +103,7 @@ namespace Compiler.Lexer
                 ["trait"] = TokenType.Trait,
                 ["type"] = TokenType.Type,
                 ["tuple"] = TokenType.Tuple,
-                ["func"] = TokenType.Function,
+                ["function"] = TokenType.Function,
                 ["mixin"] = TokenType.Mixin,
                 ["factory"] = TokenType.Factory,
                 ["packed"] = TokenType.Packed,

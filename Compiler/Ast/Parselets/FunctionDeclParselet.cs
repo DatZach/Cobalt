@@ -21,12 +21,8 @@ namespace Compiler.Ast.Parselets
                 while (!parser.Match(TokenType.RightParen))
                 {
                     var isSpread = parser.MatchAndTakeToken(TokenType.Spread) != null;
-
+                    var paramType = parser.ParseTypeName();
                     var paramName = parser.Take(TokenType.Identifier);
-                    var paramType = parser.MatchAndTakeToken(TokenType.Colon) != null
-                        ? parser.ParseTypeName()
-                        : TypeName.Any;// nameof(CobType.Any);
-
                     var paramDefault = parser.MatchAndTakeToken(TokenType.Assign) != null
                                      ? parser.ParseExpression()
                                      : null;
@@ -48,15 +44,28 @@ namespace Compiler.Ast.Parselets
 
             parser.Take(TokenType.RightParen);
 
-            var returnTypeName = parser.Match(TokenType.Identifier) ? parser.ParseTypeName() : null;
+            var returnTypeName = !parser.Match(TokenType.Comma) && !parser.Match(TokenType.FatArrow) &&
+                                 !parser.Match(TokenType.LeftBrace)
+                               ? parser.ParseTypeName()
+                               : null;
 
             CallingConvention callingConvention;
-            if (parser.MatchAndTakeToken(TokenType.CCall) != null)
-                callingConvention = CallingConvention.CCall;
-            else if (parser.MatchAndTakeToken(TokenType.StdCall) != null)
-                callingConvention = CallingConvention.StdCall;
-            else if (parser.MatchAndTakeToken(TokenType.NakedCall) != null)
-                callingConvention = CallingConvention.NakedCall;
+            if (parser.MatchAndTakeToken(TokenType.Comma) != null)
+            {
+                if (parser.MatchAndTakeToken(TokenType.CCall) != null)
+                    callingConvention = CallingConvention.CCall;
+                else if (parser.MatchAndTakeToken(TokenType.StdCall) != null)
+                    callingConvention = CallingConvention.StdCall;
+                else if (parser.MatchAndTakeToken(TokenType.NakedCall) != null)
+                    callingConvention = CallingConvention.NakedCall;
+                else
+                {
+                    var missingToken = parser.Take();
+                    parser.Messages.Add(Message.UnexpectedToken2, missingToken, "calling convention", missingToken);
+                    callingConvention = CallingConvention.Default;
+                }
+            }
+            
             else
                 callingConvention = CallingConvention.Default;
 

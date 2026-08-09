@@ -1,6 +1,5 @@
 ﻿using Compiler.Ast.Expressions;
 using Compiler.Ast.Expressions.Statements;
-using Compiler.CodeGeneration.Artifacts;
 using Compiler.Lexer;
 
 namespace Compiler.Ast.Parselets.Statements
@@ -21,12 +20,8 @@ namespace Compiler.Ast.Parselets.Statements
                 while (!parser.Match(TokenType.RightParen))
                 {
                     var isSpread = parser.MatchAndTakeToken(TokenType.Spread) != null;
-
+                    var paramType = parser.ParseTypeName();
                     var paramName = parser.Take(TokenType.Identifier);
-                    var paramType = parser.MatchAndTakeToken(TokenType.Colon) != null
-                        ? parser.ParseTypeName()
-                        : TypeName.Any;// nameof(CobType.Any);
-
                     var paramDefault = parser.MatchAndTakeToken(TokenType.Assign) != null
                         ? parser.ParseExpression()
                         : null;

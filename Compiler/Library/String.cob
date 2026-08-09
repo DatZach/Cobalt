@@ -1,7 +1,7 @@
 type string     Lens`u8;
 //type cstring    LPVOID;
 
-func string(value: int, radix: int = 10) string {
+function string(int value, int radix = 10) string {
     var result = [];
     
     const sign = radix == 10 && value < 0;
@@ -27,7 +27,7 @@ func string(value: int, radix: int = 10) string {
 
 // TODO Move to another file
 // TODO int
-func int_(value: string, radix: int = 10) int {
+function int_(string value, int radix = 10) int {
     if (value.Length == 0)
         return 0;
     

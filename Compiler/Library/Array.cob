@@ -1,5 +1,7 @@
 //module Standard;
 
+// TODO Fluent API for manip functions
+
 struct Array `T {
     Length: uint; // , const
     data: Lens`T;
@@ -12,7 +14,7 @@ struct Array `T {
         set { data[key] = value; }
     }
 
-    factory New(capacity: uint) {
+    factory New(uint capacity) {
         var _capacity = capacity; // TODO capacity
         if (_capacity == 0)
             _capacity = 16;
@@ -23,7 +25,7 @@ struct Array `T {
         };
     }
 
-    func Add(value: T) {
+    function Add(T value) {
         if (Length >= data.Length) {
             data = Heap.ReAlloc(data, data.Length << 1);
         }
@@ -32,13 +34,13 @@ struct Array `T {
         Length += 1;
     }
 
-    func AddRange(value: T[]) {
+    function AddRange(T[] value) {
         var i: int;
         for (i in ..value.Length)
             Add(value[i]);
     }
 
-    func Reverse() {
+    function Reverse() {
         if (Length < 2)
             return;
         
@@ -54,7 +56,7 @@ struct Array `T {
         }
     }
 
-    func Where(predicate: func(element: T) bool) T[] {
+    function Where(function(T element) bool predicate) T[] {
         var result = [];
 
         var i: int;
@@ -67,7 +69,7 @@ struct Array `T {
         return result;
     }
 
-    func Select(predicate: func(element: T) T) T[] {
+    function Select(function(T element) T predicate) T[] {
         var result = [];
 
         var i: int;
@@ -80,13 +82,13 @@ struct Array `T {
         return result;
     }
 
-    func Slice(range: Range) Lens`T! {
+    function Slice(Range range) Lens`T! {
         var length = (range.End < 0) :: { true => Length - ~range.End, false => range.Length };
         if (range.Start < 0 || length < 0 || length > Length) return error.OutOfBounds;
         return Lens`T ( data.Address + range.Start, length );
     }
 
-    func GetEnumerator() ArrayEnumerator`T => ArrayEnumerator`T ( this[0], this, 0 );
+    function GetEnumerator() ArrayEnumerator`T => ArrayEnumerator`T ( this[0], this, 0 );
 }
 
 tuple ArrayEnumerator `T (
@@ -94,7 +96,7 @@ tuple ArrayEnumerator `T (
     parent: Array`T;
     current: u64;
 
-    func MoveNext() bool {
+    function MoveNext() bool {
         if (current < parent.Length) {
             Current = parent[current];
             current += 1;

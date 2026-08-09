@@ -147,13 +147,9 @@ namespace Compiler.Ast
                 while (!Match(TokenType.RightParen))
                 {
                     var isSpread = MatchAndTakeToken(TokenType.Spread) != null;
+                    var parameterTypeName = ParseTypeName() ?? throw new Exception("Illegal parameter type");
                     var parameterName = Take(TokenType.Identifier).Value;
-                    TypeName parameterTypeName;
-                    if (MatchAndTakeToken(TokenType.Colon) != null)
-                        parameterTypeName = ParseTypeName() ?? throw new Exception("Illegal parameter type");
-                    else
-                        parameterTypeName = TypeName.Any;
-
+                    
                     parameters.Add(new TypeName.FunctionSignature.Parameter
                     {
                         Name = parameterName,
@@ -169,12 +165,17 @@ namespace Compiler.Ast
                 var returnType = ParseTypeName();
 
                 CallingConvention callingConvention;
-                if (MatchAndTakeToken(TokenType.CCall) != null)
-                    callingConvention = CallingConvention.CCall;
-                else if (MatchAndTakeToken(TokenType.StdCall) != null)
-                    callingConvention = CallingConvention.StdCall;
-                else if (MatchAndTakeToken(TokenType.NakedCall) != null)
-                    callingConvention = CallingConvention.NakedCall;
+                if (MatchAndTakeToken(TokenType.Comma) != null)
+                {
+                    if (MatchAndTakeToken(TokenType.CCall) != null)
+                        callingConvention = CallingConvention.CCall;
+                    else if (MatchAndTakeToken(TokenType.StdCall) != null)
+                        callingConvention = CallingConvention.StdCall;
+                    else if (MatchAndTakeToken(TokenType.NakedCall) != null)
+                        callingConvention = CallingConvention.NakedCall;
+                    else
+                        throw new Exception("Expected calling convention");
+                }
                 else
                     callingConvention = CallingConvention.Default;
 
@@ -228,6 +229,8 @@ namespace Compiler.Ast
             {
                 throw new NotImplementedException();
             }
+            else if (Match(TokenType.Error)) // Unary !
+                type = eTypeName.None;
             else
                 return null;
 

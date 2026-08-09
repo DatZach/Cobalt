@@ -37,7 +37,7 @@ tuple Lens `T (
     // TODO Slice
     // TODO GetEnumerator
 
-    func GetEnumerator() LensEnumerator`T => LensEnumerator`T ( this[0], this, 0 );
+    function GetEnumerator() LensEnumerator`T => LensEnumerator`T ( this[0], this, 0 );
 )
 
 tuple LensEnumerator `T (
@@ -45,7 +45,7 @@ tuple LensEnumerator `T (
     parent: Lens`T;
     current: u64;
 
-    func MoveNext() bool {
+    function MoveNext() bool {
         if (current < parent.Length) {
             Current = parent[current];
             current += 1;
