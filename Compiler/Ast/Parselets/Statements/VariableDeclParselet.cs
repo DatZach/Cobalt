@@ -15,33 +15,27 @@ namespace Compiler.Ast.Parselets.Statements
                 VariableDeclStatement.Declaration declaration;
                 if (parser.MatchAndTakeToken(TokenType.LeftParen) != null) // Destructure
                 {
-                    var fields = new List<VariableDeclStatement.DestructureDeclaration.Field>();
+                    var fields = new List<string>();
                     do
                     {
                         var identifier = parser.Take(TokenType.Identifier).Value;
-                        var typeName = parser.MatchAndTakeToken(TokenType.Colon) != null ? parser.ParseTypeName() : null;
-
-                        fields.Add(new VariableDeclStatement.DestructureDeclaration.Field(identifier, typeName));
+                        fields.Add(identifier);
                     } while (parser.MatchAndTakeToken(TokenType.Comma) != null);
 
                     parser.Take(TokenType.RightParen);
+                    parser.Take(TokenType.Assign);
 
-                    Expression? initializer = null;
-                    if (parser.MatchAndTakeToken(TokenType.Assign) != null)
-                        initializer = parser.ParseExpression(isConditional: true);
+                    var initializer = parser.ParseExpression(isConditional: true);
 
                     declaration = new VariableDeclStatement.DestructureDeclaration(fields, initializer);
                 }
                 else // Standard
                 {
                     var identifier = parser.Take(TokenType.Identifier).Value;
-                    var typeName = parser.MatchAndTakeToken(TokenType.Colon) != null ? parser.ParseTypeName() : null;
-                
-                    Expression? initializer = null;
-                    if (parser.MatchAndTakeToken(TokenType.Assign) != null)
-                        initializer = parser.ParseExpression(isConditional: true);
+                    parser.Take(TokenType.Assign);
+                    var initializer = parser.ParseExpression(isConditional: true);
 
-                    declaration = new VariableDeclStatement.StandardDeclaration(identifier, typeName, initializer);
+                    declaration = new VariableDeclStatement.StandardDeclaration(identifier, initializer);
                 }
 
                 declarations.Add(declaration);

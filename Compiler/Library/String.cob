@@ -5,9 +5,11 @@ function string(int value, int radix = 10) string {
     var result = [];
     
     const sign = radix == 10 && value < 0;
-    var v = (sign) :: { true => -value, false => value };
 
-    for (v > 0) {
+    while (
+        var v = (sign) :: { true => -value, false => value };
+        v > 0
+    ) {
         const i = v % radix;
         v /= radix;
 
@@ -35,9 +37,8 @@ function int_(string value, int radix = 10) int {
 
     //const sign = value[0] :: { '-' => -1, default => 1 };
 
-    var i: int;
-    var length: int = 0;
-    for (i in ..value.Length) {
+    var length = 0;
+    for (var i in ..value.Length) {
         const ch = value[i];
         if (ch == 13 || ch == 10 || ch == 0) {
             break;
@@ -46,8 +47,8 @@ function int_(string value, int radix = 10) int {
         length += 1;
     }
     
-    for (i in ..length) {
-        const ch = value[i];
+    for (var j in ..length) {
+        const ch = value[j];
         result *= radix;
         result += ch - '0';
     }

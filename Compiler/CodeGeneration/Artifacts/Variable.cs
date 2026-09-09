@@ -1,15 +1,16 @@
 ﻿using System.Buffers;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Compiler.Lexer;
 
 namespace Compiler.CodeGeneration.Artifacts
 {
     [DebuggerDisplay("Variable {Name}: {Type} = {Value}")]
-    internal record Variable : ISymbol
+    internal record Variable : ISymbol, ILateTypeBinding
     {
         public string Name { get; }
 
-        public CobType Type { get; }
+        public CobType Type { get; private set; }
 
         public bool Mutable { get; }
 
@@ -75,6 +76,14 @@ namespace Compiler.CodeGeneration.Artifacts
             : this(name, type, true, null)
         {
 
+        }
+
+        void ILateTypeBinding.RebindType(CobType type)
+        {
+            if (Type != eCobType.None)
+                throw new InvalidOperationException($"Cannot late type rebind '{Name}', type is already bound.");
+
+            Type = type;
         }
 
         public virtual bool IsVisibleTo(IScopeContext context) => true;
@@ -146,6 +155,11 @@ namespace Compiler.CodeGeneration.Artifacts
                 pinnedAddress = null;
             }
         }
+    }
+
+    internal interface ILateTypeBinding
+    {
+        void RebindType(CobType type);
     }
 
     internal sealed record CobType

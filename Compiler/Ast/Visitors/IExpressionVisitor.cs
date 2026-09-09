@@ -23,6 +23,7 @@ namespace Compiler.Ast.Visitors
         
         T Visit(IfStatement expression);
         T Visit(ForStatement expression);
+        T Visit(WhileStatement expression);
         T Visit(ContinueStatement expression);
         T Visit(BreakStatement expression);
         T Visit(ReturnStatement expression);

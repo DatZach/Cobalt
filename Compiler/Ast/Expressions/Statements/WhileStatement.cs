@@ -4,43 +4,27 @@ using System.Diagnostics;
 
 namespace Compiler.Ast.Expressions.Statements
 {
-    internal sealed class ForStatement : Expression
+    internal sealed class WhileStatement : Expression
     {
-        public string ValueIdentifier { get; }
-
-        public string? KeyIdentifier { get; }
-
-        public Expression Enumerable { get; }
-
-        public Expression? Generator { get; }
+        public Expression? Initializer { get; }
 
         public Expression? Conditional { get; }
-
-        public bool IsContinue { get; }
 
         public Token? Tag { get; }
 
         public Expression Body { get; }
 
-        public ForStatement(
+        public WhileStatement(
             Token token,
-            string valueIdentifier,
-            string? keyIdentifier,
-            Expression enumerable,
-            Expression? generator,
+            Expression? initializer,
             Expression? conditional,
-            bool isContinue,
             Token? tag,
             Expression body
         )
             : base(token)
         {
-            ValueIdentifier = valueIdentifier;
-            KeyIdentifier = keyIdentifier;
-            Enumerable = enumerable;
-            Generator = generator;
+            Initializer = initializer;
             Conditional = conditional;
-            IsContinue = isContinue;
             Tag = tag;
             Body = body;
         }

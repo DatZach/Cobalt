@@ -12,9 +12,9 @@ import kernel32 HeapAlloc   function(HANDLE hHeap, DWORD dwFlags, SIZE_T dwBytes
 import kernel32 HeapReAlloc function(HANDLE hHeap, DWORD dwFlags, LPVOID lpMem, SIZE_T dwBytes) LPVOID, stdcall;
 import kernel32 HeapFree    function(HANDLE hHeap, DWORD dwFlags, LPVOID lpMem) BOOL, stdcall;
 
-const HEAP_ZERO_MEMORY: DWORD = 8_u32;
+const HEAP_ZERO_MEMORY = DWORD(8);
 
-const heap: HANDLE = HeapCreate(0, 0, 0);
+const heap = HeapCreate(0, 0, 0);
 
 function Alloc(DWORD size) Lens`u8 {
     const addr = HeapAlloc(heap, HEAP_ZERO_MEMORY, size);

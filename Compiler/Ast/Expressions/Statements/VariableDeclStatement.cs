@@ -28,51 +28,35 @@ namespace Compiler.Ast.Expressions.Statements
         {
             public string Name { get; }
 
-            public TypeName? TypeName { get; }
+            public Expression Initializer { get; }
 
-            public Expression? Initializer { get; }
+            public override Token EndToken => Initializer.EndToken;
 
-            public override Token? EndToken => Initializer?.EndToken;
-
-            public StandardDeclaration(string name, TypeName? typeName, Expression? initializer)
+            public StandardDeclaration(string name, Expression initializer)
             {
                 Name = name;
-                TypeName = typeName;
                 Initializer = initializer;
             }
         }
 
         public sealed class DestructureDeclaration : Declaration
         {
-            public IReadOnlyList<Field> Fields { get; }
+            public IReadOnlyList<string> Fields { get; }
 
-            public Expression? Initializer { get; }
+            public Expression Initializer { get; }
 
-            public override Token? EndToken => Initializer?.EndToken;
+            public override Token EndToken => Initializer.EndToken;
 
-            public DestructureDeclaration(IReadOnlyList<Field> fields, Expression? initializer)
+            public DestructureDeclaration(IReadOnlyList<string> fields, Expression initializer)
             {
                 Fields = fields;
                 Initializer = initializer;
-            }
-
-            public sealed class Field
-            {
-                public string Name { get; }
-
-                public TypeName? TypeName { get; }
-
-                public Field(string name, TypeName? typeName)
-                {
-                    Name = name;
-                    TypeName = typeName;
-                }
             }
         }
 
         public abstract class Declaration
         {
-            public abstract Token? EndToken { get; }
+            public abstract Token EndToken { get; }
         }
     }
 }

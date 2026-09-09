@@ -8,22 +8,23 @@ namespace Compiler.Ast.Parselets.Statements
     {
         public Expression Parse(Parser parser, Token token)
         {
-            Expression? conditional, expression;
-
-            if (parser.MatchAndTakeToken(TokenType.LeftParen) != null)
-            {
-                conditional = parser.ParseStatement(false);
-                expression = parser.MatchAndTakeToken(TokenType.Semicolon) != null
-                           ? parser.ParseExpression()
-                           : null;
-
-                parser.Take(TokenType.RightParen);
-            }
-            else
-            {
-                conditional = null;
-                expression = null;
-            }
+            parser.Take(TokenType.LeftParen);
+            parser.Take(TokenType.Var);
+            var valueIdentifier = parser.Take(TokenType.Identifier).Value;
+            var keyIdentifier = parser.MatchAndTakeToken(TokenType.Comma) != null
+                              ? parser.Take(TokenType.Identifier).Value
+                              : null;
+            parser.Take(TokenType.In);
+            var enumerable = parser.ParseExpression();
+            var generator = parser.MatchAndTakeToken(TokenType.Given) != null
+                          ? parser.ParseExpression()
+                          : null;
+            var conditional = parser.MatchAndTakeToken(TokenType.Semicolon) != null
+                            ? parser.ParseExpression(isConditional: true)
+                            : null;
+            var isContinue = parser.MatchAndTakeToken(TokenType.Continue) != null
+                          && parser.MatchAndTakeToken(TokenType.Break) == null;
+            parser.Take(TokenType.RightParen);
 
             var label = parser.MatchAndTakeToken(TokenType.At) != null ? parser.Take(TokenType.Identifier) : null;
 
@@ -32,7 +33,17 @@ namespace Compiler.Ast.Parselets.Statements
             if (Parser.IsStatementExpression(body))
                 parser.Messages.Add(Message.CannotNakedNestStatement, body);
 
-            return new ForStatement(token, conditional, expression, label, body);
+            return new ForStatement(
+                token,
+                valueIdentifier,
+                keyIdentifier,
+                enumerable,
+                generator,
+                conditional,
+                isContinue,
+                label,
+                body
+            );
         }
     }
 }

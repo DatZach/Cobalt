@@ -409,7 +409,7 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(VariableDeclStatement expression)
         {
-            // TODO Idk this is a bit of a mess, both the syntax and the implementation
+            // TODO More cleanup required
 
             var mutable = expression.Type == TokenType.Var;
             for (var i = 0; i < expression.Declarations.Count; ++i)
@@ -417,69 +417,46 @@ namespace Compiler.CodeGeneration
                 var x = expression.Declarations[i];
                 if (x is VariableDeclStatement.StandardDeclaration stdDecl)
                 {
-                    var type = CobType.FromTypeName(stdDecl.TypeName, CurrentContext);
-
-                    Storage? rhs;
-                    if (stdDecl.Initializer != null)
-                    {
-                        rhs = stdDecl.Initializer.Accept(this);
-                        if (rhs == null)
-                            messages.Add(Message.TypeMismatch, expression, "any", "none");
-                        else if (type != eCobType.None && !CobType.IsCastable(rhs.Type, type))
-                            messages.Add(Message.TypeMismatch, expression, type, rhs.Type);
-                        else
-                            type = rhs.Type;
-                    }
-                    else
-                        rhs = null;
-
-                    if ((stdDecl.TypeName == null && stdDecl.Initializer == null)
-                    ||  type == eCobType.None)
+                    var rhs = stdDecl.Initializer.Accept(this);
+                    if (rhs == null || rhs.Type == eCobType.None)
                     {
                         messages.Add(Message.MalformedVarDeclaration, expression);
                         continue;
                     }
-                
+
+                    Operand dstOperand;
                     if (CurrentFunction == CurrentModule.InitializerFunction) // Global Decl
                     {
                         var global = CurrentModule.FindGlobal(stdDecl.Name)!;
                         var idx = Globals.IndexOf(global);
-                        if (rhs != null)
-                        {
-                            CurrentFunction.Body.Emit(
-                                Opcode.Move,
-                                Operand.Global(idx),
-                                rhs.Operand
-                            );
-                        }
+                        dstOperand = Operand.Global(idx);
+
+                        if (global.Type == eCobType.None && global is ILateTypeBinding lateBinding)
+                            lateBinding.RebindType(rhs.Type);
                     }
-                    else
+                    else // Local Decl
                     {
-                        var local = CurrentFunction.AllocateLocal(stdDecl.Name, type, mutable);
+                        var local = CurrentFunction.AllocateLocal(stdDecl.Name, rhs.Type, mutable);
                         var idx = CurrentFunction.FindLocalIndex(local);
-                        if (rhs != null)
-                        {
-                            CurrentFunction.Body.Emit(
-                                Opcode.Move,
-                                Operand.Local(idx),
-                                rhs.Operand
-                            );
-                        }
+                        dstOperand = Operand.Local(idx);
                     }
 
-                    rhs?.Free();
+                    CurrentFunction.Body.Emit(
+                        Opcode.Move,
+                        dstOperand,
+                        rhs.Operand
+                    );
+
+                    rhs.Free();
                 }
                 else if (x is VariableDeclStatement.DestructureDeclaration desDecl)
                 {
-                    Storage? rhs;
-                    if (desDecl.Initializer != null)
+                    var rhs = desDecl.Initializer.Accept(this);
+                    if (rhs == null || rhs.Type == eCobType.None)
                     {
-                        rhs = desDecl.Initializer.Accept(this);
-                        if (rhs == null)
-                            messages.Add(Message.TypeMismatch, expression, "any", "none");
+                        messages.Add(Message.MalformedVarDeclaration, expression);
+                        continue;
                     }
-                    else
-                        rhs = null;
 
                     var source = rhs.Type.Tag as IScopeContext;
                     var prevAssignmentRHS = AssignmentRHS;
@@ -493,17 +470,17 @@ namespace Compiler.CodeGeneration
                         var srcStorage = source.EmitGetForSymbol(srcSymbol);
                         BinOpLHS = prevBinOpLHS;
 
-                        CurrentFunction.AllocateLocal(desDecl.Fields[j].Name, srcStorage.Type, mutable);
+                        CurrentFunction.AllocateLocal(desDecl.Fields[j], srcStorage.Type, mutable);
 
                         AssignmentRHS = srcStorage;
-                        var dstSymbol = CurrentContext.FindSymbol(desDecl.Fields[j].Name);
+                        var dstSymbol = CurrentContext.FindSymbol(desDecl.Fields[j]);
                         CurrentContext.EmitSetForSymbol(dstSymbol);
                         srcStorage?.Free();
                     }
 
                     AssignmentRHS = prevAssignmentRHS;
 
-                    rhs?.Free();
+                    rhs.Free();
 
                     return null;
                 }
@@ -550,135 +527,109 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(ForStatement expression)
         {
+            // TODO Generator
+            // TODO Conditional
+            // TODO IsContinue
+            // TODO Label
+
             var startLabel = CurrentFunction.Body.AllocateLabel();
             var endLabel = CurrentFunction.Body.AllocateLabel();
 
-            loopStack.Push(new LoopContext(expression.Label?.Value, startLabel, endLabel));
+            loopStack.Push(new LoopContext(expression.Tag?.Value, startLabel, endLabel));
 
-            if (expression.Conditional is BinaryOperatorExpression boe
-            &&  boe.Operator == TokenType.In)
+            // ENUMERABLE
+            var enumerableStorage = expression.Enumerable.Accept(this);
+
+            Storage? getEnumeratorFn;
+            if (enumerableStorage != null && enumerableStorage.Type.Tag is IScopeContext enumerableScopeContext)
             {
-                var index = boe.Left.Accept(this);
-                var enumerableStorage = boe.Right.Accept(this);
-
-                Storage? getEnumeratorFn;
-                if (enumerableStorage != null && enumerableStorage.Type.Tag is IScopeContext enumerableScopeContext)
+                var getEnumeratorFnSymbol = enumerableScopeContext.FindSymbol("GetEnumerator");
+                getEnumeratorFn = getEnumeratorFnSymbol != null
+                                ? enumerableScopeContext.EmitGetForSymbol(getEnumeratorFnSymbol)
+                                : null;
+                if (getEnumeratorFn?.Type.TagFunctionCandidates != null)
                 {
-                    var getEnumeratorFnSymbol = enumerableScopeContext.FindSymbol("GetEnumerator");
-                    getEnumeratorFn = getEnumeratorFnSymbol != null
-                                    ? enumerableScopeContext.EmitGetForSymbol(getEnumeratorFnSymbol)
-                                    : null;
-                    if (getEnumeratorFn?.Type.TagFunctionCandidates != null)
-                    {
-                        getEnumeratorFn = enumerableScopeContext.EmitGetForSymbol(
-                            getEnumeratorFn.Type.TagFunctionCandidates.ResolveSingle(null)
-                        );
-                    }
+                    getEnumeratorFn = enumerableScopeContext.EmitGetForSymbol(
+                        getEnumeratorFn.Type.TagFunctionCandidates.ResolveSingle(null)
+                    );
                 }
-                else
-                    getEnumeratorFn = null;
-
-                if (getEnumeratorFn == null || getEnumeratorFn.Type.TagFunction == null)
-                {
-                    messages.Add(Message.CannotEnumerateType, boe.Right, enumerableStorage?.Type.ToString() ?? "(null)");
-                    return null;
-                }
-
-                var enumeratorType = getEnumeratorFn.Type.TagFunction.ReturnType;
-                if (enumeratorType.Tag is RecordType recordType)
-                {
-                    var superType = recordType.HACK_PendingSuperType;
-                    if (recordType.PopulateConcretizedRecordIfRequired())
-                        concreteTypeAstReferences.Add(new ConcreteTypeAstReference(superType, recordType));
-                }
-
-                var enumeratorStorage = CurrentFunction.AllocateRegisterStorage(enumeratorType);
-
-                // $tmp = GetEnumerator()
-                CurrentFunction.Body.Emit(
-                    Opcode.Call,
-                    getEnumeratorFn.Operand,
-                    enumeratorStorage.Operand,
-                    new[] { enumerableStorage!.Operand }
-                );
-                getEnumeratorFn.Free();
-                enumerableStorage.Free();
-
-                startLabel.Mark();
-
-                // if (!$tmp.MoveNext()) break;
-
-                Storage? moveNextFn;
-                if (enumeratorStorage.Type.Tag is IScopeContext enumeratorScopeContext)
-                {
-                    var moveNextFnSymbol = enumeratorScopeContext.FindSymbol("MoveNext");
-                    moveNextFn = moveNextFnSymbol != null
-                               ? enumeratorScopeContext.EmitGetForSymbol(moveNextFnSymbol)
-                               : null;
-                    if (moveNextFn?.Type.TagFunctionCandidates != null)
-                    {
-                        moveNextFn = enumeratorScopeContext.EmitGetForSymbol(
-                            moveNextFn.Type.TagFunctionCandidates.ResolveSingle(null)
-                        );
-                    }
-                }
-                else
-                {
-                    moveNextFn = null;
-                }
-
-                if (moveNextFn == null || moveNextFn.Type.TagFunction == null)
-                {
-                    messages.Add(Message.CannotEnumerateType, boe.Right, enumerableStorage?.Type.ToString() ?? "(null)");
-                    return null;
-                }
-
-                var moveNextResultStorage = CurrentFunction.AllocateRegisterStorage(moveNextFn.Type.TagFunction.ReturnType);
-                CurrentFunction.Body.Emit(
-                    Opcode.Call,
-                    moveNextFn.Operand,
-                    moveNextResultStorage.Operand,
-                    new[] { enumeratorStorage.Operand }
-                );
-
-                CurrentFunction.Body.Emit(Opcode.JmpF, moveNextResultStorage.Operand, endLabel);
-                moveNextResultStorage.Free();
-
-                // index = $tmp.Current;
-
-                //Storage? currentField;
-                //if (enumeratorStorage.Type.Tag is IScopeContext enumeratorScopeContext2)
-                //{
-                //    var currentFieldSymbol = enumeratorScopeContext2.FindSymbol("Current");
-                //    currentField = currentFieldSymbol != null
-                //        ? enumeratorScopeContext2.EmitGetForSymbol(currentFieldSymbol)
-                //        : null;
-                //}
-                //else
-                //    currentField = null;
-
-                //if (currentField == null)
-                //{
-                //    messages.Add(Message.CannotEnumerateType, boe.Right, enumerableStorage?.Type.ToString() ?? "(null)");
-                //    return null;
-                //}
-
-                //CurrentFunction.Body.Emit(Opcode.Move, index.Operand, currentField.Operand);
-                //currentField.Free();
-
-                CurrentFunction.Body.Emit(Opcode.GetField, index.Operand, enumeratorStorage.Operand, Operand.ImmediateUnsigned(0));
-
-                index.Free();
-            }
-            else if (expression.Conditional != null)
-            {
-                startLabel.Mark();
-                var a = expression.Conditional.Accept(this);
-                CurrentFunction.Body.Emit(Opcode.JmpF, a.Operand, endLabel);
-                a.Free();
             }
             else
-                startLabel.Mark();
+                getEnumeratorFn = null;
+
+            if (getEnumeratorFn == null || getEnumeratorFn.Type.TagFunction == null)
+            {
+                messages.Add(Message.CannotEnumerateType, expression.Enumerable, enumerableStorage?.Type.ToString() ?? "(null)");
+                return null;
+            }
+
+            var enumeratorType = getEnumeratorFn.Type.TagFunction.ReturnType;
+            if (enumeratorType.Tag is RecordType recordType)
+            {
+                var superType = recordType.HACK_PendingSuperType;
+                if (recordType.PopulateConcretizedRecordIfRequired())
+                    concreteTypeAstReferences.Add(new ConcreteTypeAstReference(superType, recordType));
+            }
+
+            var enumeratorStorage = CurrentFunction.AllocateRegisterStorage(enumeratorType);
+
+            // $tmp = GetEnumerator()
+            CurrentFunction.Body.Emit(
+                Opcode.Call,
+                getEnumeratorFn.Operand,
+                enumeratorStorage.Operand,
+                new[] { enumerableStorage!.Operand }
+            );
+            getEnumeratorFn.Free();
+            enumerableStorage.Free();
+
+            startLabel.Mark();
+
+            // if (!$tmp.MoveNext()) break;
+
+            Storage? moveNextFn;
+            if (enumeratorStorage.Type.Tag is IScopeContext enumeratorScopeContext)
+            {
+                var moveNextFnSymbol = enumeratorScopeContext.FindSymbol("MoveNext");
+                moveNextFn = moveNextFnSymbol != null
+                           ? enumeratorScopeContext.EmitGetForSymbol(moveNextFnSymbol)
+                           : null;
+                if (moveNextFn?.Type.TagFunctionCandidates != null)
+                {
+                    moveNextFn = enumeratorScopeContext.EmitGetForSymbol(
+                        moveNextFn.Type.TagFunctionCandidates.ResolveSingle(null)
+                    );
+                }
+            }
+            else
+            {
+                moveNextFn = null;
+            }
+
+            if (moveNextFn == null || moveNextFn.Type.TagFunction == null)
+            {
+                messages.Add(Message.CannotEnumerateType, expression.Enumerable, enumerableStorage?.Type.ToString() ?? "(null)");
+                return null;
+            }
+
+            var moveNextResultStorage = CurrentFunction.AllocateRegisterStorage(moveNextFn.Type.TagFunction.ReturnType);
+            CurrentFunction.Body.Emit(
+                Opcode.Call,
+                moveNextFn.Operand,
+                moveNextResultStorage.Operand,
+                new[] { enumeratorStorage.Operand }
+            );
+
+            CurrentFunction.Body.Emit(Opcode.JmpF, moveNextResultStorage.Operand, endLabel);
+            moveNextResultStorage.Free();
+
+            var localValue = CurrentFunction.AllocateLocal(expression.ValueIdentifier, moveNextFn.Type.TagFunction.ReturnType, true);
+            var localValueIdx = CurrentFunction.FindLocalIndex(localValue);
+            var localValueOperand = Operand.Local(localValueIdx);
+
+            CurrentFunction.Body.Emit(Opcode.GetField, localValueOperand, enumeratorStorage.Operand, Operand.ImmediateUnsigned(0));
+
+            //index.Free();
 
             expression.Body.Accept(this)?.Free();
 
@@ -689,6 +640,163 @@ namespace Compiler.CodeGeneration
 
             return null;
         }
+
+        public Storage? Visit(WhileStatement expression)
+        {
+            var startLabel = CurrentFunction.Body.AllocateLabel();
+            var endLabel = CurrentFunction.Body.AllocateLabel();
+
+            loopStack.Push(new LoopContext(expression.Tag?.Value, startLabel, endLabel));
+
+            // INITIALIZER
+            expression.Initializer?.Accept(this)?.Free();
+
+            // CONDITIONAL
+            startLabel.Mark();
+            if (expression.Conditional != null)
+            {
+                var conditional = expression.Conditional.Accept(this);
+                // TODO Error if conditional is null
+
+                CurrentFunction.Body.Emit(Opcode.JmpF, conditional.Operand, endLabel);
+
+                conditional.Free();
+            }
+
+            // BODY
+            expression.Body.Accept(this)?.Free();
+
+            CurrentFunction.Body.Emit(Opcode.Jmp, startLabel);
+            endLabel.Mark();
+
+            loopStack.Pop();
+
+            return null;
+        }
+
+        //public Storage? Visit_OLD(ForStatement expression)
+        //{
+        //    var local = CurrentFunction.AllocateLocal(expression.ValueIdentifier, rhs.Type, true);
+        //    //var idx = CurrentFunction.FindLocalIndex(local);
+        //    //dstOperand = Operand.Local(idx);
+
+        //    var startLabel = CurrentFunction.Body.AllocateLabel();
+        //    var endLabel = CurrentFunction.Body.AllocateLabel();
+
+        //    loopStack.Push(new LoopContext(expression.Label?.Value, startLabel, endLabel));
+
+        //    if (expression.Conditional is BinaryOperatorExpression boe
+        //    &&  boe.Operator == TokenType.In)
+        //    {
+        //        var index = boe.Left.Accept(this);
+        //        var enumerableStorage = boe.Right.Accept(this);
+
+        //        Storage? getEnumeratorFn;
+        //        if (enumerableStorage != null && enumerableStorage.Type.Tag is IScopeContext enumerableScopeContext)
+        //        {
+        //            var getEnumeratorFnSymbol = enumerableScopeContext.FindSymbol("GetEnumerator");
+        //            getEnumeratorFn = getEnumeratorFnSymbol != null
+        //                            ? enumerableScopeContext.EmitGetForSymbol(getEnumeratorFnSymbol)
+        //                            : null;
+        //            if (getEnumeratorFn?.Type.TagFunctionCandidates != null)
+        //            {
+        //                getEnumeratorFn = enumerableScopeContext.EmitGetForSymbol(
+        //                    getEnumeratorFn.Type.TagFunctionCandidates.ResolveSingle(null)
+        //                );
+        //            }
+        //        }
+        //        else
+        //            getEnumeratorFn = null;
+
+        //        if (getEnumeratorFn == null || getEnumeratorFn.Type.TagFunction == null)
+        //        {
+        //            messages.Add(Message.CannotEnumerateType, boe.Right, enumerableStorage?.Type.ToString() ?? "(null)");
+        //            return null;
+        //        }
+
+        //        var enumeratorType = getEnumeratorFn.Type.TagFunction.ReturnType;
+        //        if (enumeratorType.Tag is RecordType recordType)
+        //        {
+        //            var superType = recordType.HACK_PendingSuperType;
+        //            if (recordType.PopulateConcretizedRecordIfRequired())
+        //                concreteTypeAstReferences.Add(new ConcreteTypeAstReference(superType, recordType));
+        //        }
+
+        //        var enumeratorStorage = CurrentFunction.AllocateRegisterStorage(enumeratorType);
+
+        //        // $tmp = GetEnumerator()
+        //        CurrentFunction.Body.Emit(
+        //            Opcode.Call,
+        //            getEnumeratorFn.Operand,
+        //            enumeratorStorage.Operand,
+        //            new[] { enumerableStorage!.Operand }
+        //        );
+        //        getEnumeratorFn.Free();
+        //        enumerableStorage.Free();
+
+        //        startLabel.Mark();
+
+        //        // if (!$tmp.MoveNext()) break;
+
+        //        Storage? moveNextFn;
+        //        if (enumeratorStorage.Type.Tag is IScopeContext enumeratorScopeContext)
+        //        {
+        //            var moveNextFnSymbol = enumeratorScopeContext.FindSymbol("MoveNext");
+        //            moveNextFn = moveNextFnSymbol != null
+        //                       ? enumeratorScopeContext.EmitGetForSymbol(moveNextFnSymbol)
+        //                       : null;
+        //            if (moveNextFn?.Type.TagFunctionCandidates != null)
+        //            {
+        //                moveNextFn = enumeratorScopeContext.EmitGetForSymbol(
+        //                    moveNextFn.Type.TagFunctionCandidates.ResolveSingle(null)
+        //                );
+        //            }
+        //        }
+        //        else
+        //        {
+        //            moveNextFn = null;
+        //        }
+
+        //        if (moveNextFn == null || moveNextFn.Type.TagFunction == null)
+        //        {
+        //            messages.Add(Message.CannotEnumerateType, boe.Right, enumerableStorage?.Type.ToString() ?? "(null)");
+        //            return null;
+        //        }
+
+        //        var moveNextResultStorage = CurrentFunction.AllocateRegisterStorage(moveNextFn.Type.TagFunction.ReturnType);
+        //        CurrentFunction.Body.Emit(
+        //            Opcode.Call,
+        //            moveNextFn.Operand,
+        //            moveNextResultStorage.Operand,
+        //            new[] { enumeratorStorage.Operand }
+        //        );
+
+        //        CurrentFunction.Body.Emit(Opcode.JmpF, moveNextResultStorage.Operand, endLabel);
+        //        moveNextResultStorage.Free();
+
+        //        CurrentFunction.Body.Emit(Opcode.GetField, index.Operand, enumeratorStorage.Operand, Operand.ImmediateUnsigned(0));
+
+        //        index.Free();
+        //    }
+        //    else if (expression.Conditional != null)
+        //    {
+        //        startLabel.Mark();
+        //        var a = expression.Conditional.Accept(this);
+        //        CurrentFunction.Body.Emit(Opcode.JmpF, a.Operand, endLabel);
+        //        a.Free();
+        //    }
+        //    else
+        //        startLabel.Mark();
+
+        //    expression.Body.Accept(this)?.Free();
+
+        //    CurrentFunction.Body.Emit(Opcode.Jmp, startLabel);
+        //    endLabel.Mark();
+
+        //    loopStack.Pop();
+
+        //    return null;
+        //}
 
         public Storage? Visit(ContinueStatement expression)
         {
@@ -1451,10 +1559,12 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(CallExpression expression)
         {
-            var candidatesStorage = expression.FunctionExpression.Accept(this);
-
             // CAST
             var storage = VisitCastExpression(expression);
+            if (storage != null)
+                return storage;
+
+            var candidatesStorage = expression.FunctionExpression.Accept(this);
 
             // TUPLE ALLOCATION
             if (storage == null)

@@ -470,8 +470,7 @@ namespace Compiler.CodeGeneration
             {
                 if (decl is VariableDeclStatement.StandardDeclaration stdDecl)
                 {
-                    var type = CobType.FromTypeName(stdDecl.TypeName, CurrentContext);
-                    CurrentModule.AllocateGlobal(stdDecl.Name, type, mutable);
+                    CurrentModule.AllocateGlobal(stdDecl.Name, CobType.None, mutable);
                 }
                 else
                     messages.Add(Message.CannotDeclareSymbolHere, expression); // idk maybe support some day
@@ -486,6 +485,11 @@ namespace Compiler.CodeGeneration
         }
 
         public Unit Visit(ForStatement expression)
+        {
+            return Unit.Value;
+        }
+
+        public Unit Visit(WhileStatement expression)
         {
             return Unit.Value;
         }

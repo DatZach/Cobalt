@@ -35,8 +35,7 @@ struct Array `T {
     }
 
     function AddRange(T[] value) {
-        var i: int;
-        for (i in ..value.Length)
+        for (var i in ..value.Length)
             Add(value[i]);
     }
 
@@ -44,8 +43,7 @@ struct Array `T {
         if (Length < 2)
             return;
         
-        var i: int;
-        for (i in ..(Length / 2)) {
+        for (var i in ..(Length / 2)) {
             const j = Length - i - 1;
             const a = this[i];
             const b = this[j];
@@ -59,8 +57,7 @@ struct Array `T {
     function Where(function(T element) bool predicate) T[] {
         var result = [];
 
-        var i: int;
-        for (i in ..Length) {
+        for (var i in ..Length) {
             const element = this[i];
             if (predicate(element))
                 result.Add(element);
@@ -72,8 +69,7 @@ struct Array `T {
     function Select(function(T element) T predicate) T[] {
         var result = [];
 
-        var i: int;
-        for (i in ..Length) {
+        for (var i in ..Length) {
             var element = this[i];
             element = predicate(element);
             result.Add(element);
