@@ -360,6 +360,10 @@ namespace Compiler.CodeGeneration.Artifacts
             return false;
         }
 
+        CobType ISymbol.Type => ThisType;
+
+        bool ISymbol.Mutable => false;
+
         public bool IsVisibleTo(IScopeContext? context) => Compiler.IsSymbolVisible(context, Parent, Name);
 
         public bool IsFieldSignatureMatch(RecordType other)

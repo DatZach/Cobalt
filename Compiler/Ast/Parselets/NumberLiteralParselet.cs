@@ -8,7 +8,7 @@ namespace Compiler.Ast.Parselets
 {
     internal sealed class NumberLiteralParselet : IPrefixExpressionParselet
     {
-        private readonly static char[] TypeSpecifiers = { 'u', 's', 'f' };
+        private readonly static char[] TypeSpecifiers = { 'u', 's', 'r' };
 
         public Expression Parse(Parser parser, Token token)
         {
@@ -42,7 +42,7 @@ namespace Compiler.Ast.Parselets
             }
             else if (value.IndexOf('.') != -1)
             {
-                type = eCobType.Float;
+                type = eCobType.Real;
                 hasDotSpecified = true;
             }
 
@@ -56,7 +56,7 @@ namespace Compiler.Ast.Parselets
                 {
                     'u' => eCobType.Unsigned,
                     's' => eCobType.Signed,
-                    'f' => eCobType.Float,
+                    'r' => eCobType.Real,
                     _ => eCobType.None
                 };
 
@@ -77,7 +77,7 @@ namespace Compiler.Ast.Parselets
                 type = eCobType.Signed;
 
             long integerNumber;
-            double floatNumber;
+            double realNumber;
 
             if (hasHexSpecified)
             {
@@ -90,9 +90,9 @@ namespace Compiler.Ast.Parselets
                     return new NumberLiteralExpression(token, integerNumber, type, bitSize);
             }
             else if (hasDotSpecified
-                 &&  double.TryParse(value, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out floatNumber))
+                 &&  double.TryParse(value, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out realNumber))
             {
-                integerNumber = BitConverter.DoubleToInt64Bits(floatNumber);
+                integerNumber = BitConverter.DoubleToInt64Bits(realNumber);
                 return new NumberLiteralExpression(token, integerNumber, type, bitSize);
             }
             else

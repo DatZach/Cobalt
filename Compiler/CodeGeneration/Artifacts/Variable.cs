@@ -1,6 +1,5 @@
 ﻿using System.Buffers;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using Compiler.Lexer;
 
 namespace Compiler.CodeGeneration.Artifacts
@@ -170,7 +169,7 @@ namespace Compiler.CodeGeneration.Artifacts
         public readonly static CobType Boolean = new(eCobType.Boolean);
         public readonly static CobType Int = new (eCobType.Signed, -1);
         public readonly static CobType UInt = new (eCobType.Unsigned, -1);
-        public readonly static CobType Float = new (eCobType.Float, -1);
+        public readonly static CobType Float = new (eCobType.Real, -1);
         public readonly static CobType U8 = new (eCobType.Unsigned, 8);
         public readonly static CobType U32 = new(eCobType.Unsigned, 32);
         public readonly static CobType U64 = new(eCobType.Unsigned, 64);
@@ -255,7 +254,7 @@ namespace Compiler.CodeGeneration.Artifacts
                 else if (ident.Length >= 2 && ident[0] == 'u' && char.IsDigit(ident[1]))
                     type = new CobType(eCobType.Unsigned, int.Parse(ident[1..]));
                 else if (ident.Length >= 2 &&  ident[0] == 'f' && char.IsDigit(ident[1]))
-                    type = new CobType(eCobType.Float, int.Parse(ident[1..]));
+                    type = new CobType(eCobType.Real, int.Parse(ident[1..]));
                 else if (ident == "any")
                     type = Any;
                 else if (ident == "bool")
@@ -422,6 +421,22 @@ namespace Compiler.CodeGeneration.Artifacts
                 var tag = recordType.FindConcretizedRecord(bType) ?? recordType.AllocateConcretizedRecord(bType);
                 return tag.ThisType; // new CobType(Type, tag: tag);
             }
+            else if (this == eCobType.Function)
+            {
+                var tag = Tag as FunctionSignature;
+                if (tag != null)
+                {
+                    tag = new FunctionSignature
+                    {
+                        Parameters = tag.Parameters.Select(
+                            x => new Function.Parameter(x.Name, x.Type.ToConcreteType(bType), x.IsSpread)
+                        ).ToList(),
+                        ReturnType = tag.ReturnType.ToConcreteType(bType)
+                    };
+                }
+
+                return new CobType(Type, Size, ElementType, UnionedTypes, tag);
+            }
             else
                 return this;
         }
@@ -449,7 +464,7 @@ namespace Compiler.CodeGeneration.Artifacts
                     64 => typeof(ulong),
                     _ => throw new ArgumentOutOfRangeException()
                 },
-                eCobType.Float => Size switch
+                eCobType.Real => Size switch
                 {
                     -1 => Environment.Is64BitProcess ? typeof(double) : typeof(float),
                     32 => typeof(float),
@@ -457,7 +472,6 @@ namespace Compiler.CodeGeneration.Artifacts
                     128 => typeof(decimal),
                     _ => throw new ArgumentOutOfRangeException()
                 },
-                eCobType.Array => ElementType.ToManagedType().MakeArrayType(),
                 eCobType.Struct => Any.ToManagedType().MakeArrayType(), // TODO Not correct
                                                                         // Tag == Intrinsics.Array ? Any.ToManagedType().MakeArrayType() :  throw new NotImplementedException(), // ???
                 eCobType.Tuple => throw new NotImplementedException(), // ???
@@ -498,7 +512,7 @@ namespace Compiler.CodeGeneration.Artifacts
                         break;
                     case eCobType.Signed:
                     case eCobType.Unsigned:
-                    case eCobType.Float:
+                    case eCobType.Real:
                     {
                         // Size = 1 << SSS
                         uint value = 0;
@@ -507,7 +521,6 @@ namespace Compiler.CodeGeneration.Artifacts
                         result |= value << i; i += 3;
                         break;
                     }
-                    case eCobType.Array:
                     case eCobType.Lens:
                         // ElementType = <Type>
                         Encode(type.ElementType);
@@ -568,13 +581,12 @@ namespace Compiler.CodeGeneration.Artifacts
                     }
                     case eCobType.Signed:
                     case eCobType.Unsigned:
-                    case eCobType.Float:
+                    case eCobType.Real:
                     {
                         // Size = 1 << SSS
                         int size = 1 << (int)((ulong)(value >> i) & 0x7); i += 3;
                         return new CobType(type, size: size);
                     }
-                    case eCobType.Array:
                     case eCobType.Lens:
                     {
                         // ElementType = <Type>
@@ -658,7 +670,7 @@ namespace Compiler.CodeGeneration.Artifacts
 
                 case eCobType.Signed:
                 case eCobType.Unsigned:
-                case eCobType.Float:
+                case eCobType.Real:
                     return $"{Type}.{Size}";
 
                 case eCobType.None:
@@ -669,9 +681,6 @@ namespace Compiler.CodeGeneration.Artifacts
                 case eCobType.Nil:
                 case eCobType.Generic:
                     return $"{Type}";
-
-                case eCobType.Array:
-                    return $"{Type}[{ElementType}]";
 
                 case eCobType.Trait:
                 case eCobType.Struct:
@@ -705,8 +714,8 @@ namespace Compiler.CodeGeneration.Artifacts
                     return dstType.UnionedTypes.Any(x => IsCastable(srcType, x));
             }
 
-            if (srcType.Type is eCobType.Unsigned or eCobType.Signed or eCobType.Float
-            &&  dstType.Type is eCobType.Unsigned or eCobType.Signed or eCobType.Float)
+            if (srcType.Type is eCobType.Unsigned or eCobType.Signed or eCobType.Real
+            &&  dstType.Type is eCobType.Unsigned or eCobType.Signed or eCobType.Real)
             {
                 return true;
             }
@@ -750,22 +759,19 @@ namespace Compiler.CodeGeneration.Artifacts
         None,
         Any,
         Union,
-        Signed,
-        Unsigned,
-        Float,
-        Boolean,
-        Array, // TODO Remove
-        Trait,
+        Trait,  // TODO Remove
         Struct, // TODO Merge Struct+Tuple -> Record?
         Tuple,
-        Lens,
+        Signed,
+        Unsigned,
+        Real,
+        Boolean,
         Function,
+        Lens,
         Module,
         Error,
         Nil,
-
         Generic,
-
         Mask = 0x0F
     }
 

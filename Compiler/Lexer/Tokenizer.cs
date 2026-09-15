@@ -122,7 +122,7 @@ namespace Compiler.Lexer
                             return true;
                         }
 
-                        if (!hasType && (c == 'u' || c == 's' || c == 'f'))
+                        if (!hasType && (c == 'u' || c == 's' || c == 'r'))
                         {
                             hasType = true;
                             return true;

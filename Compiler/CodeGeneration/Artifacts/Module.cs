@@ -251,6 +251,10 @@ namespace Compiler.CodeGeneration.Artifacts
             return false;
         }
 
+        CobType ISymbol.Type => CobType.None;
+
+        bool ISymbol.Mutable => false;
+
         public bool IsVisibleTo(IScopeContext? context) => Compiler.IsSymbolVisible(context, Parent, Name);
     }
 }

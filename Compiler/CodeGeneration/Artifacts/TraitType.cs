@@ -88,6 +88,10 @@
             throw new NotImplementedException();
         }
 
+        CobType ISymbol.Type => CobType.None; // TODO Not right?
+
+        bool ISymbol.Mutable => false;
+
         public bool IsVisibleTo(IScopeContext context) => Compiler.IsSymbolVisible(context, Parent, Name);
 
         public override string ToString() => Name;

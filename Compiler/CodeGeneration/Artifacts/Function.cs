@@ -225,6 +225,10 @@ namespace Compiler.CodeGeneration.Artifacts
             return false;
         }
 
+        CobType ISymbol.Type => CobType.Function;
+
+        bool ISymbol.Mutable => false;
+
         public bool IsVisibleTo(IScopeContext context) => Compiler.IsSymbolVisible(context, Parent, Name);
 
         //public override string ToString() => FullyQualifiedName;
@@ -333,6 +337,10 @@ namespace Compiler.CodeGeneration.Artifacts
                 return true;
             });
         }
+
+        CobType ISymbol.Type => CobType.Function;
+
+        bool ISymbol.Mutable => false;
 
         public bool IsVisibleTo(IScopeContext context) => candidates.Any(x => x.IsVisibleTo(context));
 

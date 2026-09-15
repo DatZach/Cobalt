@@ -261,7 +261,9 @@ namespace Compiler.Ast
 
         public static Def IllegalAssignmentImmutable { get; } = new(MessageType.Error, "Cannot assign to a 'const' identifier.");
 
-        public static Def IllegalAssignment { get; } = new(MessageType.Error, "Cannot assign to an identifier of this type");
+        public static Def IllegalAssignmentTypeMismatch { get; } = new(MessageType.Error, "Cannot assign value of type '{0}' to identifier of type '{1}'");
+
+        public static Def IllegalAssignment { get; } = new(MessageType.Error, "Nonsensical assignment");
 
         public static Def CannotRedeclareEntryPoint { get; } = new(MessageType.Error, "Multiple Entry Points may not be declared");
 

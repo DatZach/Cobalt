@@ -674,130 +674,6 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
-        //public Storage? Visit_OLD(ForStatement expression)
-        //{
-        //    var local = CurrentFunction.AllocateLocal(expression.ValueIdentifier, rhs.Type, true);
-        //    //var idx = CurrentFunction.FindLocalIndex(local);
-        //    //dstOperand = Operand.Local(idx);
-
-        //    var startLabel = CurrentFunction.Body.AllocateLabel();
-        //    var endLabel = CurrentFunction.Body.AllocateLabel();
-
-        //    loopStack.Push(new LoopContext(expression.Label?.Value, startLabel, endLabel));
-
-        //    if (expression.Conditional is BinaryOperatorExpression boe
-        //    &&  boe.Operator == TokenType.In)
-        //    {
-        //        var index = boe.Left.Accept(this);
-        //        var enumerableStorage = boe.Right.Accept(this);
-
-        //        Storage? getEnumeratorFn;
-        //        if (enumerableStorage != null && enumerableStorage.Type.Tag is IScopeContext enumerableScopeContext)
-        //        {
-        //            var getEnumeratorFnSymbol = enumerableScopeContext.FindSymbol("GetEnumerator");
-        //            getEnumeratorFn = getEnumeratorFnSymbol != null
-        //                            ? enumerableScopeContext.EmitGetForSymbol(getEnumeratorFnSymbol)
-        //                            : null;
-        //            if (getEnumeratorFn?.Type.TagFunctionCandidates != null)
-        //            {
-        //                getEnumeratorFn = enumerableScopeContext.EmitGetForSymbol(
-        //                    getEnumeratorFn.Type.TagFunctionCandidates.ResolveSingle(null)
-        //                );
-        //            }
-        //        }
-        //        else
-        //            getEnumeratorFn = null;
-
-        //        if (getEnumeratorFn == null || getEnumeratorFn.Type.TagFunction == null)
-        //        {
-        //            messages.Add(Message.CannotEnumerateType, boe.Right, enumerableStorage?.Type.ToString() ?? "(null)");
-        //            return null;
-        //        }
-
-        //        var enumeratorType = getEnumeratorFn.Type.TagFunction.ReturnType;
-        //        if (enumeratorType.Tag is RecordType recordType)
-        //        {
-        //            var superType = recordType.HACK_PendingSuperType;
-        //            if (recordType.PopulateConcretizedRecordIfRequired())
-        //                concreteTypeAstReferences.Add(new ConcreteTypeAstReference(superType, recordType));
-        //        }
-
-        //        var enumeratorStorage = CurrentFunction.AllocateRegisterStorage(enumeratorType);
-
-        //        // $tmp = GetEnumerator()
-        //        CurrentFunction.Body.Emit(
-        //            Opcode.Call,
-        //            getEnumeratorFn.Operand,
-        //            enumeratorStorage.Operand,
-        //            new[] { enumerableStorage!.Operand }
-        //        );
-        //        getEnumeratorFn.Free();
-        //        enumerableStorage.Free();
-
-        //        startLabel.Mark();
-
-        //        // if (!$tmp.MoveNext()) break;
-
-        //        Storage? moveNextFn;
-        //        if (enumeratorStorage.Type.Tag is IScopeContext enumeratorScopeContext)
-        //        {
-        //            var moveNextFnSymbol = enumeratorScopeContext.FindSymbol("MoveNext");
-        //            moveNextFn = moveNextFnSymbol != null
-        //                       ? enumeratorScopeContext.EmitGetForSymbol(moveNextFnSymbol)
-        //                       : null;
-        //            if (moveNextFn?.Type.TagFunctionCandidates != null)
-        //            {
-        //                moveNextFn = enumeratorScopeContext.EmitGetForSymbol(
-        //                    moveNextFn.Type.TagFunctionCandidates.ResolveSingle(null)
-        //                );
-        //            }
-        //        }
-        //        else
-        //        {
-        //            moveNextFn = null;
-        //        }
-
-        //        if (moveNextFn == null || moveNextFn.Type.TagFunction == null)
-        //        {
-        //            messages.Add(Message.CannotEnumerateType, boe.Right, enumerableStorage?.Type.ToString() ?? "(null)");
-        //            return null;
-        //        }
-
-        //        var moveNextResultStorage = CurrentFunction.AllocateRegisterStorage(moveNextFn.Type.TagFunction.ReturnType);
-        //        CurrentFunction.Body.Emit(
-        //            Opcode.Call,
-        //            moveNextFn.Operand,
-        //            moveNextResultStorage.Operand,
-        //            new[] { enumeratorStorage.Operand }
-        //        );
-
-        //        CurrentFunction.Body.Emit(Opcode.JmpF, moveNextResultStorage.Operand, endLabel);
-        //        moveNextResultStorage.Free();
-
-        //        CurrentFunction.Body.Emit(Opcode.GetField, index.Operand, enumeratorStorage.Operand, Operand.ImmediateUnsigned(0));
-
-        //        index.Free();
-        //    }
-        //    else if (expression.Conditional != null)
-        //    {
-        //        startLabel.Mark();
-        //        var a = expression.Conditional.Accept(this);
-        //        CurrentFunction.Body.Emit(Opcode.JmpF, a.Operand, endLabel);
-        //        a.Free();
-        //    }
-        //    else
-        //        startLabel.Mark();
-
-        //    expression.Body.Accept(this)?.Free();
-
-        //    CurrentFunction.Body.Emit(Opcode.Jmp, startLabel);
-        //    endLabel.Mark();
-
-        //    loopStack.Pop();
-
-        //    return null;
-        //}
-
         public Storage? Visit(ContinueStatement expression)
         {
             if (loopStack.Count == 0)
@@ -1807,18 +1683,21 @@ namespace Compiler.CodeGeneration
 
             foreach (var scope in contextStack)
             {
-                var target = scope.FindSymbol(expression.Value);
-                if (target == null)
+                var symbol = scope.FindSymbol(expression.Value);
+                if (symbol == null)
                     continue;
 
-                if (!target.IsVisibleTo(CurrentFunction))
+                if (!symbol.IsVisibleTo(CurrentFunction))
                     messages.Add(Message.CannotAccessPrivateSymbol, expression, expression.Value, CurrentFunction.Parent.Name);
-                else if (inAssignment && target is Variable variable && !variable.Mutable)
-                    messages.Add(Message.IllegalAssignmentImmutable, expression);
-
+                
                 if (inAssignment)
                 {
-                    var result = scope.EmitSetForSymbol(target);
+                    if (!symbol.Mutable)
+                        messages.Add(Message.IllegalAssignmentImmutable, expression);
+                    if (!CobType.IsCastable(AssignmentRHS.Type, symbol.Type))
+                        messages.Add(Message.IllegalAssignmentTypeMismatch, expression, AssignmentRHS.Type, symbol.Type);
+
+                    var result = scope.EmitSetForSymbol(symbol);
                     if (!result)
                         messages.Add(Message.IllegalAssignment, expression);
 
@@ -1826,7 +1705,7 @@ namespace Compiler.CodeGeneration
                 }
                 else
                 {
-                    var result = scope.EmitGetForSymbol(target);
+                    var result = scope.EmitGetForSymbol(symbol);
                     if (result == null)
                         messages.Add(Message.IllegalAssignment, expression);
 
@@ -2239,7 +2118,7 @@ namespace Compiler.CodeGeneration
             
             if (srcType == eCobType.Unsigned
                 ||  srcType == eCobType.Signed
-                ||  srcType == eCobType.Float)
+                ||  srcType == eCobType.Real)
             {
                 return source;
                 // TODO Reimplement
@@ -2368,6 +2247,10 @@ namespace Compiler.CodeGeneration
 
     internal interface ISymbol
     {
+        CobType Type { get; }
+
+        bool Mutable { get; }
+
         bool IsVisibleTo(IScopeContext context);
     }
 

@@ -194,7 +194,7 @@ namespace Compiler.CodeGeneration.Architectures
                         buffer.EmitLine($"rdata_{i} {describe} {global.IntValue}");
                         break;
                     }
-                    case eCobType.Float:
+                    case eCobType.Real:
                     {
                         var describe = global.Type.Size switch
                         {
@@ -208,31 +208,6 @@ namespace Compiler.CodeGeneration.Architectures
                     case eCobType.Function:
                         buffer.EmitLine($"rdata_{i} dd {(global.Type.TagFunction.NativeImport != null ? global.Type.TagFunction.Name : global.Type.TagFunction.FullyQualifiedName)}");
                         break;
-                    case eCobType.Array: // T[] -> Struct { Length: uint, Data: ... }
-                    {
-                        var data = global.BufferValue;
-                        if (data == null)
-                            throw new DataException("Data expected for string or array type");
-
-                        buffer.Emit("rdata_");
-                        buffer.Emit(i.ToString());
-                        buffer.Emit(" db ");
-                        var length = data.LongLength;
-                        for (int j = 7; j >= 0; --j)
-                        {
-                            buffer.Emit(((length >> (j * 8)) & 0xFF).ToString());
-                            if (j != 0) buffer.Emit(", ");
-                        }
-
-                        if (length > 0) buffer.Emit(", ");
-                        for (int j = 0; j < length; ++j)
-                        {
-                            buffer.Emit(data[j].ToString());
-                            if (j < length - 1) buffer.Emit(", ");
-                        }
-                        buffer.EmitLine();
-                        break;
-                    }
                     default:
                         throw new DataException($"Cannot encode .rdata {global.Type}");
                 }
@@ -414,7 +389,7 @@ namespace Compiler.CodeGeneration.Architectures
                     {
                         buffer.EmitIndent();
                         var aType = GetOperandDataType(inst.A);
-                        if (aType == eCobType.Float)
+                        if (aType == eCobType.Real)
                             buffer.Emit(aType.Size == 32 ? "addss " : "addsd "); // TODO Account for width
                         else
                             buffer.Emit("add ");
@@ -427,7 +402,7 @@ namespace Compiler.CodeGeneration.Architectures
                     {
                         buffer.EmitIndent();
                         var aType = GetOperandDataType(inst.A);
-                        if (aType == eCobType.Float)
+                        if (aType == eCobType.Real)
                             buffer.Emit(aType.Size == 32 ? "subss " : "subsd "); // TODO Account for width
                         else
                             buffer.Emit("sub ");
@@ -440,7 +415,7 @@ namespace Compiler.CodeGeneration.Architectures
                     {
                         buffer.EmitIndent();
                         var aType = GetOperandDataType(inst.A);
-                        if (aType == eCobType.Float)
+                        if (aType == eCobType.Real)
                             buffer.Emit(aType.Size == 32 ? "mulss " : "mulsd "); // TODO Account for width
                         else
                             buffer.Emit("imul ");
@@ -452,7 +427,7 @@ namespace Compiler.CodeGeneration.Architectures
                     case Opcode.Div:
                     {
                         var aType = GetOperandDataType(inst.A);
-                        if (aType == eCobType.Float)
+                        if (aType == eCobType.Real)
                         {
                             buffer.EmitIndent();
                             buffer.Emit(aType.Size == 32 ? "divss " : "divsd ");
@@ -479,7 +454,7 @@ namespace Compiler.CodeGeneration.Architectures
                     case Opcode.Mod:
                     {
                         var aType = GetOperandDataType(inst.A);
-                        if (aType == eCobType.Float)
+                        if (aType == eCobType.Real)
                         {
                             throw new NotImplementedException();
                         }
@@ -546,7 +521,7 @@ namespace Compiler.CodeGeneration.Architectures
             var bOperandString = GetOperandString(b);
 
             string movInst1, movInst2, aScratch, bScratch;
-            if (aType == eCobType.Float && bType == eCobType.Float)
+            if (aType == eCobType.Real && bType == eCobType.Real)
             {
                 movInst1 = ((aSize << 8) | bSize) switch
                 {
@@ -565,7 +540,7 @@ namespace Compiler.CodeGeneration.Architectures
                 aScratch = "xmm5";
                 bScratch = "xmm5";
             }
-            else if (aType == eCobType.Float)
+            else if (aType == eCobType.Real)
             {
                 movInst1 = aSize switch
                 {
@@ -582,7 +557,7 @@ namespace Compiler.CodeGeneration.Architectures
                 aScratch = "xmm5";
                 bScratch = "xmm5";
             }
-            else if (bType == eCobType.Float)
+            else if (bType == eCobType.Real)
             {
                 movInst1 = bSize switch
                 {
@@ -736,7 +711,7 @@ namespace Compiler.CodeGeneration.Architectures
                 case OperandType.ImmediateUnsigned:
                     return new CobType(eCobType.Unsigned, BusWidth); // TODO operand.Size);
                 case OperandType.ImmediateFloat:
-                    return new CobType(eCobType.Float, BusWidth); // TODO operand.Size);
+                    return new CobType(eCobType.Real, BusWidth); // TODO operand.Size);
                 case OperandType.Register:
                     return registerTypes[operand.Value]; //new CobType(eCobType.Unsigned, operand.Size);
                 case OperandType.Argument:
@@ -798,7 +773,7 @@ namespace Compiler.CodeGeneration.Architectures
                 case OperandType.Register:
                 {
                     var type = typeOverride ?? registerTypes[operand.Value];
-                    if (type == eCobType.Float)
+                    if (type == eCobType.Real)
                         return GetFloatRegisterName((int)operand.Value);
                     else
                         return GetIntegerRegisterName((int)operand.Value, BusWidth); // TODO operand.Size);
@@ -810,7 +785,7 @@ namespace Compiler.CodeGeneration.Architectures
                     {
                         // TODO Clean this up
                         var type = typeOverride ?? registerTypes[operand.Value];
-                        if (type == eCobType.Float)
+                        if (type == eCobType.Real)
                             return GetFloatRegisterName((int)operand.Value);
                         else
                             return GetIntegerRegisterName(parameterRegisters[(int)operand.Value], BusWidth); // TODO operand.Size);
@@ -829,8 +804,6 @@ namespace Compiler.CodeGeneration.Architectures
                             return "[" + global.Type.TagFunction.Name + "]";
                         return global.Type.TagFunction.FullyQualifiedName;
                     }
-                    if (global.Type == eCobType.Array)
-                        return $"rdata_{operand.Value} + 8"; // TODO HACK SHould not + 8 this
                     return $"[rdata_{operand.Value}]";
                 }
                 case OperandType.Label:
