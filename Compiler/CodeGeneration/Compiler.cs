@@ -41,6 +41,7 @@ namespace Compiler.CodeGeneration
         public Function CurrentFunction => contextStack.OfType<Function>().First();
 
         private Expression? implicitContext;
+        private IScopeContext? forTempBlockScope;
 
         private readonly List<GenericTypeAstReference> genericTypeAstReferences;
         private readonly List<ConcreteTypeAstReference> concreteTypeAstReferences;
@@ -336,6 +337,7 @@ namespace Compiler.CodeGeneration
             if (function == null) throw new InvalidOperationException("Unable to resolve declared function");
 
             contextStack.Push(function);
+            forTempBlockScope = null;
 
             // TODO Temporary hack to call our initializer functions in the entry point
             if (HACK_isDivingFatArrow)
@@ -436,6 +438,12 @@ namespace Compiler.CodeGeneration
                     }
                     else // Local Decl
                     {
+                        if (CurrentFunction.FindLocalInTopLevelScope(stdDecl.Name) != null)
+                        {
+                            messages.Add(Message.CannotRedeclareVariable, expression, stdDecl.Name);
+                            continue;
+                        }
+
                         var local = CurrentFunction.AllocateLocal(stdDecl.Name, rhs.Type, mutable);
                         var idx = CurrentFunction.FindLocalIndex(local);
                         dstOperand = Operand.Local(idx);
@@ -464,16 +472,24 @@ namespace Compiler.CodeGeneration
 
                     for (var j = 0; j < desDecl.Fields.Count; ++j)
                     {
+                        var fieldName = desDecl.Fields[j];
+
+                        if (CurrentFunction.FindLocalInTopLevelScope(fieldName) != null)
+                        {
+                            messages.Add(Message.CannotRedeclareVariable, expression, fieldName);
+                            continue;
+                        }
+
                         var prevBinOpLHS = BinOpLHS;
                         BinOpLHS = rhs;
                         var srcSymbol = source.FindSymbol($"'{j}");
                         var srcStorage = source.EmitGetForSymbol(srcSymbol);
                         BinOpLHS = prevBinOpLHS;
 
-                        CurrentFunction.AllocateLocal(desDecl.Fields[j], srcStorage.Type, mutable);
+                        CurrentFunction.AllocateLocal(fieldName, srcStorage.Type, mutable);
 
                         AssignmentRHS = srcStorage;
-                        var dstSymbol = CurrentContext.FindSymbol(desDecl.Fields[j]);
+                        var dstSymbol = CurrentContext.FindSymbol(fieldName);
                         CurrentContext.EmitSetForSymbol(dstSymbol);
                         srcStorage?.Free();
                     }
@@ -491,6 +507,8 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(IfStatement expression)
         {
+            CurrentFunction.PushNewBlockScope();
+
             ++conditionalStack;
             var conditional = expression.Conditional.Accept(this);
             --conditionalStack;
@@ -513,14 +531,20 @@ namespace Compiler.CodeGeneration
             CurrentFunction.Body.Emit(Opcode.JmpF, conditional.Operand, elseLabel);
             conditional.Free();
 
+            CurrentFunction.PushNewBlockScope();
             expression.Then.Accept(this)?.Free();
+            CurrentFunction.PopBlockScope();
             CurrentFunction.Body.Emit(Opcode.Jmp, endLabel);
 
             elseLabel.Mark();
 
+            CurrentFunction.PushNewBlockScope();
             expression.Else?.Accept(this)?.Free();
+            CurrentFunction.PopBlockScope();
 
             endLabel.Mark();
+
+            CurrentFunction.PopBlockScope();
 
             return null;
         }
@@ -536,6 +560,7 @@ namespace Compiler.CodeGeneration
             var endLabel = CurrentFunction.Body.AllocateLabel();
 
             loopStack.Push(new LoopContext(expression.Tag?.Value, startLabel, endLabel));
+            forTempBlockScope = CurrentFunction.PushNewBlockScope();
 
             // ENUMERABLE
             var enumerableStorage = expression.Enumerable.Accept(this);
@@ -571,6 +596,9 @@ namespace Compiler.CodeGeneration
                     concreteTypeAstReferences.Add(new ConcreteTypeAstReference(superType, recordType));
             }
 
+            // FiniteEnumerator`TKey`TValue^
+            // InfiniteEnumerator`TValue^
+            var tvalueType = CobType.Int; // TODO Correctly resolve this from In/FiniteEnumerator
             var enumeratorStorage = CurrentFunction.AllocateRegisterStorage(enumeratorType);
 
             // $tmp = GetEnumerator()
@@ -623,11 +651,16 @@ namespace Compiler.CodeGeneration
             CurrentFunction.Body.Emit(Opcode.JmpF, moveNextResultStorage.Operand, endLabel);
             moveNextResultStorage.Free();
 
-            var localValue = CurrentFunction.AllocateLocal(expression.ValueIdentifier, moveNextFn.Type.TagFunction.ReturnType, true);
+            var localValue = CurrentFunction.AllocateLocal(expression.ValueIdentifier, tvalueType, true);
             var localValueIdx = CurrentFunction.FindLocalIndex(localValue);
             var localValueOperand = Operand.Local(localValueIdx);
 
-            CurrentFunction.Body.Emit(Opcode.GetField, localValueOperand, enumeratorStorage.Operand, Operand.ImmediateUnsigned(0));
+            CurrentFunction.Body.Emit(
+                Opcode.GetField,
+                localValueOperand,
+                enumeratorStorage.Operand,
+                Operand.ImmediateUnsigned(0)
+            );
 
             //index.Free();
 
@@ -636,6 +669,7 @@ namespace Compiler.CodeGeneration
             CurrentFunction.Body.Emit(Opcode.Jmp, startLabel);
             endLabel.Mark();
 
+            CurrentFunction.PopBlockScope();
             loopStack.Pop();
 
             return null;
@@ -647,6 +681,7 @@ namespace Compiler.CodeGeneration
             var endLabel = CurrentFunction.Body.AllocateLabel();
 
             loopStack.Push(new LoopContext(expression.Tag?.Value, startLabel, endLabel));
+            CurrentFunction.PushNewBlockScope();
 
             // INITIALIZER
             expression.Initializer?.Accept(this)?.Free();
@@ -669,6 +704,7 @@ namespace Compiler.CodeGeneration
             CurrentFunction.Body.Emit(Opcode.Jmp, startLabel);
             endLabel.Mark();
 
+            CurrentFunction.PopBlockScope();
             loopStack.Pop();
 
             return null;
@@ -760,6 +796,8 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(BlockExpression expression)
         {
+            CurrentFunction.PushNewBlockScope();
+
             for (var i = 0; i < expression.Expressions.Count; i++)
             {
                 var expr = expression.Expressions[i];
@@ -768,10 +806,15 @@ namespace Compiler.CodeGeneration
 
                 var retStorage = expr.Accept(this);
                 if (expr is FatArrowStatement)
+                {
+                    CurrentFunction.PopBlockScope();
                     return retStorage;
+                }
 
                 retStorage?.Free();
             }
+
+            CurrentFunction.PopBlockScope();
 
             return null;
         }
@@ -1680,6 +1723,9 @@ namespace Compiler.CodeGeneration
         public Storage? Visit(IdentifierExpression expression)
         {
             var inAssignment = AssignmentRHS != null;
+
+            if (expression.Value == "for" && CurrentContext == CurrentFunction)
+                return new Storage(new CobType(eCobType.None, tag: forTempBlockScope), Operand.None);
 
             foreach (var scope in contextStack)
             {

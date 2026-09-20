@@ -267,6 +267,8 @@ namespace Compiler.Ast
 
         public static Def CannotRedeclareEntryPoint { get; } = new(MessageType.Error, "Multiple Entry Points may not be declared");
 
+        public static Def CannotRedeclareVariable { get; } = new(MessageType.Error, "Cannot redeclare variable '{0}'");
+
         public static Def MissingFunctionBody { get; } = new(MessageType.Error, "Missing function body");
 
         public static Def CannotAccessPrivateSymbol { get; } = new(MessageType.Error, "Cannot access private symbol '{0}' from module '{1}'");

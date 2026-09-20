@@ -25,7 +25,9 @@ namespace Compiler.Ast.Parselets.Statements
                     parser.Take(TokenType.RightParen);
                     parser.Take(TokenType.Assign);
 
-                    var initializer = parser.ParseExpression(isConditional: true);
+                    var initializer = parser.Match(TokenType.LeftBrace)
+                                    ? parser.ParseBlock(true)
+                                    : parser.ParseExpression(isConditional: true);
 
                     declaration = new VariableDeclStatement.DestructureDeclaration(fields, initializer);
                 }
@@ -33,7 +35,9 @@ namespace Compiler.Ast.Parselets.Statements
                 {
                     var identifier = parser.Take(TokenType.Identifier).Value;
                     parser.Take(TokenType.Assign);
-                    var initializer = parser.ParseExpression(isConditional: true);
+                    var initializer = parser.Match(TokenType.LeftBrace)
+                                    ? parser.ParseBlock(true)
+                                    : parser.ParseExpression(isConditional: true);
 
                     declaration = new VariableDeclStatement.StandardDeclaration(identifier, initializer);
                 }

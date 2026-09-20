@@ -125,6 +125,7 @@ namespace Compiler.Ast
 
             Register(TokenType.If, new IfParselet());
             Register(TokenType.For, new ForParselet());
+            Register(TokenType.For, new IdentifierParselet());
             Register(TokenType.While, new WhileParselet());
             Register(TokenType.Continue, new ContinueParselet());
             Register(TokenType.Break, new BreakParselet());

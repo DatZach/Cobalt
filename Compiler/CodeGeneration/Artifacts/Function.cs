@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System.ComponentModel;
+using System.Diagnostics;
 using System.Text;
 using Compiler.Ast.Expressions;
 using Compiler.Interpreter;
@@ -33,6 +34,7 @@ namespace Compiler.CodeGeneration.Artifacts
         private int freeRegisterIndex;
         private int registers;
 
+        private readonly Stack<BlockScope> blockScopeStack;
         private readonly List<Variable> locals;
         private readonly Compiler compiler;
 
@@ -53,12 +55,15 @@ namespace Compiler.CodeGeneration.Artifacts
             Body = new InstructionBuffer();
             ReturnLabel = Body.AllocateLabel();
 
+            blockScopeStack = new Stack<BlockScope>();
             locals = new List<Variable>();
 
             this.compiler = compiler;
 
             freeRegisterIndex = 0;
             registers = 0;
+
+            PushNewBlockScope();
         }
 
         //public Storage AllocateStorage(CobType type, Operand operand)
@@ -110,17 +115,44 @@ namespace Compiler.CodeGeneration.Artifacts
             freeRegisterIndex = register;
         }
 
+        public IScopeContext PushNewBlockScope()
+        {
+            var blockScope = new BlockScope(this);
+            blockScopeStack.Push(blockScope);
+            return blockScope;
+        }
+
+        public void PopBlockScope()
+        {
+            blockScopeStack.Pop();
+        }
+
         public Variable AllocateLocal(string name, CobType type, bool mutable)
         {
             var local = new Variable(name, type, mutable);
             locals.Add(local);
 
+            blockScopeStack.Peek().AddLocal(local);
+
             return local;
+        }
+
+        public Variable? FindLocalInTopLevelScope(string name)
+        {
+            return blockScopeStack.Peek().FindLocal(name);
         }
 
         public Variable? FindLocal(string name)
         {
-            return locals.FirstOrDefault(x => x.Name == name);
+            foreach (var scope in blockScopeStack)
+            {
+                var symbol = scope.FindLocal(name);
+                if (symbol != null)
+                    return symbol;
+            }
+
+
+            return null;
         }
 
         public int FindLocalIndex(Variable local)
@@ -156,20 +188,6 @@ namespace Compiler.CodeGeneration.Artifacts
 
             return null;
         }
-
-        //public ISymbol? FindImplicitSymbol(eCobType containerType, IReadOnlyList<CobType> fieldTypes)
-        //{
-        //    if (containerType == eCobType.Tuple)
-        //    {
-        //        return Parameters.FirstOrDefault(
-        //            x => x.Type == containerType
-        //              && x.Type.Tag is RecordType recordType
-        //              && recordType.IsFieldSignatureMatch(fieldTypes)
-        //        )?.Type.Tag as ISymbol;
-        //    }
-            
-        //    return null;
-        //}
 
         public Storage? EmitGetForSymbol(ISymbol symbol)
         {
@@ -271,6 +289,48 @@ namespace Compiler.CodeGeneration.Artifacts
             {
                 IsSpread = isSpread;
                 DefaultValue = defaultValue;
+            }
+        }
+
+        public sealed class BlockScope : IScopeContext
+        {
+            string IScopeContext.Name => "";
+
+            IScopeContext IScopeContext.Parent => parent;
+
+            private readonly Dictionary<string, Variable> locals;
+            private readonly IScopeContext parent;
+
+            public BlockScope(IScopeContext parent)
+            {
+                this.parent = parent;
+
+                locals = new Dictionary<string, Variable>();
+            }
+
+            public void AddLocal(Variable local)
+            {
+                locals.Add(local.Name, local);
+            }
+            
+            public Variable? FindLocal(string name)
+            {
+                return locals.GetValueOrDefault(name);
+            }
+
+            ISymbol? IScopeContext.FindSymbol(string name)
+            {
+                return FindLocal(name);
+            }
+
+            Storage? IScopeContext.EmitGetForSymbol(ISymbol symbol)
+            {
+                return parent.EmitGetForSymbol(symbol);
+            }
+
+            bool IScopeContext.EmitSetForSymbol(ISymbol symbol)
+            {
+                return false;
             }
         }
     }

@@ -516,7 +516,7 @@ namespace Compiler.CodeGeneration.Artifacts
                     {
                         // Size = 1 << SSS
                         uint value = 0;
-                        for (int x = type.Size; x > 1; x >>= 1)
+                        for (int x = type.Size; x >= 1; x >>= 1)
                             ++value;
                         result |= value << i; i += 3;
                         break;
@@ -584,7 +584,8 @@ namespace Compiler.CodeGeneration.Artifacts
                     case eCobType.Real:
                     {
                         // Size = 1 << SSS
-                        int size = 1 << (int)((ulong)(value >> i) & 0x7); i += 3;
+                        int size = (int)((ulong)(value >> i) & 0x7); i += 3;
+                            size = size != 0 ? 1 << size : -1;
                         return new CobType(type, size: size);
                     }
                     case eCobType.Lens:

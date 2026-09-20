@@ -8,6 +8,9 @@ namespace Compiler.Ast.Parselets.Statements
     {
         public Expression Parse(Parser parser, Token token)
         {
+            //if (!parser.Match(TokenType.LeftParen))
+            //    return new IdentifierExpression(token);
+
             parser.Take(TokenType.LeftParen);
             parser.Take(TokenType.Var);
             var valueIdentifier = parser.Take(TokenType.Identifier).Value;
