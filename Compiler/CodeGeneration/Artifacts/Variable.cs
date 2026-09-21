@@ -79,8 +79,8 @@ namespace Compiler.CodeGeneration.Artifacts
 
         void ILateTypeBinding.RebindType(CobType type)
         {
-            if (Type != eCobType.None)
-                throw new InvalidOperationException($"Cannot late type rebind '{Name}', type is already bound.");
+            //if (Type != eCobType.None)
+            //    throw new InvalidOperationException($"Cannot late type rebind '{Name}', type is already bound.");
 
             Type = type;
         }

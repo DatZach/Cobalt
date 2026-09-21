@@ -87,6 +87,7 @@ namespace Compiler.Ast
 
             // Assignments
             Register(TokenType.Assign, new BinaryOperatorParselet(PrecedenceTable.Assignment));
+            Register(TokenType.UnionAssign, new BinaryOperatorParselet(PrecedenceTable.Assignment));
             Register(TokenType.AddAssign, new BinaryOperatorParselet(PrecedenceTable.Assignment));
             Register(TokenType.SubtractAssign, new BinaryOperatorParselet(PrecedenceTable.Assignment));
             Register(TokenType.MultiplyAssign, new BinaryOperatorParselet(PrecedenceTable.Assignment));

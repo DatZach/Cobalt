@@ -134,6 +134,7 @@ namespace Compiler.Lexer
         [Description("'>'")] MoreThan,
 
         [Description("'='")] Assign,
+        [Description("':='")] UnionAssign,
         [Description("'+='")] AddAssign,
         [Description("'-='")] SubtractAssign,
         [Description("'*='")] MultiplyAssign,

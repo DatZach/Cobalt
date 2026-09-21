@@ -845,12 +845,15 @@ namespace Compiler.CodeGeneration
         public Storage? BinOpLHS { get; set; } // TODO Probably a hack tbh
         public Storage? AssignmentRHS { get; set; }
         private int conditionalStack;
+        private bool isUnionAssignment;
 
         public Storage? Visit(BinaryOperatorExpression expression)
         {
             // Assignment
             var asnOpcode = expression.Operator switch
             {
+                TokenType.Assign => Opcode.Move,
+                TokenType.UnionAssign => Opcode.Move,
                 TokenType.AddAssign => Opcode.Add,
                 TokenType.SubtractAssign => Opcode.Sub,
                 TokenType.MultiplyAssign => Opcode.Mul,
@@ -866,7 +869,6 @@ namespace Compiler.CodeGeneration
                 TokenType.BitAndAssign => Opcode.BitAnd,
                 TokenType.BitOrAssign => Opcode.BitOr,
                 TokenType.BitXorAssign => Opcode.BitXor,
-                TokenType.Assign => Opcode.Move,
                 _ => Opcode.None
             };
 
@@ -1194,6 +1196,8 @@ namespace Compiler.CodeGeneration
                     AssignmentRHS = b;
                     c = null;
                 }
+
+                isUnionAssignment = expression.Operator == TokenType.UnionAssign;
 
                 var a = expression.Left.Accept(this);
 
@@ -1740,8 +1744,20 @@ namespace Compiler.CodeGeneration
                 {
                     if (!symbol.Mutable)
                         messages.Add(Message.IllegalAssignmentImmutable, expression);
+
+                    // TODO This definitely feels out of place here...
                     if (!CobType.IsCastable(AssignmentRHS.Type, symbol.Type))
-                        messages.Add(Message.IllegalAssignmentTypeMismatch, expression, AssignmentRHS.Type, symbol.Type);
+                    {
+                        if (isUnionAssignment && symbol is ILateTypeBinding lateBinding)
+                        {
+                            lateBinding.RebindType(new CobType(
+                                eCobType.Union,
+                                unionedTypes: symbol.Type.YieldTypesInUnion().Append(AssignmentRHS.Type).ToList()
+                            ));
+                        }
+                        else
+                            messages.Add(Message.IllegalAssignmentTypeMismatch, expression, AssignmentRHS.Type, symbol.Type);
+                    }
 
                     var result = scope.EmitSetForSymbol(symbol);
                     if (!result)

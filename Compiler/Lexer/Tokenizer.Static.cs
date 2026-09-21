@@ -63,6 +63,7 @@ namespace Compiler.Lexer
                 [">"] = TokenType.MoreThan,
                 
                 ["="] = TokenType.Assign,
+                [":="] = TokenType.UnionAssign,
                 ["+="] = TokenType.AddAssign,
                 ["-="] = TokenType.SubtractAssign,
                 ["*="] = TokenType.MultiplyAssign,
@@ -80,7 +81,7 @@ namespace Compiler.Lexer
                 ["^="] = TokenType.BitXorAssign,
 
                 ["::"] = TokenType.Is,
-                ["!:"] = TokenType.IsNot,
+                ["!::"] = TokenType.IsNot,
 
                 ["?."] = TokenType.NilDot,
                 ["??"] = TokenType.NilCoalesce,
