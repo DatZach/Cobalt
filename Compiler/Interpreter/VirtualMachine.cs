@@ -458,7 +458,7 @@ namespace Compiler.Interpreter
                     case OperandType.ImmediateUnsigned:
                         return new Variable("$imm", CobType.UInt, false, operand.Value);
                     case OperandType.ImmediateFloat:
-                        return new Variable("$imm", CobType.Float, false, operand.Value);
+                        return new Variable("$imm", CobType.Real, false, operand.Value);
                     case OperandType.Register:
                         return registers[operand.Value];
                     case OperandType.Argument:

@@ -511,9 +511,9 @@ namespace Compiler.CodeGeneration.Architectures
             var aSize = aType.Size; // TODO a.Size == -1 ? BusWidth : a.Size;
             var bSize = bType.Size; // TODO b.Size == -1 ? BusWidth : b.Size;
 
-            var aIsMemory = (a.Type is OperandType.Local or OperandType.Global or OperandType.ImmediateFloat)
+            var aIsMemory = (a.Type is OperandType.Local or OperandType.Global or OperandType.ImmediateReal)
                          || (a.Type == OperandType.Argument && a.Value >= parameterRegisters.Length);
-            var bIsMemory = (b.Type is OperandType.Local or OperandType.Global or OperandType.ImmediateFloat)
+            var bIsMemory = (b.Type is OperandType.Local or OperandType.Global or OperandType.ImmediateReal)
                          || (b.Type == OperandType.Argument && b.Value >= parameterRegisters.Length)
                          || (b.Type is OperandType.ImmediateSigned or OperandType.ImmediateUnsigned && b.Value > uint.MaxValue);
             
@@ -679,7 +679,7 @@ namespace Compiler.CodeGeneration.Architectures
                 case OperandType.None:
                 case OperandType.ImmediateSigned:
                 case OperandType.ImmediateUnsigned:
-                case OperandType.ImmediateFloat:
+                case OperandType.ImmediateReal:
                     // TODO Technically an error condition?
                     break;
                 case OperandType.Register:
@@ -710,7 +710,7 @@ namespace Compiler.CodeGeneration.Architectures
                     return new CobType(eCobType.Signed, BusWidth); // TODO operand.Size);
                 case OperandType.ImmediateUnsigned:
                     return new CobType(eCobType.Unsigned, BusWidth); // TODO operand.Size);
-                case OperandType.ImmediateFloat:
+                case OperandType.ImmediateReal:
                     return new CobType(eCobType.Real, BusWidth); // TODO operand.Size);
                 case OperandType.Register:
                     return registerTypes[operand.Value]; //new CobType(eCobType.Unsigned, operand.Size);
@@ -750,7 +750,7 @@ namespace Compiler.CodeGeneration.Architectures
                     return operand.Value.ToString("D");
                 case OperandType.ImmediateUnsigned:
                     return ((ulong)operand.Value).ToString("D");
-                case OperandType.ImmediateFloat:
+                case OperandType.ImmediateReal:
                 {
                     throw new NotImplementedException();
                     //var valueName = BitConverter.Int64BitsToDouble(operand.Value).ToString("F").Replace('.', '_');

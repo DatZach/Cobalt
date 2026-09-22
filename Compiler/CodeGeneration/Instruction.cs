@@ -45,7 +45,7 @@
                     return Value.ToString("D");
                 case OperandType.ImmediateUnsigned:
                     return ((ulong)Value).ToString("D");
-                case OperandType.ImmediateFloat:
+                case OperandType.ImmediateReal:
                     return BitConverter.Int64BitsToDouble(Value).ToString("F");
                 case OperandType.Register:
                 case OperandType.Argument:
@@ -67,7 +67,7 @@
         public static Operand ImmediateSigned(long value) => new() { Type = OperandType.ImmediateSigned, Value = value };
         public static Operand ImmediateUnsigned(ulong value) => new() { Type = OperandType.ImmediateUnsigned, Value = (long)value };
         public static Operand ImmediateUnsigned(int value) => new() { Type = OperandType.ImmediateUnsigned, Value = value };
-        public static Operand ImmediateFloat(double value) => new() { Type = OperandType.ImmediateSigned, Value = BitConverter.DoubleToInt64Bits(value) };
+        public static Operand ImmediateReal(double value) => new() { Type = OperandType.ImmediateSigned, Value = BitConverter.DoubleToInt64Bits(value) };
         public static Operand _Register(int value) => new() { Type = OperandType.Register, Value = value };
         public static Operand Argument(int value) => new() { Type = OperandType.Argument, Value = value };
         public static Operand Local(int value) => new() { Type = OperandType.Local, Value = value };
@@ -139,7 +139,7 @@
         None,
         ImmediateSigned,
         ImmediateUnsigned,
-        ImmediateFloat,
+        ImmediateReal,
         Register,
         Argument,
         Local,

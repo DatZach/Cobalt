@@ -515,7 +515,7 @@ namespace Compiler.CodeGeneration
 
             if (conditional == null || conditional.Type != CobType.Boolean)
             {
-                messages.Add(Message.TypeMismatch, expression.Conditional, CobType.Boolean, conditional?.Type.ToString() ?? "none");
+                messages.Add(Message.TypeMismatch, expression.Conditional, CobType.Boolean, conditional?.Type);
                 return null;
             }
             else if (expression.Conditional is IdentifierExpression)
@@ -584,7 +584,7 @@ namespace Compiler.CodeGeneration
 
             if (getEnumeratorFn == null || getEnumeratorFn.Type.TagFunction == null)
             {
-                messages.Add(Message.CannotEnumerateType, expression.Enumerable, enumerableStorage?.Type.ToString() ?? "(null)");
+                messages.Add(Message.CannotEnumerateType, expression.Enumerable, enumerableStorage?.Type);
                 return null;
             }
 
@@ -636,7 +636,7 @@ namespace Compiler.CodeGeneration
 
             if (moveNextFn == null || moveNextFn.Type.TagFunction == null)
             {
-                messages.Add(Message.CannotEnumerateType, expression.Enumerable, enumerableStorage?.Type.ToString() ?? "(null)");
+                messages.Add(Message.CannotEnumerateType, expression.Enumerable, enumerableStorage?.Type);
                 return null;
             }
 
@@ -1052,7 +1052,7 @@ namespace Compiler.CodeGeneration
 
                 if (lhs?.Type.Tag is not IScopeContext context)
                 {
-                    messages.Add(Message.CannotDereferenceContext, expression, lhs?.Type.ToString() ?? "(null)");
+                    messages.Add(Message.CannotDereferenceContext, expression, lhs?.Type);
                     return null;
                 }
 
@@ -1077,8 +1077,15 @@ namespace Compiler.CodeGeneration
             {
                 var a = expression.Left.Accept(this);
                 var b = expression.Right.Accept(this);
-                var c = CurrentFunction.AllocateRegisterStorage(a.Type);
 
+                var cType = CobType.ResolveOperatorResultType(expression.Operator, a?.Type, b?.Type);
+                if (cType == CobType.None)
+                {
+                    messages.Add(Message.IllegalOperationBetweenTypes, expression, expression.Operator.GetDescription(), a?.Type, b?.Type);
+                    return null;
+                }
+
+                var c = CurrentFunction.AllocateRegisterStorage(cType);
                 var shlValue = b.Type.Size;
 
                 CurrentFunction.Body.Emit(Opcode.BitShl, c.Operand, a.Operand, Operand.ImmediateUnsigned(shlValue));
@@ -1092,17 +1099,20 @@ namespace Compiler.CodeGeneration
             else if (expression.Operator is TokenType.Range or TokenType.RangeInclusive
                                          or TokenType.RangeLength or TokenType.RangeTerminal)
             {
-                var type = Intrinsics.Range;
-                var cobType = new CobType(eCobType.Tuple, tag: type);
-
-                var c = CurrentFunction.AllocateRegisterStorage(cobType);
-                CurrentFunction.Body.Emit(Opcode.New, c.Operand, cobType.ToOperand(artifact));
-
                 var a = expression.Left.Accept(this);
                 var b = expression.Right.Accept(this);
-
                 var aType = a?.Type ?? b?.Type ?? CobType.UInt;
                 var bType = b?.Type ?? a?.Type ?? CobType.UInt;
+
+                var cType = CobType.ResolveOperatorResultType(expression.Operator, aType, bType);
+                if (cType == CobType.None)
+                {
+                    messages.Add(Message.IllegalOperationBetweenTypes, expression, expression.Operator.GetDescription(), aType, bType);
+                    return null;
+                }
+
+                var c = CurrentFunction.AllocateRegisterStorage(cType);
+                CurrentFunction.Body.Emit(Opcode.New, c.Operand, cType.ToOperand(artifact));
 
                 if (expression.Left is EmptyExpression)
                     a = new Storage(bType, Operand.ImmediateUnsigned(0));
@@ -1144,7 +1154,15 @@ namespace Compiler.CodeGeneration
             {
                 var a = expression.Left.Accept(this);
                 var b = expression.Right.Accept(this);
-                var c = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
+
+                var cType = CobType.ResolveOperatorResultType(expression.Operator, a?.Type, b?.Type);
+                if (cType == CobType.None)
+                {
+                    messages.Add(Message.IllegalOperationBetweenTypes, expression, expression.Operator.GetDescription(), a?.Type, b?.Type);
+                    return null;
+                }
+
+                var c = CurrentFunction.AllocateRegisterStorage(cType);
 
                 CurrentFunction.Body.Emit(cndOpcode, c.Operand, a.Operand, b.Operand);
 
@@ -1157,7 +1175,15 @@ namespace Compiler.CodeGeneration
             {
                 var a = expression.Left.Accept(this);
                 var b = expression.Right.Accept(this);
-                var c = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
+
+                var cType = CobType.ResolveOperatorResultType(expression.Operator, a?.Type, b?.Type);
+                if (cType == CobType.None)
+                {
+                    messages.Add(Message.IllegalOperationBetweenTypes, expression, expression.Operator.GetDescription(), a?.Type, b?.Type);
+                    return null;
+                }
+
+                var c = CurrentFunction.AllocateRegisterStorage(cType);
 
                 CurrentFunction.Body.Emit(cmpOpcode, c.Operand, a.Operand, b.Operand);
 
@@ -1170,7 +1196,15 @@ namespace Compiler.CodeGeneration
             {
                 var a = expression.Left.Accept(this);
                 var b = expression.Right.Accept(this);
-                var c = CurrentFunction.AllocateRegisterStorage(a.Type);
+
+                var cType = CobType.ResolveOperatorResultType(expression.Operator, a?.Type, b?.Type);
+                if (cType == CobType.None)
+                {
+                    messages.Add(Message.IllegalOperationBetweenTypes, expression, expression.Operator.GetDescription(), a?.Type, b?.Type);
+                    return null;
+                }
+
+                var c = CurrentFunction.AllocateRegisterStorage(cType);
                 
                 CurrentFunction.Body.Emit(artOpcode, c.Operand, a.Operand, b.Operand);
                 
@@ -1190,6 +1224,13 @@ namespace Compiler.CodeGeneration
                     c = expression.Left.Accept(this);
                     CurrentFunction.Body.Emit(asnOpcode, c.Operand, c.Operand, b.Operand);
                     AssignmentRHS = c;
+
+                    var cType = CobType.ResolveOperatorResultType(expression.Operator, c.Type, b.Type);
+                    if (cType == CobType.None)
+                    {
+                        messages.Add(Message.IllegalOperationBetweenTypes, expression, expression.Operator.GetDescription(), c.Type, b.Type);
+                        //return null;
+                    }
                 }
                 else
                 {
@@ -1236,7 +1277,7 @@ namespace Compiler.CodeGeneration
             {
                 if (implicitContext == null)
                 {
-                    messages.Add(Message.CannotDereferenceContext, expression, "(null)");
+                    messages.Add(Message.CannotDereferenceContext, expression, null);
                     return null;
                 }
 
@@ -1601,7 +1642,7 @@ namespace Compiler.CodeGeneration
 
             if (function == null)
             {
-                messages.Add(Message.NoMatchingFunctionCandidate, expression.FunctionExpression, candidatesStorage?.Type.Tag?.ToString());
+                messages.Add(Message.NoMatchingFunctionCandidate, expression.FunctionExpression, candidatesStorage?.Type.Tag);
                 return null;
             }
 
@@ -1746,18 +1787,15 @@ namespace Compiler.CodeGeneration
                         messages.Add(Message.IllegalAssignmentImmutable, expression);
 
                     // TODO This definitely feels out of place here...
-                    if (!CobType.IsCastable(AssignmentRHS.Type, symbol.Type))
+                    if (isUnionAssignment && AssignmentRHS.Type != symbol.Type && symbol is ILateTypeBinding lateBinding)
                     {
-                        if (isUnionAssignment && symbol is ILateTypeBinding lateBinding)
-                        {
-                            lateBinding.RebindType(new CobType(
-                                eCobType.Union,
-                                unionedTypes: symbol.Type.YieldTypesInUnion().Append(AssignmentRHS.Type).ToList()
-                            ));
-                        }
-                        else
-                            messages.Add(Message.IllegalAssignmentTypeMismatch, expression, AssignmentRHS.Type, symbol.Type);
+                        lateBinding.RebindType(new CobType(
+                            eCobType.Union,
+                            unionedTypes: symbol.Type.YieldTypesInUnion().Append(AssignmentRHS.Type).ToList()
+                        ));
                     }
+                    else if (!CobType.IsCastable(AssignmentRHS.Type, symbol.Type))
+                        messages.Add(Message.IllegalAssignmentTypeMismatch, expression, AssignmentRHS.Type, symbol.Type);
 
                     var result = scope.EmitSetForSymbol(symbol);
                     if (!result)
@@ -1936,13 +1974,6 @@ namespace Compiler.CodeGeneration
                     cobType = CobType.FromTypeName(expression.ExplicitTypeName, CurrentContext);
                 else
                 {
-                    //var tupleType = CurrentModule.FindTupleTypeViaImplicitTypeMatch(exprStorages);
-                    //if (tupleType == null)
-                    //{
-                    //    messages.Add(Message.NoMatchingTupleCandidate, expression, string.Join(", ", exprStorages.Select(x => x?.Type.ToString())));
-                    //    return null;
-                    //}
-
                     var tupleType = Intrinsics.FindOrAllocateAnonymousTupleType(
                         fieldStorages.Select(x => x.Type).ToList(),
                         this
@@ -1976,7 +2007,7 @@ namespace Compiler.CodeGeneration
             ||  structTypeStorage.Type.Tag is not RecordType structType
             ||  structType.Type != eRecordType.Struct)
             {
-                messages.Add(Message.CannotInstantiateType, expression.StructTypeExpression, structTypeStorage?.Type.ToString() ?? "(null)");
+                messages.Add(Message.CannotInstantiateType, expression.StructTypeExpression, structTypeStorage?.Type);
                 return null;
             }
 

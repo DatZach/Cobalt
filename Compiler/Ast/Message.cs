@@ -31,22 +31,22 @@ namespace Compiler.Ast
         }
 
         public void Add(Message.Def definition, Expression expression) => AddInner(definition, expression.StartToken, expression.EndToken, definition.Content);
-        public void Add(Message.Def definition, Expression expression, params object[] args) => AddInner(definition, expression.StartToken, expression.EndToken, string.Format(definition.Content, args));
-        public void Add(Message.Def definition, Expression expression, object? arg0) => AddInner(definition, expression.StartToken, expression.EndToken, string.Format(definition.Content, arg0));
-        public void Add(Message.Def definition, Expression expression, object? arg0, object? arg1) => AddInner(definition, expression.StartToken, expression.EndToken, string.Format(definition.Content, arg0, arg1));
-        public void Add(Message.Def definition, Expression expression, object? arg0, object? arg1, object? arg2) => AddInner(definition, expression.StartToken, expression.EndToken, string.Format(definition.Content, arg0, arg1, arg2));
+        public void Add(Message.Def definition, Expression expression, params object?[] args) => AddInner(definition, expression.StartToken, expression.EndToken, string.Format(definition.Content, args.Select(x => x ?? "(null)")));
+        public void Add(Message.Def definition, Expression expression, object? arg0) => AddInner(definition, expression.StartToken, expression.EndToken, string.Format(definition.Content, arg0 ?? "(null)"));
+        public void Add(Message.Def definition, Expression expression, object? arg0, object? arg1) => AddInner(definition, expression.StartToken, expression.EndToken, string.Format(definition.Content, arg0 ?? "(null)", arg1 ?? "(null)"));
+        public void Add(Message.Def definition, Expression expression, object? arg0, object? arg1, object? arg2) => AddInner(definition, expression.StartToken, expression.EndToken, string.Format(definition.Content, arg0 ?? "(null)", arg1 ?? "(null)", arg2 ?? "(null)"));
 
         public void Add(Message.Def definition, Token startToken) => AddInner(definition, startToken, null, definition.Content);
 
-        public void Add(Message.Def definition, Token startToken, params object[] args) => AddInner(definition, startToken, null, string.Format(definition.Content, args));
-        public void Add(Message.Def definition, Token startToken, object? arg0) => AddInner(definition, startToken, null, string.Format(definition.Content, arg0));
-        public void Add(Message.Def definition, Token startToken, object? arg0, object? arg1) => AddInner(definition, startToken, null, string.Format(definition.Content, arg0, arg1));
-        public void Add(Message.Def definition, Token startToken, object? arg0, object? arg1, object? arg2) => AddInner(definition, startToken, null, string.Format(definition.Content, arg0, arg1, arg2));
+        public void Add(Message.Def definition, Token startToken, params object?[] args) => AddInner(definition, startToken, null, string.Format(definition.Content, args.Select(x => x ?? "(null)")));
+        public void Add(Message.Def definition, Token startToken, object? arg0) => AddInner(definition, startToken, null, string.Format(definition.Content, arg0 ?? "(null)"));
+        public void Add(Message.Def definition, Token startToken, object? arg0, object? arg1) => AddInner(definition, startToken, null, string.Format(definition.Content, arg0 ?? "(null)", arg1 ?? "(null)"));
+        public void Add(Message.Def definition, Token startToken, object? arg0, object? arg1, object? arg2) => AddInner(definition, startToken, null, string.Format(definition.Content, arg0 ?? "(null)", arg1 ?? "(null)", arg2 ?? "(null)"));
 
-        public void Add(Message.Def definition, Token startToken, Token? endToken, object? arg0) => AddInner(definition, startToken, endToken, string.Format(definition.Content, arg0));
-        public void Add(Message.Def definition, Token startToken, Token? endToken, object? arg0, object? arg1) => AddInner(definition, startToken, endToken, string.Format(definition.Content, arg0, arg1));
-        public void Add(Message.Def definition, Token startToken, Token? endToken, object? arg0, object? arg1, object? arg2) => AddInner(definition, startToken, endToken, string.Format(definition.Content, arg0, arg1, arg2));
-        public void Add(Message.Def definition, Token startToken, Token? endToken, params object[] args) => AddInner(definition, startToken, endToken, string.Format(definition.Content, args));
+        public void Add(Message.Def definition, Token startToken, Token? endToken, object? arg0) => AddInner(definition, startToken, endToken, string.Format(definition.Content, arg0 ?? "(null)"));
+        public void Add(Message.Def definition, Token startToken, Token? endToken, object? arg0, object? arg1) => AddInner(definition, startToken, endToken, string.Format(definition.Content, arg0 ?? "(null)", arg1 ?? "(null)"));
+        public void Add(Message.Def definition, Token startToken, Token? endToken, object? arg0, object? arg1, object? arg2) => AddInner(definition, startToken, endToken, string.Format(definition.Content, arg0 ?? "(null)", arg1 ?? "(null)", arg2 ?? "(null)"));
+        public void Add(Message.Def definition, Token startToken, Token? endToken, params object?[] args) => AddInner(definition, startToken, endToken, string.Format(definition.Content, args.Select(x => x ?? "(null)")));
 
         void ICollection<Message>.Add(Message item) => messages.Add(item);
 
@@ -300,6 +300,8 @@ namespace Compiler.Ast
         public static Def CannotMatchNotPattern { get; } = new(MessageType.Error, "Cannot pattern match 'is not' against multiple patterns");
 
         public static Def CannotDereferenceContext { get; } = new(MessageType.Error, "Cannot '.' dereference '{0}' context");
+
+        public static Def IllegalOperationBetweenTypes { get; } = new(MessageType.Error, "Cannot perform {0} operation between types '{1}' and '{2}'");
 
         public sealed record Def(
             MessageType Type,

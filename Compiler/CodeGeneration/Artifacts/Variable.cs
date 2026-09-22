@@ -169,7 +169,7 @@ namespace Compiler.CodeGeneration.Artifacts
         public readonly static CobType Boolean = new(eCobType.Boolean);
         public readonly static CobType Int = new (eCobType.Signed, -1);
         public readonly static CobType UInt = new (eCobType.Unsigned, -1);
-        public readonly static CobType Float = new (eCobType.Real, -1);
+        public readonly static CobType Real = new (eCobType.Real, -1);
         public readonly static CobType U8 = new (eCobType.Unsigned, 8);
         public readonly static CobType U32 = new(eCobType.Unsigned, 32);
         public readonly static CobType U64 = new(eCobType.Unsigned, 64);
@@ -264,7 +264,7 @@ namespace Compiler.CodeGeneration.Artifacts
                 else if (ident == "uint")
                     type = UInt;
                 else if (ident == "float")
-                    type = Float;
+                    type = Real;
                 else if (ident == "error")
                     type = Error;
                 else if (ident == "nil")
@@ -752,6 +752,111 @@ namespace Compiler.CodeGeneration.Artifacts
             // NOTE Immediate aliases should be functional as their type is directly encoded
 
             return false;
+        }
+
+        public static CobType ResolveOperatorResultType(TokenType @operator, CobType? lhsType, CobType? rhsType)
+        {
+            if (lhsType == null || rhsType == null)
+                return None;
+
+            switch (@operator)
+            {
+                case TokenType.BitPack:
+                    if (lhsType != eCobType.Signed && lhsType != eCobType.Unsigned)
+                        return None;
+                    if (rhsType != eCobType.Signed && rhsType != eCobType.Unsigned)
+                        return None;
+                    return lhsType;
+
+                case TokenType.Range:
+                case TokenType.RangeInclusive:
+                case TokenType.RangeLength:
+                case TokenType.RangeTerminal:
+                    if (lhsType != eCobType.Signed && lhsType != eCobType.Unsigned && lhsType != eCobType.Real)
+                        return None;
+                    if (rhsType != eCobType.Signed && rhsType != eCobType.Unsigned && rhsType != eCobType.Real)
+                        return None;
+                    return new CobType(eCobType.Tuple, tag: Intrinsics.Range);
+
+                case TokenType.ConditionalAnd:
+                case TokenType.ConditionalOr:
+                    if (lhsType != Boolean || rhsType != Boolean)
+                        return None;
+                    return Boolean;
+
+                case TokenType.Equals:
+                case TokenType.NotEquals:
+                    if (lhsType == rhsType)
+                        return Boolean;
+                    if (lhsType != eCobType.Signed && lhsType != eCobType.Unsigned && lhsType != eCobType.Real)
+                        return None;
+                    if (rhsType != eCobType.Signed && rhsType != eCobType.Unsigned && rhsType != eCobType.Real)
+                        return None;
+                    return Boolean;
+
+                case TokenType.LessThan:
+                case TokenType.LessThanOrEquals:
+                case TokenType.MoreThan:
+                case TokenType.MoreThanOrEquals:
+                    if (lhsType != eCobType.Signed && lhsType != eCobType.Unsigned && lhsType != eCobType.Real)
+                        return None;
+                    if (rhsType != eCobType.Signed && rhsType != eCobType.Unsigned && rhsType != eCobType.Real)
+                        return None;
+                    return Boolean;
+
+                case TokenType.Add:
+                case TokenType.Subtract:
+                case TokenType.Multiply:
+                case TokenType.Exponent:
+                case TokenType.Divide:
+                case TokenType.DivideCeil:
+                case TokenType.DivideFloor:
+                case TokenType.Remainder:
+                case TokenType.Modulo:
+                case TokenType.AddAssign:
+                case TokenType.SubtractAssign:
+                case TokenType.MultiplyAssign:
+                case TokenType.DivideAssign:
+                case TokenType.DivideCeilAssign:
+                case TokenType.DivideFloorAssign:
+                case TokenType.RemainderAssign:
+                case TokenType.ModuloAssign:
+                    if (lhsType != eCobType.Signed && lhsType != eCobType.Unsigned && lhsType != eCobType.Real)
+                        return None;
+                    if (rhsType != eCobType.Signed && rhsType != eCobType.Unsigned && rhsType != eCobType.Real)
+                        return None;
+                    // implicit casts to lose the least info: uint -> int -> real
+                    if (lhsType == eCobType.Real || rhsType == eCobType.Real)
+                        return Real;
+                    if (lhsType == eCobType.Signed || rhsType == eCobType.Signed)
+                        return Int;
+                    if (lhsType == eCobType.Unsigned || rhsType == eCobType.Unsigned)
+                        return UInt;
+                    return None;
+
+                case TokenType.BitLeftShift:
+                case TokenType.BitRightShift:
+                case TokenType.BitLeftRotate:
+                case TokenType.BitRightRotate:
+                case TokenType.BitAnd:
+                case TokenType.BitOr:
+                case TokenType.BitXor:
+                case TokenType.BitLeftShiftAssign:
+                case TokenType.BitRightShiftAssign:
+                case TokenType.BitLeftRotateAssign:
+                case TokenType.BitRightRotateAssign:
+                case TokenType.BitAndAssign:
+                case TokenType.BitOrAssign:
+                case TokenType.BitXorAssign:
+                    if (lhsType != eCobType.Signed && lhsType != eCobType.Unsigned)
+                        return None;
+                    if (rhsType != eCobType.Signed && rhsType != eCobType.Unsigned)
+                        return None;
+                    return lhsType;
+
+                default:
+                    return None;
+            }
         }
     }
 
