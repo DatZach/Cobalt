@@ -429,7 +429,7 @@ namespace Compiler.Interpreter
                 {
                     case OperandType.ImmediateSigned:
                     case OperandType.ImmediateUnsigned:
-                    case OperandType.ImmediateFloat:
+                    case OperandType.ImmediateReal:
                     case OperandType.Function:
                         throw new InvalidOperationException();
                     case OperandType.Register:
@@ -457,7 +457,7 @@ namespace Compiler.Interpreter
                         return new Variable("$imm", CobType.Int, false, operand.Value);
                     case OperandType.ImmediateUnsigned:
                         return new Variable("$imm", CobType.UInt, false, operand.Value);
-                    case OperandType.ImmediateFloat:
+                    case OperandType.ImmediateReal:
                         return new Variable("$imm", CobType.Real, false, operand.Value);
                     case OperandType.Register:
                         return registers[operand.Value];

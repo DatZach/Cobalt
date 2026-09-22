@@ -137,11 +137,6 @@ namespace Compiler.CodeGeneration.Artifacts
             return local;
         }
 
-        public Variable? FindLocalInTopLevelScope(string name)
-        {
-            return blockScopeStack.Peek().FindLocal(name);
-        }
-
         public Variable? FindLocal(string name)
         {
             foreach (var scope in blockScopeStack)
@@ -310,7 +305,7 @@ namespace Compiler.CodeGeneration.Artifacts
 
             public void AddLocal(Variable local)
             {
-                locals.Add(local.Name, local);
+                locals[local.Name] = local;
             }
             
             public Variable? FindLocal(string name)

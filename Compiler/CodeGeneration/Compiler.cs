@@ -438,12 +438,6 @@ namespace Compiler.CodeGeneration
                     }
                     else // Local Decl
                     {
-                        if (CurrentFunction.FindLocalInTopLevelScope(stdDecl.Name) != null)
-                        {
-                            messages.Add(Message.CannotRedeclareVariable, expression, stdDecl.Name);
-                            continue;
-                        }
-
                         var local = CurrentFunction.AllocateLocal(stdDecl.Name, rhs.Type, mutable);
                         var idx = CurrentFunction.FindLocalIndex(local);
                         dstOperand = Operand.Local(idx);
@@ -473,12 +467,6 @@ namespace Compiler.CodeGeneration
                     for (var j = 0; j < desDecl.Fields.Count; ++j)
                     {
                         var fieldName = desDecl.Fields[j];
-
-                        if (CurrentFunction.FindLocalInTopLevelScope(fieldName) != null)
-                        {
-                            messages.Add(Message.CannotRedeclareVariable, expression, fieldName);
-                            continue;
-                        }
 
                         var prevBinOpLHS = BinOpLHS;
                         BinOpLHS = rhs;
