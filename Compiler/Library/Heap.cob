@@ -3,10 +3,6 @@
 //module Standard.Heap;
 module Heap;
 
-error {
-    OutOfBounds
-}
-
 import kernel32 HeapCreate  function(DWORD flOptions, SIZE_T dwInitialSize, SIZE_T dwMaximumSize) HANDLE, stdcall;
 import kernel32 HeapAlloc   function(HANDLE hHeap, DWORD dwFlags, SIZE_T dwBytes) LPVOID, stdcall;
 import kernel32 HeapReAlloc function(HANDLE hHeap, DWORD dwFlags, LPVOID lpMem, SIZE_T dwBytes) LPVOID, stdcall;

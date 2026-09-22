@@ -8,6 +8,15 @@
     type SIZE_T     uint;
 //}
 
+error {
+    NaN,
+    Infinity,
+
+    DivideByZero,
+    Overflow,
+    OutOfBounds
+}
+
 import Range;
 import Lens;
 import Heap;

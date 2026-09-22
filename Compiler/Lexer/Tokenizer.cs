@@ -132,14 +132,14 @@ namespace Compiler.Lexer
                         {
                             if (c == 'x' && index == startIndex + 1)
                                 return true;
-                            return IsHexChar(c);
+                            return char.IsLetterOrDigit(c);
                         }
 
                         if (hasBinSpecified)
                         {
                             if (c == 'b' && index == startIndex + 1)
                                 return true;
-                            return IsBinChar(c);
+                            return char.IsLetterOrDigit(c);
                         }
 
                         return char.IsDigit(c);

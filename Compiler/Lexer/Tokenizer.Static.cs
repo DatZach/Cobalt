@@ -142,26 +142,6 @@ namespace Compiler.Lexer
             };
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static bool IsKeyword(string ident)
-        {
-            return Keywords.ContainsKey(ident);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static bool IsHexChar(char ch)
-        {
-            return char.IsDigit(ch)
-                || (ch >= 'a' && ch <= 'f')
-                || (ch >= 'A' && ch <= 'F');
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static bool IsBinChar(char ch)
-        {
-            return ch == '0' || ch == '1';
-        }
-
         private sealed class OperatorDictionary : IEnumerable<object>
         {
             private readonly GenericComparer<Tuple<string, TokenType>> comparer;
