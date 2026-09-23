@@ -86,12 +86,9 @@ namespace Compiler
                 {
                     vm.ExecuteFunction(artifact.EntryFunction);
                 }
-                catch (InvalidOperationException ex)
+                catch 
                 {
-                    Console.ForegroundColor = ConsoleColor.Red;
-                    Console.Write("PANIC! ");
-                    Console.ForegroundColor = ConsoleColor.Gray;
-                    Console.WriteLine(ex.Message);
+                    /* Squash */
                 }
 
                 swRuntime.Stop();

@@ -1,5 +1,6 @@
 ﻿using System.Numerics;
 using System.Reflection;
+using System.Reflection.Metadata;
 using System.Runtime.InteropServices;
 using System.Text;
 using Compiler.CodeGeneration;
@@ -12,6 +13,7 @@ namespace Compiler.Interpreter
     {
         public const int MaxRegisters = 32;
 
+        private readonly Stack<FunctionContext> stack;
         private readonly NativeLibrariesProxy nativeLibrariesProxy;
         private readonly Artifact artifact;
 
@@ -20,6 +22,7 @@ namespace Compiler.Interpreter
             this.artifact = artifact ?? throw new ArgumentNullException(nameof(artifact));
             
             nativeLibrariesProxy = NativeLibrariesProxy.FromArtifact(artifact);
+            stack = new Stack<FunctionContext>();
         }
         
         public Variable? ExecuteFunction(Function function, IList<Variable>? parameters = null)
@@ -28,397 +31,439 @@ namespace Compiler.Interpreter
             var registers = new Variable[MaxRegisters];
 
             var instructions = function.Body.Instructions;
-            for (int ip = 0; ip < instructions.Count; ++ip)
+            try
             {
-                var inst = instructions[ip];
-                switch (inst.Opcode)
+                var ctx = new FunctionContext(function);
+                stack.Push(ctx);
+                for (; ctx.IP < instructions.Count; ++ctx.IP)
                 {
-                    case Opcode.None:
-                        break;
-                    case Opcode.Call:
-                    case Opcode.CallVirt:
+                    var inst = instructions[ctx.IP];
+                    switch (inst.Opcode)
                     {
-                        Function callee;
-                        if (inst.Opcode == Opcode.Call)
-                            callee = ReadOperand(inst.A!).Type.TagFunction!;
-                        else
+                        case Opcode.None:
+                            break;
+                        case Opcode.Call:
+                        case Opcode.CallVirt:
                         {
-                            var virtFunc = ReadOperand(inst.A!).Type.TagFunction!;
-                            var @this = ReadOperand(inst.D![0]).Type.Tag;
-                            if (@this is RecordType recordType)
-                                callee = recordType.FindVirtualFunction(virtFunc)!;
+                            Function callee;
+                            if (inst.Opcode == Opcode.Call)
+                                callee = ReadOperand(inst.A!).Type.TagFunction!;
                             else
-                                throw new InvalidOperationException();
-                        }
-
-                        IList<Variable>? calleeParameters;
-                        if (callee.Parameters.Count > 0)
-                        {
-                            var aCalleeParameters = new Variable[callee.Parameters.Count];
-                            for (int j = 0; j < aCalleeParameters.Length; ++j)
                             {
-                                var aCalleeParameter = ReadOperand(inst.D![j]);
-                                if (j != 0 || callee.CallingConvention != CallingConvention.ThisCall)
-                                    aCalleeParameter = aCalleeParameter.DeepClone();
-                                
-                                aCalleeParameters[j] = aCalleeParameter;
+                                var virtFunc = ReadOperand(inst.A!).Type.TagFunction!;
+                                var @this = ReadOperand(inst.D![0]).Type.Tag;
+                                if (@this is RecordType recordType)
+                                    callee = recordType.FindVirtualFunction(virtFunc)!;
+                                else
+                                    throw new InvalidOperationException();
                             }
 
-                            calleeParameters = aCalleeParameters;
-                        }
-                        else
-                            calleeParameters = null;
+                            IList<Variable>? calleeParameters;
+                            if (callee.Parameters.Count > 0)
+                            {
+                                var aCalleeParameters = new Variable[callee.Parameters.Count];
+                                for (int j = 0; j < aCalleeParameters.Length; ++j)
+                                {
+                                    var aCalleeParameter = ReadOperand(inst.D![j]);
+                                    if (j != 0 || callee.CallingConvention != CallingConvention.ThisCall)
+                                        aCalleeParameter = aCalleeParameter.DeepClone();
 
-                        var native = callee.NativeImport;
-                        var result = native != null
-                            ? nativeLibrariesProxy.Invoke(native, calleeParameters)
-                            : ExecuteFunction(callee, calleeParameters);
+                                    aCalleeParameters[j] = aCalleeParameter;
+                                }
 
-                        if (callee.ReturnType != eCobType.None)
-                            WriteOperand(inst.B!, result);
-                        break;
-                    }
-                    case Opcode.Return:
-                    {
-                        var value = inst.A != null ? ReadOperand(inst.A) : null;
-                        return value;
-                    }
-                    case Opcode.Move:
-                    {
-                        WriteOperand(inst.A!, ReadOperand(inst.B!));
-                        break;
-                    }
-                    case Opcode.GetField:
-                    {
-                        Variable? fieldValue;
-                        var obj = ReadOperand(inst.B!);
-                        var fieldIdx = inst.C!.Value;
-                        if (fieldIdx == 0)
-                        {
-                            // TODO Strings are actually Structs, when implemented in the language this hack can be fixed
-                            if (obj.Value is byte[])
-                                fieldValue = new Variable("$imm", CobType.U64, false, obj.BufferValue.Length);
+                                calleeParameters = aCalleeParameters;
+                            }
                             else
-                                fieldValue = obj.RecordValue[0];
-                        }
-                        else
-                            fieldValue = obj.RecordValue[fieldIdx];
+                                calleeParameters = null;
 
-                        WriteOperand(inst.A!, fieldValue);
-                        break;
-                    }
-                    case Opcode.SetField:
-                    {
-                        var obj = ReadOperand(inst.A!);
-                        var fieldIdx = inst.B!.Value;
-                        var value = ReadOperand(inst.C!);
-                        obj.RecordValue[fieldIdx] = value;
-                        break;
-                    }
-                    case Opcode.GetElem:
-                    {
-                        Variable? elemValue;
-                        var arr = ReadOperand(inst.B!);
-                        var idx = ReadOperand(inst.C!);
-                        elemValue = arr.ElementAt(idx.IntValue);
-                        WriteOperand(inst.A!, elemValue);
-                        break;
-                    }
-                    case Opcode.SetElem:
-                    {
-                        throw new NotImplementedException();
-                        break;
-                    }
-                    case Opcode.Peek:
-                    {
-                        var ptr = (IntPtr)ReadOperand(inst.B!).IntValue;
-                        var size = ReadOperand(inst.C!).IntValue;
-                        var value = size switch
-                        {
-                            1 => Marshal.ReadByte(ptr),
-                            2 => Marshal.ReadInt16(ptr),
-                            4 => Marshal.ReadInt32(ptr),
-                            8 => Marshal.ReadInt64(ptr),
-                            _ => throw new InvalidOperationException($"Cannot peek size {size}")
-                        };
-                        WriteOperand(inst.A!, value.ToCobVariable());
-                        break;
-                    }
-                    case Opcode.Poke:
-                    {
-                        var ptr = (IntPtr)ReadOperand(inst.A!).IntValue;
-                        var size = ReadOperand(inst.B!).IntValue;
-                        var value = ReadOperand(inst.C!).IntValue;
-                        switch (size)
-                        {
-                            case 1: Marshal.WriteByte(ptr, (byte)value); break;
-                            case 2: Marshal.WriteInt16(ptr, (short)value); break;
-                            case 4: Marshal.WriteInt32(ptr, (int)value); break;
-                            case 8: Marshal.WriteInt64(ptr, value); break;
-                            default: throw new InvalidOperationException($"Cannot poke size {size}");
-                        }
-                        break;
-                    }
-                    case Opcode.New:
-                    {
-                        var type = ReadOperand(inst.B!).Type;
-                        Variable obj;
-                        if (type.Tag is RecordType recordType)
-                            obj = recordType.ToVariable();
-                        else
-                            throw new InvalidOperationException($"Cannot allocate type {type.Tag?.GetType().Name}");
+                            var native = callee.NativeImport;
+                            var result = native != null
+                                ? nativeLibrariesProxy.Invoke(native, calleeParameters)
+                                : ExecuteFunction(callee, calleeParameters);
 
-                        WriteOperand(inst.A!, obj);
-                        break;
+                            if (callee.ReturnType != eCobType.None)
+                                WriteOperand(inst.B!, result);
+                            break;
+                        }
+                        case Opcode.Return:
+                        {
+                            var value = inst.A != null ? ReadOperand(inst.A) : null;
+                            return value;
+                        }
+                        case Opcode.Move:
+                        {
+                            WriteOperand(inst.A!, ReadOperand(inst.B!));
+                            break;
+                        }
+                        case Opcode.GetField:
+                        {
+                            Variable? fieldValue;
+                            var obj = ReadOperand(inst.B!);
+                            var fieldIdx = inst.C!.Value;
+                            if (fieldIdx == 0)
+                            {
+                                // TODO Strings are actually Structs, when implemented in the language this hack can be fixed
+                                if (obj.Value is byte[])
+                                    fieldValue = new Variable("$imm", CobType.U64, false, obj.BufferValue.Length);
+                                else
+                                    fieldValue = obj.RecordValue[0];
+                            }
+                            else
+                                fieldValue = obj.RecordValue[fieldIdx];
+
+                            WriteOperand(inst.A!, fieldValue);
+                            break;
+                        }
+                        case Opcode.SetField:
+                        {
+                            var obj = ReadOperand(inst.A!);
+                            var fieldIdx = inst.B!.Value;
+                            var value = ReadOperand(inst.C!);
+                            obj.RecordValue[fieldIdx] = value;
+                            break;
+                        }
+                        case Opcode.GetElem:
+                        {
+                            Variable? elemValue;
+                            var arr = ReadOperand(inst.B!);
+                            var idx = ReadOperand(inst.C!);
+                            elemValue = arr.ElementAt(idx.IntValue);
+                            WriteOperand(inst.A!, elemValue);
+                            break;
+                        }
+                        case Opcode.SetElem:
+                        {
+                            throw new NotImplementedException();
+                            break;
+                        }
+                        case Opcode.Peek:
+                        {
+                            var ptr = (IntPtr)ReadOperand(inst.B!).IntValue;
+                            var size = ReadOperand(inst.C!).IntValue;
+                            var value = size switch
+                            {
+                                1 => Marshal.ReadByte(ptr),
+                                2 => Marshal.ReadInt16(ptr),
+                                4 => Marshal.ReadInt32(ptr),
+                                8 => Marshal.ReadInt64(ptr),
+                                _ => throw new InvalidOperationException($"Cannot peek size {size}")
+                            };
+                            WriteOperand(inst.A!, value.ToCobVariable());
+                            break;
+                        }
+                        case Opcode.Poke:
+                        {
+                            var ptr = (IntPtr)ReadOperand(inst.A!).IntValue;
+                            var size = ReadOperand(inst.B!).IntValue;
+                            var value = ReadOperand(inst.C!).IntValue;
+                            switch (size)
+                            {
+                                case 1: Marshal.WriteByte(ptr, (byte)value); break;
+                                case 2: Marshal.WriteInt16(ptr, (short)value); break;
+                                case 4: Marshal.WriteInt32(ptr, (int)value); break;
+                                case 8: Marshal.WriteInt64(ptr, value); break;
+                                default: throw new InvalidOperationException($"Cannot poke size {size}");
+                            }
+
+                            break;
+                        }
+                        case Opcode.New:
+                        {
+                            var type = ReadOperand(inst.B!).Type;
+                            Variable obj;
+                            if (type.Tag is RecordType recordType)
+                                obj = recordType.ToVariable();
+                            else
+                                throw new InvalidOperationException($"Cannot allocate type {type.Tag?.GetType().Name}");
+
+                            WriteOperand(inst.A!, obj);
+                            break;
+                        }
+                        case Opcode.BitShr:
+                        {
+                            var b = ReadOperand(inst.B!).IntValue;
+                            b >>= (int)ReadOperand(inst.C!).IntValue;
+                            WriteOperand(inst.A!, b.ToCobVariable());
+                            break;
+                        }
+                        case Opcode.BitShl:
+                        {
+                            var b = ReadOperand(inst.B!).IntValue;
+                            b <<= (int)ReadOperand(inst.C!).IntValue;
+                            WriteOperand(inst.A!, b.ToCobVariable());
+                            break;
+                        }
+                        case Opcode.BitRol:
+                        {
+                            var b = ReadOperand(inst.B!).IntValue;
+                            var c = ReadOperand(inst.C!).IntValue;
+                            b = (long)BitOperations.RotateLeft((ulong)b, (int)c);
+                            WriteOperand(inst.A!, b.ToCobVariable());
+                            break;
+                        }
+                        case Opcode.BitRor:
+                        {
+                            var b = ReadOperand(inst.B!).IntValue;
+                            var c = ReadOperand(inst.C!).IntValue;
+                            b = (long)BitOperations.RotateRight((ulong)b, (int)c);
+                            WriteOperand(inst.A!, b.ToCobVariable());
+                            break;
+                        }
+                        case Opcode.BitAnd:
+                        {
+                            var b = ReadOperand(inst.B!).IntValue;
+                            b &= ReadOperand(inst.C!).IntValue;
+                            WriteOperand(inst.A!, b.ToCobVariable());
+                            break;
+                        }
+                        case Opcode.BitXor:
+                        {
+                            var b = ReadOperand(inst.B!).IntValue;
+                            b ^= ReadOperand(inst.C!).IntValue;
+                            WriteOperand(inst.A!, b.ToCobVariable());
+                            break;
+                        }
+                        case Opcode.BitOr:
+                        {
+                            var b = ReadOperand(inst.B!).IntValue;
+                            b |= ReadOperand(inst.C!).IntValue;
+                            WriteOperand(inst.A!, b.ToCobVariable());
+                            break;
+                        }
+                        case Opcode.BitNot:
+                        {
+                            var b = ReadOperand(inst.B!).IntValue;
+                            b = ~b;
+                            WriteOperand(inst.A!, b.ToCobVariable());
+                            break;
+                        }
+                        case Opcode.Not:
+                        {
+                            var b = ReadOperand(inst.B!).IntValue;
+                            b = b != 0 ? 0 : 1;
+                            WriteOperand(inst.A!, b.ToCobVariable());
+                            break;
+                        }
+                        case Opcode.Neg:
+                        {
+                            var b = ReadOperand(inst.B!).IntValue;
+                            b = -b;
+                            WriteOperand(inst.A!, b.ToCobVariable());
+                            break;
+                        }
+                        case Opcode.Add:
+                        {
+                            var b = ReadOperand(inst.B!).IntValue;
+                            b += ReadOperand(inst.C!).IntValue;
+                            WriteOperand(inst.A!, b.ToCobVariable());
+                            break;
+                        }
+                        case Opcode.Sub:
+                        {
+                            var b = ReadOperand(inst.B!).IntValue;
+                            b -= ReadOperand(inst.C!).IntValue;
+                            WriteOperand(inst.A!, b.ToCobVariable());
+                            break;
+                        }
+                        case Opcode.Mul:
+                        {
+                            var b = ReadOperand(inst.B!).IntValue;
+                            b *= ReadOperand(inst.C!).IntValue;
+                            WriteOperand(inst.A!, b.ToCobVariable());
+                            break;
+                        }
+                        case Opcode.Pow:
+                        {
+                            var b = ReadOperand(inst.B!).IntValue;
+                            var c = ReadOperand(inst.C!).IntValue;
+                            b = (long)Math.Pow(b, c);
+                            WriteOperand(inst.A!, b.ToCobVariable());
+                            break;
+                        }
+                        case Opcode.Div:
+                        {
+                            var b = ReadOperand(inst.B!).IntValue;
+                            b /= ReadOperand(inst.C!).IntValue;
+                            WriteOperand(inst.A!, b.ToCobVariable());
+                            break;
+                        }
+                        case Opcode.DivCeil:
+                        {
+                            var b = ReadOperand(inst.B!).IntValue;
+                            var c = ReadOperand(inst.C!).IntValue;
+                            b = (b + c - 1) / c;
+                            WriteOperand(inst.A!, b.ToCobVariable());
+                            break;
+                        }
+                        case Opcode.DivFloor:
+                        {
+                            // TODO Technically only useful for floats
+                            var b = ReadOperand(inst.B!).IntValue;
+                            b /= ReadOperand(inst.C!).IntValue;
+                            WriteOperand(inst.A!, b.ToCobVariable());
+                            break;
+                        }
+                        case Opcode.Mod:
+                        {
+                            var b = ReadOperand(inst.B!).IntValue;
+                            b %= ReadOperand(inst.C!).IntValue;
+                            WriteOperand(inst.A!, b.ToCobVariable());
+                            break;
+                        }
+                        case Opcode.Rem:
+                        {
+                            var b = ReadOperand(inst.B!).IntValue;
+                            var c = ReadOperand(inst.C!).IntValue;
+                            b = ((b % c) + c) % c;
+                            WriteOperand(inst.A!, b.ToCobVariable());
+                            break;
+                        }
+                        case Opcode.CondAnd:
+                        {
+                            var b = ReadOperand(inst.B!).IntValue;
+                            var c = ReadOperand(inst.C!).IntValue;
+                            var d = b == 1 && c == 1;
+                            WriteOperand(inst.A!, d.ToCobVariable());
+                            break;
+                        }
+                        case Opcode.CondOr:
+                        {
+                            var b = ReadOperand(inst.B!).IntValue;
+                            var c = ReadOperand(inst.C!).IntValue;
+                            var d = b == 1 || c == 1;
+                            WriteOperand(inst.A!, d.ToCobVariable());
+                            break;
+                        }
+                        case Opcode.CmpEQ:
+                        {
+                            var b = ReadOperand(inst.B!).IntValue;
+                            var c = ReadOperand(inst.C!).IntValue;
+                            var d = b == c;
+                            WriteOperand(inst.A!, d.ToCobVariable());
+                            break;
+                        }
+                        case Opcode.CmpNEQ:
+                        {
+                            var b = ReadOperand(inst.B!).IntValue;
+                            var c = ReadOperand(inst.C!).IntValue;
+                            var d = b != c;
+                            WriteOperand(inst.A!, d.ToCobVariable());
+                            break;
+                        }
+                        case Opcode.CmpLT:
+                        {
+                            var b = ReadOperand(inst.B!).IntValue;
+                            var c = ReadOperand(inst.C!).IntValue;
+                            var d = b < c;
+                            WriteOperand(inst.A!, d.ToCobVariable());
+                            break;
+                        }
+                        case Opcode.CmpLTE:
+                        {
+                            var b = ReadOperand(inst.B!).IntValue;
+                            var c = ReadOperand(inst.C!).IntValue;
+                            var d = b <= c;
+                            WriteOperand(inst.A!, d.ToCobVariable());
+                            break;
+                        }
+                        case Opcode.CmpGT:
+                        {
+                            var b = ReadOperand(inst.B!).IntValue;
+                            var c = ReadOperand(inst.C!).IntValue;
+                            var d = b > c;
+                            WriteOperand(inst.A!, d.ToCobVariable());
+                            break;
+                        }
+                        case Opcode.CmpGTE:
+                        {
+                            var b = ReadOperand(inst.B!).IntValue;
+                            var c = ReadOperand(inst.C!).IntValue;
+                            var d = b >= c;
+                            WriteOperand(inst.A!, d.ToCobVariable());
+                            break;
+                        }
+                        case Opcode.CmpTyEQ:
+                        {
+                            var b = ReadOperand(inst.B!).Type;
+                            var c = ReadOperand(inst.C!).Type;
+                            var d = b == c;
+                            WriteOperand(inst.A!, d.ToCobVariable());
+                            break;
+                        }
+                        case Opcode.CmpTyNEQ:
+                        {
+                            var b = ReadOperand(inst.B!).Type;
+                            var c = ReadOperand(inst.C!).Type;
+                            var d = b != c;
+                            WriteOperand(inst.A!, d.ToCobVariable());
+                            break;
+                        }
+                        case Opcode.JmpT:
+                        {
+                            var cmp = ReadOperand(inst.A!).IntValue;
+                            if (cmp == 1)
+                                ctx.IP = function.Body.Labels[(int)inst.B!.Value].Location - 1;
+                            break;
+                        }
+                        case Opcode.JmpF:
+                        {
+                            var cmp = ReadOperand(inst.A!).IntValue;
+                            if (cmp == 0)
+                                ctx.IP = function.Body.Labels[(int)inst.B!.Value].Location - 1;
+                            break;
+                        }
+                        case Opcode.Jmp:
+                        {
+                            ctx.IP = function.Body.Labels[(int)inst.A!.Value].Location - 1;
+                            break;
+                        }
+                        case Opcode.PanicOnErr:
+                        {
+                            var a = ReadOperand(inst.A!);
+                            if (a.Type == eCobType.Error)
+                                throw new VmException(a.IntValue);
+                            break;
+                        }
+                        default:
+                            throw new ArgumentOutOfRangeException();
                     }
-                    case Opcode.BitShr:
-                    {
-                        var b = ReadOperand(inst.B!).IntValue;
-                        b >>= (int)ReadOperand(inst.C!).IntValue;
-                        WriteOperand(inst.A!, b.ToCobVariable());
-                        break;
-                    }
-                    case Opcode.BitShl:
-                    {
-                        var b = ReadOperand(inst.B!).IntValue;
-                        b <<= (int)ReadOperand(inst.C!).IntValue;
-                        WriteOperand(inst.A!, b.ToCobVariable());
-                        break;
-                    }
-                    case Opcode.BitRol:
-                    {
-                        var b = ReadOperand(inst.B!).IntValue;
-                        var c = ReadOperand(inst.C!).IntValue;
-                        b = (long)BitOperations.RotateLeft((ulong)b, (int)c);
-                        WriteOperand(inst.A!, b.ToCobVariable());
-                        break;
-                    }
-                    case Opcode.BitRor:
-                    {
-                        var b = ReadOperand(inst.B!).IntValue;
-                        var c = ReadOperand(inst.C!).IntValue;
-                        b = (long)BitOperations.RotateRight((ulong)b, (int)c);
-                        WriteOperand(inst.A!, b.ToCobVariable());
-                        break;
-                    }
-                    case Opcode.BitAnd:
-                    {
-                        var b = ReadOperand(inst.B!).IntValue;
-                        b &= ReadOperand(inst.C!).IntValue;
-                        WriteOperand(inst.A!, b.ToCobVariable());
-                        break;
-                    }
-                    case Opcode.BitXor:
-                    {
-                        var b = ReadOperand(inst.B!).IntValue;
-                        b ^= ReadOperand(inst.C!).IntValue;
-                        WriteOperand(inst.A!, b.ToCobVariable());
-                        break;
-                    }
-                    case Opcode.BitOr:
-                    {
-                        var b = ReadOperand(inst.B!).IntValue;
-                        b |= ReadOperand(inst.C!).IntValue;
-                        WriteOperand(inst.A!, b.ToCobVariable());
-                        break;
-                    }
-                    case Opcode.BitNot:
-                    {
-                        var b = ReadOperand(inst.B!).IntValue;
-                        b = ~b;
-                        WriteOperand(inst.A!, b.ToCobVariable());
-                        break;
-                    }
-                    case Opcode.Not:
-                    {
-                        var b = ReadOperand(inst.B!).IntValue;
-                        b = b != 0 ? 0 : 1;
-                        WriteOperand(inst.A!, b.ToCobVariable());
-                        break;
-                    }
-                    case Opcode.Neg:
-                    {
-                        var b = ReadOperand(inst.B!).IntValue;
-                        b = -b;
-                        WriteOperand(inst.A!, b.ToCobVariable());
-                        break;
-                    }
-                    case Opcode.Add:
-                    {
-                        var b = ReadOperand(inst.B!).IntValue;
-                        b += ReadOperand(inst.C!).IntValue;
-                        WriteOperand(inst.A!, b.ToCobVariable());
-                        break;
-                    }
-                    case Opcode.Sub:
-                    {
-                        var b = ReadOperand(inst.B!).IntValue;
-                        b -= ReadOperand(inst.C!).IntValue;
-                        WriteOperand(inst.A!, b.ToCobVariable());
-                        break;
-                    }
-                    case Opcode.Mul:
-                    {
-                        var b = ReadOperand(inst.B!).IntValue;
-                        b *= ReadOperand(inst.C!).IntValue;
-                        WriteOperand(inst.A!, b.ToCobVariable());
-                        break;
-                    }
-                    case Opcode.Pow:
-                    {
-                        var b = ReadOperand(inst.B!).IntValue;
-                        var c = ReadOperand(inst.C!).IntValue;
-                        b = (long)Math.Pow(b, c);
-                        WriteOperand(inst.A!, b.ToCobVariable());
-                        break;
-                    }
-                    case Opcode.Div:
-                    {
-                        var b = ReadOperand(inst.B!).IntValue;
-                        b /= ReadOperand(inst.C!).IntValue;
-                        WriteOperand(inst.A!, b.ToCobVariable());
-                        break;
-                    }
-                    case Opcode.DivCeil:
-                    {
-                        var b = ReadOperand(inst.B!).IntValue;
-                        var c = ReadOperand(inst.C!).IntValue;
-                        b = (b + c - 1) / c;
-                        WriteOperand(inst.A!, b.ToCobVariable());
-                        break;
-                    }
-                    case Opcode.DivFloor:
-                    {
-                        // TODO Technically only useful for floats
-                        var b = ReadOperand(inst.B!).IntValue;
-                        b /= ReadOperand(inst.C!).IntValue;
-                        WriteOperand(inst.A!, b.ToCobVariable());
-                        break;
-                    }
-                    case Opcode.Mod:
-                    {
-                        var b = ReadOperand(inst.B!).IntValue;
-                        b %= ReadOperand(inst.C!).IntValue;
-                        WriteOperand(inst.A!, b.ToCobVariable());
-                        break;
-                    }
-                    case Opcode.Rem:
-                    {
-                        var b = ReadOperand(inst.B!).IntValue;
-                        var c = ReadOperand(inst.C!).IntValue;
-                        b = ((b % c) + c) % c;
-                        WriteOperand(inst.A!, b.ToCobVariable());
-                        break;
-                    }
-                    case Opcode.CondAnd:
-                    {
-                        var b = ReadOperand(inst.B!).IntValue;
-                        var c = ReadOperand(inst.C!).IntValue;
-                        var d = b == 1 && c == 1;
-                        WriteOperand(inst.A!, d.ToCobVariable());
-                        break;
-                    }
-                    case Opcode.CondOr:
-                    {
-                        var b = ReadOperand(inst.B!).IntValue;
-                        var c = ReadOperand(inst.C!).IntValue;
-                        var d = b == 1 || c == 1;
-                        WriteOperand(inst.A!, d.ToCobVariable());
-                        break;
-                    }
-                    case Opcode.CmpEQ:
-                    {
-                        var b = ReadOperand(inst.B!).IntValue;
-                        var c = ReadOperand(inst.C!).IntValue;
-                        var d = b == c;
-                        WriteOperand(inst.A!, d.ToCobVariable());
-                        break;
-                    }
-                    case Opcode.CmpNEQ:
-                    {
-                        var b = ReadOperand(inst.B!).IntValue;
-                        var c = ReadOperand(inst.C!).IntValue;
-                        var d = b != c;
-                        WriteOperand(inst.A!, d.ToCobVariable());
-                        break;
-                    }
-                    case Opcode.CmpLT:
-                    {
-                        var b = ReadOperand(inst.B!).IntValue;
-                        var c = ReadOperand(inst.C!).IntValue;
-                        var d = b < c;
-                        WriteOperand(inst.A!, d.ToCobVariable());
-                        break;
-                    }
-                    case Opcode.CmpLTE:
-                    {
-                        var b = ReadOperand(inst.B!).IntValue;
-                        var c = ReadOperand(inst.C!).IntValue;
-                        var d = b <= c;
-                        WriteOperand(inst.A!, d.ToCobVariable());
-                        break;
-                    }
-                    case Opcode.CmpGT:
-                    {
-                        var b = ReadOperand(inst.B!).IntValue;
-                        var c = ReadOperand(inst.C!).IntValue;
-                        var d = b > c;
-                        WriteOperand(inst.A!, d.ToCobVariable());
-                        break;
-                    }
-                    case Opcode.CmpGTE:
-                    {
-                        var b = ReadOperand(inst.B!).IntValue;
-                        var c = ReadOperand(inst.C!).IntValue;
-                        var d = b >= c;
-                        WriteOperand(inst.A!, d.ToCobVariable());
-                        break;
-                    }
-                    case Opcode.CmpTyEQ:
-                    {
-                        var b = ReadOperand(inst.B!).Type;
-                        var c = ReadOperand(inst.C!).Type;
-                        var d = b == c;
-                        WriteOperand(inst.A!, d.ToCobVariable());
-                        break;
-                    }
-                    case Opcode.CmpTyNEQ:
-                    {
-                        var b = ReadOperand(inst.B!).Type;
-                        var c = ReadOperand(inst.C!).Type;
-                        var d = b != c;
-                        WriteOperand(inst.A!, d.ToCobVariable());
-                        break;
-                    }
-                    case Opcode.JmpT:
-                    {
-                        var cmp = ReadOperand(inst.A!).IntValue;
-                        if (cmp == 1)
-                            ip = function.Body.Labels[(int)inst.B!.Value].Location - 1;
-                        break;
-                    }
-                    case Opcode.JmpF:
-                    {
-                        var cmp = ReadOperand(inst.A!).IntValue;
-                        if (cmp == 0)
-                            ip = function.Body.Labels[(int)inst.B!.Value].Location - 1;
-                        break;
-                    }
-                    case Opcode.Jmp:
-                    {
-                        ip = function.Body.Labels[(int)inst.A!.Value].Location - 1;
-                        break;
-                    }
-                    case Opcode.PanicOnErr:
-                    {
-                        var a = ReadOperand(inst.A!);
-                        if (a.Type == eCobType.Error)
-                            throw new InvalidOperationException($"Unhandled error returned from function call in '{function.Name}' @ {ip}");
-                        break;
-                    }
-                    default:
-                        throw new ArgumentOutOfRangeException();
                 }
+            }
+            catch (UnwindException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // TODO Invoke user-defined panic handler if hooked
+
+                var moduleError = artifact.Modules.FirstOrDefault(x => x.Name == "error");
+                string errorName;
+                if (ex is VmException vmEx)
+                    errorName = vmEx.ErrorIndex.ToString();
+                else if (ex is DivideByZeroException)
+                    errorName = "DivideByZero";
+                else if (ex is OverflowException)
+                    errorName = "Overflow";
+                else
+                    errorName = $"(VM EXCEPTION; {ex.GetType().Name})";
+
+                var stackTrace = new StringBuilder();
+                foreach (var frame in stack)
+                {
+                    // at function_name(Filename:Line)
+                    stackTrace.AppendLine($" at {frame.Function.Name}");
+                }
+
+                Console.ForegroundColor = ConsoleColor.Red; Console.Write("Panic! ");
+                Console.ForegroundColor = ConsoleColor.Gray; Console.WriteLine($"Unhandled '{errorName}' occurred.");
+                Console.WriteLine(stackTrace.ToString());
+
+                throw new UnwindException(ex);
+            }
+            finally
+            {
+                stack.Pop();
             }
 
             throw new InvalidOperationException("End of buffer without a ret instruction");
@@ -488,6 +533,19 @@ namespace Compiler.Interpreter
         public void Dispose()
         {
             nativeLibrariesProxy.Dispose();
+        }
+
+        private sealed class FunctionContext
+        {
+            public Function Function { get; }
+
+            public int IP;
+
+            public FunctionContext(Function function)
+            {
+                Function = function;
+                IP = 0;
+            }
         }
 
         public sealed class NativeLibrariesProxy : IDisposable
@@ -585,6 +643,25 @@ namespace Compiler.Interpreter
             }
 
             public static string GetString(byte[] data) => Encoding.UTF8.GetString(data);
+        }
+
+        private sealed class UnwindException : Exception
+        {
+            public UnwindException(Exception innerException)
+                : base("VM Exception", innerException)
+            {
+
+            }
+        }
+
+        private sealed class VmException : Exception
+        {
+            public long ErrorIndex { get; }
+
+            public VmException(long errorIndex)
+            {
+                ErrorIndex = errorIndex;
+            }
         }
     }
 
