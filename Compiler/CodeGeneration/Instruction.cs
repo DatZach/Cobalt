@@ -131,7 +131,8 @@
         Neg,
         Not,
 
-        PanicOnErr
+        PanicOnErr,
+        SetPanicHandler
     }
 
     public enum OperandType : byte

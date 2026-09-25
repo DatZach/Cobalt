@@ -66,6 +66,7 @@ namespace Compiler.CodeGeneration
             loopStack = new Stack<LoopContext>();
 
             Modules.Add(RootModule);
+            contextStack.Push(new RootScopeContext(this));
         }
 
         public Storage? Visit(ScriptExpression expression)
@@ -1265,7 +1266,7 @@ namespace Compiler.CodeGeneration
             {
                 if (implicitContext == null)
                 {
-                    messages.Add(Message.CannotDereferenceContext, expression, null);
+                    messages.Add(Message.CannotDereferenceContext, expression, (string?)null);
                     return null;
                 }
 
@@ -1756,9 +1757,6 @@ namespace Compiler.CodeGeneration
         public Storage? Visit(IdentifierExpression expression)
         {
             var inAssignment = AssignmentRHS != null;
-
-            if (expression.Value == "for" && CurrentContext == CurrentFunction)
-                return new Storage(new CobType(eCobType.None, tag: forTempBlockScope), Operand.None);
 
             foreach (var scope in contextStack)
             {
@@ -2309,6 +2307,93 @@ namespace Compiler.CodeGeneration
         private sealed record GenericTypeAstReference(IScopeContext Generic, Expression Expression, Stack<IScopeContext> ContextStack);
 
         private sealed record ConcreteTypeAstReference(IScopeContext Generic, IScopeContext Concrete);
+
+        private sealed class RootScopeContext : IScopeContext
+        {
+            private static readonly RootSymbol ForSymbol = new (CobType.None, false);
+            private static readonly RootSymbol PanicSymbol = new (new CobType(eCobType.Function, tag: new FunctionSignature()), true);
+
+            public string Name => "(root)";
+
+            public IScopeContext? Parent => null;
+
+            private readonly Compiler compiler;
+
+            public RootScopeContext(Compiler compiler)
+            {
+                this.compiler = compiler;
+            }
+
+            public ISymbol? FindSymbol(string name)
+            {
+                return name switch
+                {
+                    "for" => ForSymbol,
+                    "panic" => PanicSymbol,
+                    _ => null
+                };
+            }
+
+            public Storage? EmitGetForSymbol(ISymbol symbol)
+            {
+                if (symbol == ForSymbol && compiler.forTempBlockScope != null)
+                    return new Storage(new CobType(eCobType.None, tag: compiler.forTempBlockScope), Operand.None);
+
+                if (symbol == PanicSymbol)
+                {
+                    compiler.CurrentFunction.Body.Emit(
+                        Opcode.PanicOnErr,
+                        new CobType(eCobType.Error).ToOperand(compiler.artifact)
+                    );
+                    return new Storage(CobType.None, Operand.None);
+                }
+                return null;
+            }
+
+            public bool EmitSetForSymbol(ISymbol symbol)
+            {
+                if (symbol == PanicSymbol)
+                {
+                    Storage? storage;
+                    if (compiler.AssignmentRHS?.Type.TagFunctionCandidates != null)
+                    {
+                        storage = compiler.CurrentModule.EmitGetForSymbol(
+                            compiler.AssignmentRHS.Type.TagFunctionCandidates.ResolveSingle(null)
+                        );
+                    }
+                    else
+                        storage = null;
+
+                    if (storage != null)
+                    {
+                        compiler.CurrentFunction.Body.Emit(
+                            Opcode.SetPanicHandler,
+                            storage.Operand
+                        );
+                        storage.Free();
+                    }
+
+                    return true;
+                }
+
+                return false;
+            }
+
+            private sealed class RootSymbol : ISymbol
+            {
+                public CobType Type { get; }
+
+                public bool Mutable { get; }
+
+                public bool IsVisibleTo(IScopeContext context) => true;
+
+                public RootSymbol(CobType type, bool mutable)
+                {
+                    Type = type;
+                    Mutable = mutable;
+                }
+            }
+        }
     }
 
     internal interface IScopeContext

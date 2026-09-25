@@ -1,6 +1,5 @@
 ﻿using System.Numerics;
 using System.Reflection;
-using System.Reflection.Metadata;
 using System.Runtime.InteropServices;
 using System.Text;
 using Compiler.CodeGeneration;
@@ -12,6 +11,8 @@ namespace Compiler.Interpreter
     internal sealed class VirtualMachine : IDisposable
     {
         public const int MaxRegisters = 32;
+
+        private Function? userPanicCallback;
 
         private readonly Stack<FunctionContext> stack;
         private readonly NativeLibrariesProxy nativeLibrariesProxy;
@@ -424,6 +425,12 @@ namespace Compiler.Interpreter
                                 throw new VmException(a.IntValue);
                             break;
                         }
+                        case Opcode.SetPanicHandler:
+                        {
+                            var a = ReadOperand(inst.A!);
+                            userPanicCallback = a.Type == eCobType.Nil ? null : a.Value as Function;
+                            break;
+                        }
                         default:
                             throw new ArgumentOutOfRangeException();
                     }
@@ -435,30 +442,71 @@ namespace Compiler.Interpreter
             }
             catch (Exception ex)
             {
-                // TODO Invoke user-defined panic handler if hooked
-
+                // PREAMBLE
                 var moduleError = artifact.Modules.FirstOrDefault(x => x.Name == "error");
-                string errorName;
+                long errorCode;
                 if (ex is VmException vmEx)
-                    errorName = vmEx.ErrorIndex.ToString();
+                    errorCode = vmEx.ErrorCode;
                 else if (ex is DivideByZeroException)
-                    errorName = "DivideByZero";
+                    errorCode = artifact.Globals.FirstOrDefault(x => x.Name == "DivideByZero").IntValue;
                 else if (ex is OverflowException)
-                    errorName = "Overflow";
+                    errorCode = 3;
                 else
-                    errorName = $"(VM EXCEPTION; {ex.GetType().Name})";
+                    errorCode = -1;
 
-                var stackTrace = new StringBuilder();
+                var sbStackTrace = new StringBuilder();
                 foreach (var frame in stack)
                 {
                     // at function_name(Filename:Line)
-                    stackTrace.AppendLine($" at {frame.Function.Name}");
+                    sbStackTrace.AppendLine($" at {frame.Function.Name}");
                 }
 
-                Console.ForegroundColor = ConsoleColor.Red; Console.Write("Panic! ");
-                Console.ForegroundColor = ConsoleColor.Gray; Console.WriteLine($"Unhandled '{errorName}' occurred.");
-                Console.WriteLine(stackTrace.ToString());
+                var stackTrace = sbStackTrace.ToString();
 
+                // USER HANDLER
+                bool handled = false;
+                if (userPanicCallback != null)
+                {
+                    var cb = userPanicCallback;
+                    try
+                    {
+                        userPanicCallback = null;
+
+                        var byteCount = Encoding.UTF8.GetByteCount(stackTrace);
+                        var data = new byte[byteCount + 1];
+                        Encoding.UTF8.GetBytes(stackTrace, 0, stackTrace.Length, data, 0);
+
+                        // TODO Somehow, this should be using a stdlib defined symbol
+                        var cobType = new CobType(eCobType.Tuple, tag: Intrinsics.Lens.FindConcretizedRecord(CobType.U8));
+
+                        ExecuteFunction(cb, new[]
+                        {
+                            new Variable("code", CobType.Error, errorCode),
+                            new Variable("stackTrace", cobType, new[]
+                            {
+                                new Variable("Address", CobType.UInt, false, data),
+                                new Variable("Length", CobType.UInt, false, byteCount),
+                            })
+                        });
+                        handled = true;
+                    }
+                    catch { /* Second Chance exception, fall through to default handler */ }
+                    finally
+                    {
+                        userPanicCallback = cb;
+                    }
+                }
+
+                // DEFAULT HANDLER
+                if (!handled)
+                {
+                    string errorName = errorCode.ToString();
+                    Console.ForegroundColor = ConsoleColor.Red; Console.Write("Panic! ");
+                    Console.ForegroundColor = ConsoleColor.Gray; Console.WriteLine($"Unhandled '{errorName}' occurred.");
+                    Console.WriteLine(sbStackTrace.ToString());
+                }
+
+                // Unwind stack
                 throw new UnwindException(ex);
             }
             finally
@@ -656,11 +704,11 @@ namespace Compiler.Interpreter
 
         private sealed class VmException : Exception
         {
-            public long ErrorIndex { get; }
+            public long ErrorCode { get; }
 
-            public VmException(long errorIndex)
+            public VmException(long errorCode)
             {
-                ErrorIndex = errorIndex;
+                ErrorCode = errorCode;
             }
         }
     }
