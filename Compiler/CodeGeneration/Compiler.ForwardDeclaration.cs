@@ -255,7 +255,10 @@ namespace Compiler.CodeGeneration
             if (phase == DeclPhase.Types)
             {
                 foreach (var x in expression.Members)
-                    compiler.Errors.AllocateGlobal(x, CobType.Error, false).IntValue = compiler.Globals.Count;
+                {
+                    var error = compiler.Errors.AllocateGlobal(x, CobType.Error, false);
+                    error.IntValue = compiler.Globals.Count;
+                }
             }
 
             return Unit.Value;

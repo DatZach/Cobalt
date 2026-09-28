@@ -12,6 +12,7 @@ error {
     NaN,
     Infinity,
 
+    Panic,
     DivideByZero,
     Overflow,
     OutOfBounds

@@ -6,7 +6,6 @@ using Compiler.CodeGeneration.Artifacts;
 using Compiler.Interpreter;
 using Compiler.Lexer;
 using System.Diagnostics;
-using System.Text;
 
 namespace Compiler.CodeGeneration
 {
@@ -33,6 +32,8 @@ namespace Compiler.CodeGeneration
         public Module RootModule { get; }
 
         public Module Errors { get; }
+
+        public Function FunctionStringError { get; set; } // HACK TODO Cleanup implementation
 
         public IScopeContext CurrentContext => contextStack.Peek();
 
@@ -2150,23 +2151,11 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(StringLiteralExpression expression)
         {
-            var byteCount = Encoding.UTF8.GetByteCount(expression.Value);
-            var data = new byte[byteCount + 1];
-            Encoding.UTF8.GetBytes(expression.Value, 0, expression.Value.Length, data, 0);
-
-            // TODO Somehow, this should be using a stdlib defined symbol
-            var cobType = new CobType(eCobType.Tuple, tag: Intrinsics.Lens.FindConcretizedRecord(CobType.U8));
-            var global = CurrentModule.AllocateGlobal($"string{Globals.Count}", cobType, false);
-            global.RecordValue = new[]
-            {
-                new Variable("Address", CobType.UInt, false, data),
-                new Variable("Length", CobType.UInt, false, byteCount),
-            };
-
+            var global = Intrinsics.AllocateStringLiteral(expression.Value, this);
             var idx = Globals.IndexOf(global);
             
             return new Storage(
-                cobType,
+                CobType.String,
                 Operand.Global(idx)
             );
         }
@@ -2187,6 +2176,48 @@ namespace Compiler.CodeGeneration
         public Storage? Visit(EmptyExpression expression)
         {
             return null;
+        }
+
+        public void GenerateFunctionStringErrorBody()
+        {
+            if (FunctionStringError.Body.Instructions.Count > 0)
+                throw new InvalidOperationException();
+
+            var nextLabel = FunctionStringError.Body.AllocateLabel();
+
+            // TODO Optimize implementation to a jump table, probably
+            var errorCodes = Globals.Where(x => x.Type == eCobType.Error).ToList();
+            foreach (var errorCode in errorCodes)
+            {
+                var cmpStorage = FunctionStringError.AllocateRegisterStorage(CobType.Boolean);
+                FunctionStringError.Body.Emit(
+                    Opcode.CmpEQ,
+                    cmpStorage.Operand,
+                    Operand.Argument(0),
+                    Operand.ImmediateSigned(errorCode.IntValue)
+                    //Operand.Global(Globals.IndexOf(errorCode))
+                );
+                FunctionStringError.Body.Emit(
+                    Opcode.JmpF,
+                    cmpStorage.Operand,
+                    nextLabel
+                );
+                cmpStorage.Free();
+                var global = Intrinsics.AllocateStringLiteral($"error.{errorCode.Name}", this);
+                FunctionStringError.Body.Emit(
+                    Opcode.Return,
+                    Operand.Global(Globals.IndexOf(global))
+                );
+
+                nextLabel.Mark();
+                nextLabel = FunctionStringError.Body.AllocateLabel();
+            }
+
+            var defaultGlobal = Intrinsics.AllocateStringLiteral("error", this);
+            FunctionStringError.Body.Emit(
+                Opcode.Return,
+                Operand.Global(Globals.IndexOf(defaultGlobal))
+            );
         }
 
         private static Storage EmitCast(Storage source, CobType dstType)
@@ -2257,6 +2288,8 @@ namespace Compiler.CodeGeneration
                 // PASS 1 - Compilation
                 // NOTE We must compile all imported scripts before we compile this script; list is in import order
                 Intrinsics.InitializeForPass1(compiler);
+                compiler.FunctionStringError = compiler.RootModule.AllocateFunction("string", CallingConvention.Default, new[] { new Function.Parameter("code", CobType.Error, false) }, CobType.String);
+
                 for (var i = 0; i < compiler.Scripts.Count; ++i)
                     compiler.Scripts[i].Accept(compiler);
                 
@@ -2265,6 +2298,8 @@ namespace Compiler.CodeGeneration
                 // HACK Really shouldn't be needed here
                 foreach (var module in artifact.Modules)
                     module.InitializerFunction.Body.Emit(Opcode.Return);
+
+                compiler.GenerateFunctionStringErrorBody();
 
                 
                 // PASS 2 - Generics
@@ -2343,7 +2378,7 @@ namespace Compiler.CodeGeneration
                 {
                     compiler.CurrentFunction.Body.Emit(
                         Opcode.PanicOnErr,
-                        new CobType(eCobType.Error).ToOperand(compiler.artifact)
+                        Operand.Global(compiler.Globals.IndexOf(compiler.Globals.First(x => x.Type == eCobType.Error && x.Name == "Panic")))
                     );
                     return new Storage(CobType.None, Operand.None);
                 }

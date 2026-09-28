@@ -443,52 +443,58 @@ namespace Compiler.Interpreter
             catch (Exception ex)
             {
                 // PREAMBLE
-                var moduleError = artifact.Modules.FirstOrDefault(x => x.Name == "error");
                 long errorCode;
                 if (ex is VmException vmEx)
                     errorCode = vmEx.ErrorCode;
                 else if (ex is DivideByZeroException)
-                    errorCode = artifact.Globals.FirstOrDefault(x => x.Name == "DivideByZero").IntValue;
+                    errorCode = artifact.Globals.First(x => x.Type == eCobType.Error && x.Name == "DivideByZero").IntValue;
                 else if (ex is OverflowException)
-                    errorCode = 3;
+                    errorCode = artifact.Globals.First(x => x.Type == eCobType.Error && x.Name == "Overflow").IntValue;
                 else
                     errorCode = -1;
 
                 var sbStackTrace = new StringBuilder();
                 foreach (var frame in stack)
                 {
-                    // at function_name(Filename:Line)
-                    sbStackTrace.AppendLine($" at {frame.Function.Name}");
+                    // at function_name in Filename, Line
+                    // TODO Resolve debug symbol
+
+                    // Full Name
+                    var sbFullName = new StringBuilder();
+                    IScopeContext? symbol = frame.Function;
+                    while (symbol != null)
+                    {
+                        string symbolName;
+                        if (symbol == artifact.EntryFunction)
+                            symbolName = "(entry)";
+                        else
+                            symbolName = symbol.Name;
+                        sbFullName.Insert(0, symbolName);
+                        symbol = symbol.Parent;
+                        if (symbol != null && symbol.Parent == null) symbol = null;
+                        if (symbol != null) sbFullName.Insert(0, '.');
+                    }
+
+                    var fullName = sbFullName.ToString();
+
+                    sbStackTrace.AppendLine($"  at {fullName}");
+                    
                 }
 
                 var stackTrace = sbStackTrace.ToString();
 
-                // USER HANDLER
-                bool handled = false;
                 if (userPanicCallback != null)
                 {
+                    // USER HANDLER
                     var cb = userPanicCallback;
                     try
                     {
                         userPanicCallback = null;
-
-                        var byteCount = Encoding.UTF8.GetByteCount(stackTrace);
-                        var data = new byte[byteCount + 1];
-                        Encoding.UTF8.GetBytes(stackTrace, 0, stackTrace.Length, data, 0);
-
-                        // TODO Somehow, this should be using a stdlib defined symbol
-                        var cobType = new CobType(eCobType.Tuple, tag: Intrinsics.Lens.FindConcretizedRecord(CobType.U8));
-
                         ExecuteFunction(cb, new[]
                         {
                             new Variable("code", CobType.Error, errorCode),
-                            new Variable("stackTrace", cobType, new[]
-                            {
-                                new Variable("Address", CobType.UInt, false, data),
-                                new Variable("Length", CobType.UInt, false, byteCount),
-                            })
+                            Intrinsics.AllocateStringLiteral(stackTrace, null)
                         });
-                        handled = true;
                     }
                     catch { /* Second Chance exception, fall through to default handler */ }
                     finally
@@ -496,11 +502,20 @@ namespace Compiler.Interpreter
                         userPanicCallback = cb;
                     }
                 }
-
-                // DEFAULT HANDLER
-                if (!handled)
+                else
                 {
-                    string errorName = errorCode.ToString();
+                    // DEFAULT HANDLER
+                    string errorName;
+                    if (errorCode == -1)
+                        errorName = $"(VM EXCEPTION; {ex.Message})";
+                    else
+                    {
+                        errorName = artifact.Globals.FirstOrDefault(
+                            x => x.Type == eCobType.Error
+                              && x.IntValue == errorCode
+                        )?.Name ?? $"(UNKNOWN; {errorCode})";
+                    }
+
                     Console.ForegroundColor = ConsoleColor.Red; Console.Write("Panic! ");
                     Console.ForegroundColor = ConsoleColor.Gray; Console.WriteLine($"Unhandled '{errorName}' occurred.");
                     Console.WriteLine(sbStackTrace.ToString());

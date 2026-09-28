@@ -1,4 +1,5 @@
 ﻿using Compiler.CodeGeneration.Artifacts;
+using System.Text;
 
 namespace Compiler.CodeGeneration
 {
@@ -41,6 +42,24 @@ namespace Compiler.CodeGeneration
             }
 
             return recordType;
+        }
+
+        public static Variable AllocateStringLiteral(string value, Compiler? compiler)
+        {
+            var byteCount = Encoding.UTF8.GetByteCount(value);
+            var data = new byte[byteCount + 1];
+            Encoding.UTF8.GetBytes(value, 0, value.Length, data, 0);
+
+            var global = compiler != null
+                       ? compiler.RootModule.AllocateGlobal($"$string{compiler.Globals.Count}", CobType.String, false)
+                       : new Variable("", CobType.String, false);
+            global.RecordValue = new[]
+            {
+                new Variable("Address", CobType.UInt, false, data),
+                new Variable("Length", CobType.UInt, false, byteCount)
+            };
+
+            return global;
         }
     }
 }

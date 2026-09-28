@@ -22,6 +22,8 @@
 
         public Function? EntryFunction { get; set; }
 
+        public DebugSymbols DebugSymbols { get; }
+
         public Artifact()
         {
             ArtifactDirectives = new List<ArtifactDirective>();

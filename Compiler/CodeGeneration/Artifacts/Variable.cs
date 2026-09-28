@@ -177,6 +177,7 @@ namespace Compiler.CodeGeneration.Artifacts
         public readonly static CobType Error = eCobType.Error;
         public readonly static CobType Nil = eCobType.Nil;
         public readonly static CobType Generic = eCobType.Generic;
+        public static CobType String => new (eCobType.Tuple, tag: Intrinsics.Lens.FindConcretizedRecord(U8) ?? throw new ArgumentNullException());
 
         public eCobType Type { get; }
 
