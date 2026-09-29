@@ -1,6 +1,7 @@
 ﻿using Compiler.Ast.Expressions;
 using Compiler.Lexer;
 using System.Text;
+using Compiler.CodeGeneration.Artifacts;
 
 namespace Compiler.Ast.Parselets
 {
@@ -12,10 +13,38 @@ namespace Compiler.Ast.Parselets
         {
             if (!TryParseEscapedString(token.Value, out var result))
                 parser.Messages.Add(Message.StringIllegalEscape, token);
-            else if (result.Length != 1)
-                parser.Messages.Add(Message.CharacterIllegalLength, token);
 
-            return new CharacterLiteralExpression(token, result.FirstOrDefault());
+            var typeSuffixName = parser.ParseTypeName();
+            if (typeSuffixName != null)
+            {
+                // AS UINT
+                var typeSuffix = CobType.FromTypeName(typeSuffixName, null);
+                if (typeSuffix != eCobType.Signed && typeSuffix != eCobType.Unsigned)
+                {
+                    parser.Messages.Add(Message.CharacterIllegalTypeSuffix, token);
+                    return new CharacterLiteralExpression(token, '\0');
+                }
+
+                var resultBytes = Encoding.UTF8.GetBytes(result);
+                if (resultBytes.Length > typeSuffix.Size / 8)
+                    parser.Messages.Add(Message.CharacterIllegalLength, token, typeSuffix.Size / 8);
+
+                long longValue = 0;
+                for (var i = resultBytes.Length - 1; i >= 0; --i)
+                    longValue = (longValue << 8) | resultBytes[i];
+
+                longValue <<= typeSuffix.Size - resultBytes.Length * 8;
+
+                return new NumberLiteralExpression(token, longValue, typeSuffix.Type, typeSuffix.Size);
+            }
+            else
+            {
+                // AS CHAR
+                if (result.Length != 1)
+                    parser.Messages.Add(Message.CharacterIllegalLength, token);
+
+                return new CharacterLiteralExpression(token, result.FirstOrDefault());
+            }
         }
 
         public static bool TryParseEscapedString(string value, out string result)
