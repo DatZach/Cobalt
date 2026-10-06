@@ -14,6 +14,8 @@ namespace Compiler.CodeGeneration.Architectures
 
         public override string DefaultExtension => "cia";
 
+        public override int BusWidth => 64; // TODO ??? Doesn't really have a bus width
+
         private Artifact artifact;
         
         public override void Assemble(Artifact artifact, ArtifactDirective directive, string outputFilename)

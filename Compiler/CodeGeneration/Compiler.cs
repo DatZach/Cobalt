@@ -440,7 +440,8 @@ namespace Compiler.CodeGeneration
                     }
                     else // Local Decl
                     {
-                        var local = CurrentFunction.AllocateLocal(stdDecl.Name, rhs.Type, mutable);
+                        var varType = rhs.Type.ToImpliedType(this);
+                        var local = CurrentFunction.AllocateLocal(stdDecl.Name, varType, mutable);
                         var idx = CurrentFunction.FindLocalIndex(local);
                         dstOperand = Operand.Local(idx);
                     }
@@ -751,7 +752,7 @@ namespace Compiler.CodeGeneration
             {
                 if (CurrentFunction.ReturnType == eCobType.None)
                     CurrentFunction.ReturnType = rhs.Type;
-                else if (!CobType.IsCastable(rhs.Type, CurrentFunction.ReturnType))
+                else if (!CobType.IsImplicitCastable(CurrentFunction.ReturnType, rhs.Type))
                     messages.Add(Message.ReturnTypeMismatch, expression, CurrentFunction.ReturnType, rhs.Type);
                 
                 CurrentFunction.Body.Emit(Opcode.Return, rhs.Operand);
@@ -1460,7 +1461,7 @@ namespace Compiler.CodeGeneration
                     CurrentFunction.Body.Emit(Opcode.Jmp, labelEnd);
                     labelCaseEnd.Mark();
 
-                    if (resultType == null || CobType.IsCastable(resultType, rhs.Type))
+                    if (resultType == null || CobType.IsImplicitCastable(resultType, rhs.Type))
                         resultType = rhs.Type;
                     else
                         messages.Add(Message.TypeMismatch, branch.Right, resultType, rhs.Type);
@@ -1474,7 +1475,7 @@ namespace Compiler.CodeGeneration
                     
                     CurrentFunction.Body.Emit(Opcode.Move, c.Operand, rhs.Operand);
 
-                    if (resultType == null || CobType.IsCastable(resultType, rhs.Type))
+                    if (resultType == null || CobType.IsImplicitCastable(resultType, rhs.Type))
                         resultType = rhs.Type;
                     else
                         messages.Add(Message.TypeMismatch, defaultBranch.Right, resultType, rhs.Type);
@@ -1774,14 +1775,15 @@ namespace Compiler.CodeGeneration
                         messages.Add(Message.IllegalAssignmentImmutable, expression);
 
                     // TODO This definitely feels out of place here...
-                    if (isUnionAssignment && AssignmentRHS.Type != symbol.Type && symbol is ILateTypeBinding lateBinding)
+                    if (isUnionAssignment && AssignmentRHS!.Type != symbol.Type && symbol is ILateTypeBinding lateBinding)
                     {
                         lateBinding.RebindType(new CobType(
                             eCobType.Union,
                             unionedTypes: symbol.Type.YieldTypesInUnion().Append(AssignmentRHS.Type).ToList()
                         ));
                     }
-                    else if (!CobType.IsCastable(AssignmentRHS.Type, symbol.Type))
+                    //else if (!CobType.IsImplicitCastable(symbol.Type, AssignmentRHS.Type))
+                    else if (!AssignmentRHS!.IsAssignableToType(symbol.Type))
                         messages.Add(Message.IllegalAssignmentTypeMismatch, expression, AssignmentRHS.Type, symbol.Type);
 
                     var result = scope.EmitSetForSymbol(symbol);

@@ -167,9 +167,9 @@ namespace Compiler.CodeGeneration.Artifacts
         public readonly static CobType Any = eCobType.Any;
         public readonly static CobType Function = eCobType.Function;
         public readonly static CobType Boolean = new(eCobType.Boolean);
-        public readonly static CobType Int = new (eCobType.Signed, -1);
-        public readonly static CobType UInt = new (eCobType.Unsigned, -1);
-        public readonly static CobType Real = new (eCobType.Real, -1);
+        public readonly static CobType Int = new (eCobType.Signed);
+        public readonly static CobType UInt = new (eCobType.Unsigned);
+        public readonly static CobType Real = new (eCobType.Real);
         public readonly static CobType U8 = new (eCobType.Unsigned, 8);
         public readonly static CobType U32 = new(eCobType.Unsigned, 32);
         public readonly static CobType U64 = new(eCobType.Unsigned, 64);
@@ -178,6 +178,9 @@ namespace Compiler.CodeGeneration.Artifacts
         public readonly static CobType Nil = eCobType.Nil;
         public readonly static CobType Generic = eCobType.Generic;
         public static CobType String => new (eCobType.Tuple, tag: Intrinsics.Lens.FindConcretizedRecord(U8) ?? throw new ArgumentNullException());
+
+        public const int SizeUnadorned = -1;
+        public const int SizePlatformSpecified = -2;
 
         public eCobType Type { get; }
 
@@ -199,7 +202,7 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public CobType(
             eCobType type,
-            int size = -1,
+            int size = SizeUnadorned,
             CobType? elementType = null,
             IReadOnlyList<CobType>? unionedTypes = null,
             object? tag = null
@@ -213,7 +216,7 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public static implicit operator CobType(eCobType type)
         {
-            return new CobType(type, -1);
+            return new CobType(type);
         }
         
         public override int GetHashCode()
@@ -442,6 +445,18 @@ namespace Compiler.CodeGeneration.Artifacts
                 return this;
         }
 
+        public CobType ToImpliedType(Compiler compiler)
+        {
+            if (Type is eCobType.Signed or eCobType.Unsigned or eCobType.Real
+            &&  Size is SizeUnadorned or SizePlatformSpecified)
+            {
+                var minSize = ArtifactFactory.ResolveMinimumBusWidthForSpecifiedArchitectures(compiler.ArtifactDirectives);
+                return new CobType(Type, minSize);
+            }
+
+            return this;
+        }
+
         public Type ToManagedType()
         {
             return Type switch
@@ -449,7 +464,8 @@ namespace Compiler.CodeGeneration.Artifacts
                 eCobType.Any => typeof(object),
                 eCobType.Signed => Size switch
                 {
-                    -1 => Environment.Is64BitProcess ? typeof(long) : typeof(int),
+                    SizePlatformSpecified => Environment.Is64BitProcess ? typeof(long) : typeof(int),
+                    SizeUnadorned => Environment.Is64BitProcess ? typeof(long) : typeof(int),
                     8 => typeof(sbyte),
                     16 => typeof(short),
                     32 => typeof(int),
@@ -458,7 +474,8 @@ namespace Compiler.CodeGeneration.Artifacts
                 },
                 eCobType.Unsigned => Size switch
                 {
-                    -1 => Environment.Is64BitProcess ? typeof(ulong) : typeof(uint),
+                    SizePlatformSpecified => Environment.Is64BitProcess ? typeof(ulong) : typeof(uint),
+                    SizeUnadorned => Environment.Is64BitProcess ? typeof(ulong) : typeof(uint),
                     8 => typeof(byte),
                     16 => typeof(ushort),
                     32 => typeof(uint),
@@ -467,7 +484,8 @@ namespace Compiler.CodeGeneration.Artifacts
                 },
                 eCobType.Real => Size switch
                 {
-                    -1 => Environment.Is64BitProcess ? typeof(double) : typeof(float),
+                    SizePlatformSpecified => Environment.Is64BitProcess ? typeof(double) : typeof(float),
+                    SizeUnadorned => Environment.Is64BitProcess ? typeof(double) : typeof(float),
                     32 => typeof(float),
                     64 => typeof(double),
                     128 => typeof(decimal),
@@ -476,7 +494,6 @@ namespace Compiler.CodeGeneration.Artifacts
                 eCobType.Struct => Any.ToManagedType().MakeArrayType(), // TODO Not correct
                                                                         // Tag == Intrinsics.Array ? Any.ToManagedType().MakeArrayType() :  throw new NotImplementedException(), // ???
                 eCobType.Tuple => throw new NotImplementedException(), // ???
-                eCobType.Lens => throw new NotImplementedException(), // ???
                 eCobType.Function => throw new NotImplementedException(), // ???
                 _ => throw new ArgumentOutOfRangeException()
             };
@@ -522,10 +539,6 @@ namespace Compiler.CodeGeneration.Artifacts
                         result |= value << i; i += 3;
                         break;
                     }
-                    case eCobType.Lens:
-                        // ElementType = <Type>
-                        Encode(type.ElementType);
-                        break;
                     case eCobType.Trait:
                         // ArtifactIndex = SSSS SSSS SSSS
                         result |= ((uint)artifact.TraitTypes.IndexOf((TraitType)type.Tag!) & 0xFFFFFF) << i; i += 12;
@@ -586,14 +599,8 @@ namespace Compiler.CodeGeneration.Artifacts
                     {
                         // Size = 1 << SSS
                         int size = (int)((ulong)(value >> i) & 0x7); i += 3;
-                            size = size != 0 ? 1 << size : -1;
+                            size = size != 0 ? 1 << size : SizeUnadorned; // TODO PlatformSize
                         return new CobType(type, size: size);
-                    }
-                    case eCobType.Lens:
-                    {
-                        // ElementType = <Type>
-                        var elementType = Decode();
-                        return new CobType(type, elementType: elementType);
                     }
                     case eCobType.Trait:
                     {
@@ -665,38 +672,51 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public override string ToString()
         {
+            if (HasErrorFlag)
+                return Bust(Error).ToString() + '!';
+            if (HasNilFlag)
+                return Bust(Nil).ToString() + '?';
+
             switch (Type)
             {
                 case eCobType.Union:
                     return string.Join("|", UnionedTypes!.Select(x => x.ToString()));
 
                 case eCobType.Signed:
+                    return Size == SizeUnadorned ? "int" : Size == SizePlatformSpecified ? "s" : $"s{Size}";
                 case eCobType.Unsigned:
+                    return Size == SizeUnadorned ? "uint" : Size == SizePlatformSpecified ? "u" : $"u{Size}";
                 case eCobType.Real:
-                    return $"{Type}.{Size}";
+                    return Size == SizeUnadorned ? "real" : Size == SizePlatformSpecified ? "r" : $"r{Size}";
 
-                case eCobType.None:
                 case eCobType.Any:
+                    return "any";
                 case eCobType.Boolean:
-                case eCobType.Lens:
+                    return "bool";
                 case eCobType.Error:
+                    return "error";
                 case eCobType.Nil:
+                    return "nil";
                 case eCobType.Generic:
-                    return $"{Type}";
+                    return "`T"; // TODO??
 
                 case eCobType.Trait:
                 case eCobType.Struct:
                 case eCobType.Tuple:
                 case eCobType.Function:
                 case eCobType.Module:
-                    return $"{Type}.{Tag}";
+                    return Tag?.ToString() ?? $"(NULL {Type.ToString()})";
+
+                case eCobType.None:
+                    return "(none)";
 
                 default:
                     throw new ArgumentOutOfRangeException();
             }
         }
 
-        public static bool IsCastable(CobType srcType, CobType dstType)
+        // dst = src
+        public static bool IsImplicitCastable(CobType dstType, CobType srcType)
         {
             if (srcType == dstType)
                 return true;
@@ -710,16 +730,24 @@ namespace Compiler.CodeGeneration.Artifacts
                 if (srcType.Type == eCobType.Union)
                 {
                     // All srcTypes must be in dstType
-                    return srcType.UnionedTypes.All(x => dstType.UnionedTypes.Any(y => IsCastable(x, y)));
+                    return srcType.UnionedTypes.All(x => dstType.UnionedTypes.Any(y => IsImplicitCastable(x, y)));
                 }
                 else
-                    return dstType.UnionedTypes.Any(x => IsCastable(srcType, x));
+                    return dstType.UnionedTypes.Any(x => IsImplicitCastable(x, srcType));
             }
 
+            // NUMBERS
             if (srcType.Type is eCobType.Unsigned or eCobType.Signed or eCobType.Real
             &&  dstType.Type is eCobType.Unsigned or eCobType.Signed or eCobType.Real)
             {
-                return true;
+                // TODO Verify no data loss
+                if (srcType.Size == SizeUnadorned || dstType.Size == SizeUnadorned)
+                    return true;
+
+                if (srcType.Type != dstType.Type)
+                    return false;
+
+                return dstType.Size >= srcType.Size; // u64 >= u32
             }
 
             if (srcType.Type is eCobType.Tuple or eCobType.Struct && dstType.Type == eCobType.Trait)
@@ -874,7 +902,6 @@ namespace Compiler.CodeGeneration.Artifacts
         Real,
         Boolean,
         Function,
-        Lens,
         Module,
         Error,
         Nil,

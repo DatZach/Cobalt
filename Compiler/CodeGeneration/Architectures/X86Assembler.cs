@@ -9,11 +9,11 @@ namespace Compiler.CodeGeneration.Architectures
     {
         public const string DefaultFasmPath = @"C:\Tools\fasmw17332\fasm.exe";
 
-        private const int BusWidth = 64;
-
         public override IReadOnlyList<string> SupportedArchitectures => new[] { "x86_64" };
 
         public override string DefaultExtension => "exe";
+
+        public override int BusWidth => 64;
 
         private Function currentFunction;
         private int callReserve, localReserve, nvrReserve, stackSpace;

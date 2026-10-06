@@ -373,7 +373,7 @@ namespace Compiler.CodeGeneration.Artifacts
 
             for (int i = 0; i < fields.Count; ++i)
             {
-                if (!CobType.IsCastable(other.fields[i].Type, fields[i].Type))
+                if (!CobType.IsImplicitCastable(fields[i].Type, other.fields[i].Type))
                     return false;
             }
 

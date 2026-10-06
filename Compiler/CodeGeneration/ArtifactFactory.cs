@@ -46,6 +46,21 @@ namespace Compiler.CodeGeneration
             }
         }
 
+        public static int ResolveMinimumBusWidthForSpecifiedArchitectures(IReadOnlyList<ArtifactDirective> directives)
+        {
+            int busWidth = int.MaxValue;
+            foreach (var directive in directives)
+            {
+                if (!architectures.TryGetValue(directive.Architecture, out var architecture))
+                    continue;
+
+                if (busWidth > architecture.BusWidth)
+                    busWidth = architecture.BusWidth;
+            }
+
+            return Math.Min(busWidth, 64); // HACK Ehhhhhhhhhhhh
+        }
+
         public static long TotalMilliseconds => stopwatch.ElapsedMilliseconds;
         private static readonly Stopwatch stopwatch = new ();
     }
@@ -55,6 +70,8 @@ namespace Compiler.CodeGeneration
         public abstract IReadOnlyList<string> SupportedArchitectures { get; }
 
         public abstract string DefaultExtension { get; }
+
+        public abstract int BusWidth { get; }
         
         public abstract void Assemble(Artifact artifact, ArtifactDirective directive, string outputFilename);
     }

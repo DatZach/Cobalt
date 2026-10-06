@@ -73,7 +73,7 @@ namespace Compiler.Ast.Parselets
                         parser.Messages.Add(Message.IllegalTypeName, token, value[typeIdx..]);
                 }
                 else
-                    bitSize = -1;
+                    bitSize = CobType.SizePlatformSpecified;
 
                 if (suffixType == eCobType.Unsigned && type == eCobType.Signed)
                     parser.Messages.Add(Message.IllegalNumber, token, token.Value);

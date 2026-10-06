@@ -12,13 +12,13 @@ const HEAP_ZERO_MEMORY = DWORD(8);
 
 const heap = HeapCreate(0, 0, 0);
 
-function Alloc(DWORD size) Lens`u8 {
+function Alloc(uint size) Lens`u8 {
     const addr = HeapAlloc(heap, HEAP_ZERO_MEMORY, size);
     return Lens`u8( addr, size );
     // return lens u8 addr..+size;
 }
 
-function ReAlloc(Lens`u8 ptr, DWORD size) Lens`u8 {
+function ReAlloc(Lens`u8 ptr, uint size) Lens`u8 {
     const addr = HeapReAlloc(heap, HEAP_ZERO_MEMORY, ptr.Address, size);
     return Lens`u8( addr, size );
 }
