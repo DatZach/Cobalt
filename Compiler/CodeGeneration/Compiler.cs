@@ -752,7 +752,8 @@ namespace Compiler.CodeGeneration
             {
                 if (CurrentFunction.ReturnType == eCobType.None)
                     CurrentFunction.ReturnType = rhs.Type;
-                else if (!CobType.IsImplicitCastable(CurrentFunction.ReturnType, rhs.Type))
+                //else if (!CobType.IsImplicitCastable(CurrentFunction.ReturnType, rhs.Type))
+                else if (!rhs.IsAssignableToType(CurrentFunction.ReturnType))
                     messages.Add(Message.ReturnTypeMismatch, expression, CurrentFunction.ReturnType, rhs.Type);
                 
                 CurrentFunction.Body.Emit(Opcode.Return, rhs.Operand);
@@ -1727,6 +1728,9 @@ namespace Compiler.CodeGeneration
                 if (argument.Operand == Operand.None && argument.Type.Tag is FunctionCandidates argumentCandidates)
                     argument = function.Parent.EmitGetForSymbol(argumentCandidates.ResolveSingle(null));
 
+                if (!argument.IsAssignableToType(parameter.Type))
+                    messages.Add(Message.IllegalAssignmentTypeMismatch, expression, argument.Type, parameter.Type);
+
                 if (i < arguments.Count)
                     arguments[i] = argument;
                 else
@@ -2139,7 +2143,13 @@ namespace Compiler.CodeGeneration
         {
             return new Storage(
                 new CobType(expression.Type, expression.BitSize),
-                Operand.ImmediateSigned(expression.LongValue)
+                expression.Type switch
+                {
+                    eCobType.Unsigned => Operand.ImmediateUnsigned((ulong)expression.LongValue, expression.BitSize),
+                    eCobType.Signed => Operand.ImmediateSigned(expression.LongValue, expression.BitSize),
+                    eCobType.Real => Operand.ImmediateReal(expression.LongValue, expression.BitSize),
+                    _ => throw new InvalidOperationException()
+                }
             );
         }
 

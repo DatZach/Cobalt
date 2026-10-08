@@ -511,11 +511,13 @@ namespace Compiler.CodeGeneration.Architectures
             var aSize = aType.Size; // TODO a.Size == -1 ? BusWidth : a.Size;
             var bSize = bType.Size; // TODO b.Size == -1 ? BusWidth : b.Size;
 
-            var aIsMemory = (a.Type is OperandType.Local or OperandType.Global or OperandType.ImmediateReal)
+            var aIsMemory = (a.Type is OperandType.Local or OperandType.Global or OperandType.ImmediateReal32 or OperandType.ImmediateReal64)
                          || (a.Type == OperandType.Argument && a.Value >= parameterRegisters.Length);
-            var bIsMemory = (b.Type is OperandType.Local or OperandType.Global or OperandType.ImmediateReal)
+            var bIsMemory = (b.Type is OperandType.Local or OperandType.Global or OperandType.ImmediateReal32 or OperandType.ImmediateReal64)
                          || (b.Type == OperandType.Argument && b.Value >= parameterRegisters.Length)
-                         || (b.Type is OperandType.ImmediateSigned or OperandType.ImmediateUnsigned && b.Value > uint.MaxValue);
+                         || (b.Type is OperandType.ImmediateSigned8 or OperandType.ImmediateSigned16 or OperandType.ImmediateSigned32 or OperandType.ImmediateSigned64
+                                    or OperandType.ImmediateUnsigned8 or OperandType.ImmediateUnsigned16 or OperandType.ImmediateUnsigned32 or OperandType.ImmediateUnsigned64
+                             && b.Value > uint.MaxValue);
             
             var aOperandString = GetOperandString(a);
             var bOperandString = GetOperandString(b);
@@ -677,9 +679,16 @@ namespace Compiler.CodeGeneration.Architectures
             switch (operandA.Type)
             {
                 case OperandType.None:
-                case OperandType.ImmediateSigned:
-                case OperandType.ImmediateUnsigned:
-                case OperandType.ImmediateReal:
+                case OperandType.ImmediateSigned8:
+                case OperandType.ImmediateSigned16:
+                case OperandType.ImmediateSigned32:
+                case OperandType.ImmediateSigned64:
+                case OperandType.ImmediateUnsigned8:
+                case OperandType.ImmediateUnsigned16:
+                case OperandType.ImmediateUnsigned32:
+                case OperandType.ImmediateUnsigned64:
+                case OperandType.ImmediateReal32:
+                case OperandType.ImmediateReal64:
                     // TODO Technically an error condition?
                     break;
                 case OperandType.Register:
@@ -706,11 +715,18 @@ namespace Compiler.CodeGeneration.Architectures
         {
             switch (operand.Type)
             {
-                case OperandType.ImmediateSigned:
+                case OperandType.ImmediateSigned8:
+                case OperandType.ImmediateSigned16:
+                case OperandType.ImmediateSigned32:
+                case OperandType.ImmediateSigned64:
                     return new CobType(eCobType.Signed, BusWidth); // TODO operand.Size);
-                case OperandType.ImmediateUnsigned:
+                case OperandType.ImmediateUnsigned8:
+                case OperandType.ImmediateUnsigned16:
+                case OperandType.ImmediateUnsigned32:
+                case OperandType.ImmediateUnsigned64:
                     return new CobType(eCobType.Unsigned, BusWidth); // TODO operand.Size);
-                case OperandType.ImmediateReal:
+                case OperandType.ImmediateReal32:
+                case OperandType.ImmediateReal64:
                     return new CobType(eCobType.Real, BusWidth); // TODO operand.Size);
                 case OperandType.Register:
                     return registerTypes[operand.Value]; //new CobType(eCobType.Unsigned, operand.Size);
@@ -746,11 +762,18 @@ namespace Compiler.CodeGeneration.Architectures
             {
                 case OperandType.None:
                     return "";
-                case OperandType.ImmediateSigned:
+                case OperandType.ImmediateSigned8:
+                case OperandType.ImmediateSigned16:
+                case OperandType.ImmediateSigned32:
+                case OperandType.ImmediateSigned64:
                     return operand.Value.ToString("D");
-                case OperandType.ImmediateUnsigned:
+                case OperandType.ImmediateUnsigned8:
+                case OperandType.ImmediateUnsigned16:
+                case OperandType.ImmediateUnsigned32:
+                case OperandType.ImmediateUnsigned64:
                     return ((ulong)operand.Value).ToString("D");
-                case OperandType.ImmediateReal:
+                case OperandType.ImmediateReal32:
+                case OperandType.ImmediateReal64:
                 {
                     throw new NotImplementedException();
                     //var valueName = BitConverter.Int64BitsToDouble(operand.Value).ToString("F").Replace('.', '_');

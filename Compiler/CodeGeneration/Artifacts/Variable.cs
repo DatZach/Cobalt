@@ -168,11 +168,18 @@ namespace Compiler.CodeGeneration.Artifacts
         public readonly static CobType Function = eCobType.Function;
         public readonly static CobType Boolean = new(eCobType.Boolean);
         public readonly static CobType Int = new (eCobType.Signed);
+        public readonly static CobType S8 = new (eCobType.Signed, 8);
+        public readonly static CobType S16 = new (eCobType.Signed, 16);
+        public readonly static CobType S32 = new(eCobType.Signed, 32);
+        public readonly static CobType S64 = new(eCobType.Signed, 64);
         public readonly static CobType UInt = new (eCobType.Unsigned);
-        public readonly static CobType Real = new (eCobType.Real);
         public readonly static CobType U8 = new (eCobType.Unsigned, 8);
+        public readonly static CobType U16 = new (eCobType.Unsigned, 16);
         public readonly static CobType U32 = new(eCobType.Unsigned, 32);
         public readonly static CobType U64 = new(eCobType.Unsigned, 64);
+        public readonly static CobType Real = new (eCobType.Real);
+        public readonly static CobType R32 = new(eCobType.Real, 32);
+        public readonly static CobType R64 = new(eCobType.Real, 64);
         public readonly static CobType Module = eCobType.Module;
         public readonly static CobType Error = eCobType.Error;
         public readonly static CobType Nil = eCobType.Nil;
@@ -445,6 +452,7 @@ namespace Compiler.CodeGeneration.Artifacts
                 return this;
         }
 
+        // TODO This should probably be moved elsewhere
         public CobType ToImpliedType(Compiler compiler)
         {
             if (Type is eCobType.Signed or eCobType.Unsigned or eCobType.Real

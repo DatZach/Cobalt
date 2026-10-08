@@ -38,36 +38,68 @@
 
         public override string ToString()
         {
-            switch (Type)
+            return Type switch
             {
-                case OperandType.None: return "<none>";
-                case OperandType.ImmediateSigned:
-                    return Value.ToString("D");
-                case OperandType.ImmediateUnsigned:
-                    return ((ulong)Value).ToString("D");
-                case OperandType.ImmediateReal:
-                    return BitConverter.Int64BitsToDouble(Value).ToString("F");
-                case OperandType.Register:
-                case OperandType.Argument:
-                case OperandType.Local:
-                case OperandType.Global:
-                case OperandType.Function:
-                case OperandType.Type:
-                //case OperandType.TupleType:
-                //case OperandType.StructType:
-                    return Type.ToString()[..1].ToLowerInvariant()
-                           + Value.ToString("G");
-                case OperandType.Label:
-                    return $".label_{Value}";
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
+                OperandType.None => "<none>",
+                OperandType.ImmediateSigned8 => Value.ToString("D") + "_s8",
+                OperandType.ImmediateSigned16 => Value.ToString("D") + "_s16",
+                OperandType.ImmediateSigned32 => Value.ToString("D") + "_s32",
+                OperandType.ImmediateSigned64 => Value.ToString("D") + "_s64",
+                OperandType.ImmediateUnsigned8 => ((ulong)Value).ToString("D") + "_u8",
+                OperandType.ImmediateUnsigned16 => ((ulong)Value).ToString("D") + "_u16",
+                OperandType.ImmediateUnsigned32 => ((ulong)Value).ToString("D") + "_u32",
+                OperandType.ImmediateUnsigned64 => ((ulong)Value).ToString("D") + "_u64",
+                OperandType.ImmediateReal32 => BitConverter.Int64BitsToDouble(Value).ToString("F") + "_r32",
+                OperandType.ImmediateReal64 => BitConverter.Int64BitsToDouble(Value).ToString("F") + "_r64",
+                OperandType.Register or OperandType.Argument or OperandType.Local or OperandType.Global
+                    or OperandType.Function
+                    or OperandType.Type => Type.ToString()[..1].ToLowerInvariant() + Value.ToString("G"),
+                OperandType.Label => $".label_{Value}",
+                _ => throw new ArgumentOutOfRangeException()
+            };
         }
         
-        public static Operand ImmediateSigned(long value) => new() { Type = OperandType.ImmediateSigned, Value = value };
-        public static Operand ImmediateUnsigned(ulong value) => new() { Type = OperandType.ImmediateUnsigned, Value = (long)value };
-        public static Operand ImmediateUnsigned(int value) => new() { Type = OperandType.ImmediateUnsigned, Value = value };
-        public static Operand ImmediateReal(double value) => new() { Type = OperandType.ImmediateSigned, Value = BitConverter.DoubleToInt64Bits(value) };
+        public static Operand ImmediateSigned(long value, int width = -1) => new()
+        {
+            Type = width switch
+            {
+                8 => OperandType.ImmediateSigned8,
+                16 => OperandType.ImmediateSigned16,
+                32 => OperandType.ImmediateSigned32,
+                64 => OperandType.ImmediateSigned64,
+                -1 => OperandType.ImmediateSigned64, // TODO Might not be right
+                _ => throw new ArgumentOutOfRangeException(nameof(width))
+            },
+            Value = value
+        };
+
+        public static Operand ImmediateUnsigned(ulong value, int width = -1) => new()
+        {
+            Type = width switch
+            {
+                8 => OperandType.ImmediateUnsigned8,
+                16 => OperandType.ImmediateUnsigned16,
+                32 => OperandType.ImmediateUnsigned32,
+                64 => OperandType.ImmediateUnsigned64,
+                -1 => OperandType.ImmediateUnsigned64, // TODO Might not be right
+                _ => throw new ArgumentOutOfRangeException(nameof(width))
+            },
+            Value = (long)value
+        };
+        public static Operand ImmediateUnsigned(int value, int width = -1) => ImmediateUnsigned((ulong)value, width);
+        
+        public static Operand ImmediateReal(double value, int width = -1) => new()
+        {
+            Type = width switch
+            {
+                32 => OperandType.ImmediateReal32,
+                64 => OperandType.ImmediateReal64,
+                -1 => OperandType.ImmediateReal64, // TODO Might not be right
+                _ => throw new ArgumentOutOfRangeException(nameof(width))
+            },
+            Value = BitConverter.DoubleToInt64Bits(value)
+        };
+        
         public static Operand _Register(int value) => new() { Type = OperandType.Register, Value = value };
         public static Operand Argument(int value) => new() { Type = OperandType.Argument, Value = value };
         public static Operand Local(int value) => new() { Type = OperandType.Local, Value = value };
@@ -138,17 +170,25 @@
     public enum OperandType : byte
     {
         None,
-        ImmediateSigned,
-        ImmediateUnsigned,
-        ImmediateReal,
         Register,
         Argument,
         Local,
         Global,
         Label,
         Function,
-        //TupleType,
-        //StructType,
-        Type
+        Type,
+
+        ImmediateSigned8,
+        ImmediateSigned16,
+        ImmediateSigned32,
+        ImmediateSigned64,
+
+        ImmediateUnsigned8,
+        ImmediateUnsigned16,
+        ImmediateUnsigned32,
+        ImmediateUnsigned64,
+
+        ImmediateReal32,
+        ImmediateReal64
     }
 }

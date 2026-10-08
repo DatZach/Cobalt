@@ -254,9 +254,42 @@ namespace Compiler.Interpreter
                         }
                         case Opcode.Add:
                         {
-                            var b = ReadOperand(inst.B!).IntValue;
-                            b += ReadOperand(inst.C!).IntValue;
-                            WriteOperand(inst.A!, b.ToCobVariable());
+                            var b = ReadOperand(inst.B!);
+                            var c = ReadOperand(inst.C!);
+                            var a = b.IntValue + c.IntValue;
+
+                            var t = b.Type == eCobType.Signed || c.Type == eCobType.Signed ? eCobType.Signed : eCobType.Unsigned;
+                            var w = Math.Max(b.Type.Size, c.Type.Size);
+                            if (t == eCobType.Signed)
+                            {
+                                // Saturation
+                                if (w == 8)
+                                    a = (sbyte)a;
+                                else if (w == 16)
+                                    a = (short)a;
+                                else if (w == 32)
+                                    a = (int)a;
+                                else if (w == 64)
+                                    a = (long)a;
+                                else
+                                    throw new InvalidOperationException($"Cannot saturate {w} bit integer");
+                            }
+                            else
+                            {
+                                // Truncation
+                                if (w == 8)
+                                    a = (byte)a;
+                                else if (w == 16)
+                                    a = (ushort)a;
+                                else if (w == 32)
+                                    a = (uint)a;
+                                else if (w == 64)
+                                    a = a;
+                                else
+                                    throw new InvalidOperationException($"Cannot truncate {w} bit integer");
+                            }
+
+                            WriteOperand(inst.A!, new Variable("$imm", new CobType(t, w), a));
                             break;
                         }
                         case Opcode.Sub:
@@ -535,11 +568,11 @@ namespace Compiler.Interpreter
             {
                 switch (operand.Type)
                 {
-                    case OperandType.ImmediateSigned:
-                    case OperandType.ImmediateUnsigned:
-                    case OperandType.ImmediateReal:
-                    case OperandType.Function:
-                        throw new InvalidOperationException();
+                    //case OperandType.ImmediateSigned:
+                    //case OperandType.ImmediateUnsigned:
+                    //case OperandType.ImmediateReal:
+                    //case OperandType.Function:
+                    //    throw new InvalidOperationException();
                     case OperandType.Register:
                         registers[operand.Value] = value;
                         break;
@@ -561,12 +594,26 @@ namespace Compiler.Interpreter
             {
                 switch (operand.Type)
                 {
-                    case OperandType.ImmediateSigned:
-                        return new Variable("$imm", CobType.Int, false, operand.Value);
-                    case OperandType.ImmediateUnsigned:
-                        return new Variable("$imm", CobType.UInt, false, operand.Value);
-                    case OperandType.ImmediateReal:
-                        return new Variable("$imm", CobType.Real, false, operand.Value);
+                    case OperandType.ImmediateSigned8:
+                        return new Variable("$imm", CobType.S8, false, operand.Value);
+                    case OperandType.ImmediateSigned16:
+                        return new Variable("$imm", CobType.S16, false, operand.Value);
+                    case OperandType.ImmediateSigned32:
+                        return new Variable("$imm", CobType.S32, false, operand.Value);
+                    case OperandType.ImmediateSigned64:
+                        return new Variable("$imm", CobType.S64, false, operand.Value);
+                    case OperandType.ImmediateUnsigned8:
+                        return new Variable("$imm", CobType.U8, false, operand.Value);
+                    case OperandType.ImmediateUnsigned16:
+                        return new Variable("$imm", CobType.U16, false, operand.Value);
+                    case OperandType.ImmediateUnsigned32:
+                        return new Variable("$imm", CobType.U32, false, operand.Value);
+                    case OperandType.ImmediateUnsigned64:
+                        return new Variable("$imm", CobType.U64, false, operand.Value);
+                    case OperandType.ImmediateReal32:
+                        return new Variable("$imm", CobType.R32, false, operand.Value);
+                    case OperandType.ImmediateReal64:
+                        return new Variable("$imm", CobType.R64, false, operand.Value);
                     case OperandType.Register:
                         return registers[operand.Value];
                     case OperandType.Argument:
