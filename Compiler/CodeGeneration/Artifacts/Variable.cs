@@ -542,7 +542,7 @@ namespace Compiler.CodeGeneration.Artifacts
                     {
                         // Size = 1 << SSS
                         uint value = 0;
-                        for (int x = type.Size; x >= 1; x >>= 1)
+                        for (int x = type.Size; x > 1; x >>= 1)
                             ++value;
                         result |= value << i; i += 3;
                         break;

@@ -163,6 +163,8 @@
         Neg,
         Not,
 
+        Cast,
+
         PanicOnErr,
         SetPanicHandler
     }

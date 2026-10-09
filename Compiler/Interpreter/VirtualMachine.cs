@@ -184,7 +184,7 @@ namespace Compiler.Interpreter
                         {
                             var b = ReadOperand(inst.B!);
                             var c = ReadOperand(inst.C!);
-                            var a = SaturateTruncate(b.IntValue >> (int)c.IntValue, b.Type, c.Type);
+                            var a = SaturateTruncate(b.IntValue >> (int)c.IntValue, b.Type, c.Type, true);
                             WriteOperand(inst.A!, a);
                             break;
                         }
@@ -192,7 +192,7 @@ namespace Compiler.Interpreter
                         {
                             var b = ReadOperand(inst.B!);
                             var c = ReadOperand(inst.C!);
-                            var a = SaturateTruncate(b.IntValue << (int)c.IntValue, b.Type, c.Type);
+                            var a = SaturateTruncate(b.IntValue << (int)c.IntValue, b.Type, c.Type, true);
                             WriteOperand(inst.A!, a);
                             break;
                         }
@@ -210,7 +210,7 @@ namespace Compiler.Interpreter
                         {
                             var b = ReadOperand(inst.B!);
                             var c = ReadOperand(inst.C!);
-                            var a = SaturateTruncate(b.IntValue & c.IntValue, b.Type, c.Type);
+                            var a = SaturateTruncate(b.IntValue & c.IntValue, b.Type, c.Type, true);
                             WriteOperand(inst.A!, a);
                             break;
                         }
@@ -218,7 +218,7 @@ namespace Compiler.Interpreter
                         {
                             var b = ReadOperand(inst.B!);
                             var c = ReadOperand(inst.C!);
-                            var a = SaturateTruncate(b.IntValue ^ c.IntValue, b.Type, c.Type);
+                            var a = SaturateTruncate(b.IntValue ^ c.IntValue, b.Type, c.Type, true);
                             WriteOperand(inst.A!, a);
                             break;
                         }
@@ -226,28 +226,28 @@ namespace Compiler.Interpreter
                         {
                             var b = ReadOperand(inst.B!);
                             var c = ReadOperand(inst.C!);
-                            var a = SaturateTruncate(b.IntValue | c.IntValue, b.Type, c.Type);
+                            var a = SaturateTruncate(b.IntValue | c.IntValue, b.Type, c.Type, true);
                             WriteOperand(inst.A!, a);
                             break;
                         }
                         case Opcode.BitNot:
                         {
                             var b = ReadOperand(inst.B!);
-                            var a = SaturateTruncate(~b.IntValue, b.Type, b.Type);
+                            var a = SaturateTruncate(~b.IntValue, b.Type, true);
                             WriteOperand(inst.A!, a);
                             break;
                         }
                         case Opcode.Not:
                         {
                             var b = ReadOperand(inst.B!);
-                            var a = SaturateTruncate(b.IntValue != 0 ? 0 : 1, b.Type, b.Type);
+                            var a = SaturateTruncate(b.IntValue != 0 ? 0 : 1, b.Type, true);
                             WriteOperand(inst.A!, a);
                             break;
                         }
                         case Opcode.Neg:
                         {
                             var b = ReadOperand(inst.B!);
-                            var a = SaturateTruncate(-b.IntValue, b.Type, b.Type);
+                            var a = SaturateTruncate(-b.IntValue, b.Type, true);
                             WriteOperand(inst.A!, a);
                             break;
                         }
@@ -255,7 +255,7 @@ namespace Compiler.Interpreter
                         {
                             var b = ReadOperand(inst.B!);
                             var c = ReadOperand(inst.C!);
-                            var a = SaturateTruncate(b.IntValue + c.IntValue, b.Type, c.Type);
+                            var a = SaturateTruncate(b.IntValue + c.IntValue, b.Type, c.Type, true);
                             WriteOperand(inst.A!, a);
                             break;
                         }
@@ -263,7 +263,7 @@ namespace Compiler.Interpreter
                         {
                             var b = ReadOperand(inst.B!);
                             var c = ReadOperand(inst.C!);
-                            var a = SaturateTruncate(b.IntValue - c.IntValue, b.Type, c.Type);
+                            var a = SaturateTruncate(b.IntValue - c.IntValue, b.Type, c.Type, true);
                             WriteOperand(inst.A!, a);
                             break;
                         }
@@ -271,7 +271,7 @@ namespace Compiler.Interpreter
                         {
                             var b = ReadOperand(inst.B!);
                             var c = ReadOperand(inst.C!);
-                            var a = SaturateTruncate(b.IntValue * c.IntValue, b.Type, c.Type);
+                            var a = SaturateTruncate(b.IntValue * c.IntValue, b.Type, c.Type, true);
                             WriteOperand(inst.A!, a);
                             break;
                         }
@@ -284,7 +284,7 @@ namespace Compiler.Interpreter
                         {
                             var b = ReadOperand(inst.B!);
                             var c = ReadOperand(inst.C!);
-                            var a = SaturateTruncate(b.IntValue / c.IntValue, b.Type, c.Type);
+                            var a = SaturateTruncate(b.IntValue / c.IntValue, b.Type, c.Type, true);
                             WriteOperand(inst.A!, a);
                             break;
                         }
@@ -292,7 +292,7 @@ namespace Compiler.Interpreter
                         {
                             var b = ReadOperand(inst.B!);
                             var c = ReadOperand(inst.C!);
-                            var a = SaturateTruncate((b.IntValue + c.IntValue - 1) / c.IntValue, b.Type, c.Type);
+                            var a = SaturateTruncate((b.IntValue + c.IntValue - 1) / c.IntValue, b.Type, c.Type, true);
                             WriteOperand(inst.A!, a);
                             break;
                         }
@@ -301,7 +301,7 @@ namespace Compiler.Interpreter
                             // TODO Technically only useful for floats
                             var b = ReadOperand(inst.B!);
                             var c = ReadOperand(inst.C!);
-                            var a = SaturateTruncate(b.IntValue / c.IntValue, b.Type, c.Type);
+                            var a = SaturateTruncate(b.IntValue / c.IntValue, b.Type, c.Type, true);
                             WriteOperand(inst.A!, a);
                             break;
                         }
@@ -309,7 +309,7 @@ namespace Compiler.Interpreter
                         {
                             var b = ReadOperand(inst.B!);
                             var c = ReadOperand(inst.C!);
-                            var a = SaturateTruncate(b.IntValue % c.IntValue, b.Type, c.Type);
+                            var a = SaturateTruncate(b.IntValue % c.IntValue, b.Type, c.Type, true);
                             WriteOperand(inst.A!, a);
                             break;
                         }
@@ -317,7 +317,7 @@ namespace Compiler.Interpreter
                         {
                             var b = ReadOperand(inst.B!);
                             var c = ReadOperand(inst.C!);
-                            var a = SaturateTruncate(((b.IntValue % c.IntValue) + c.IntValue) % c.IntValue, b.Type, c.Type);
+                            var a = SaturateTruncate(((b.IntValue % c.IntValue) + c.IntValue) % c.IntValue, b.Type, c.Type, true);
                             WriteOperand(inst.A!, a);
                             break;
                         }
@@ -418,6 +418,14 @@ namespace Compiler.Interpreter
                         case Opcode.Jmp:
                         {
                             ctx.IP = function.Body.Labels[(int)inst.A!.Value].Location - 1;
+                            break;
+                        }
+                        case Opcode.Cast:
+                        {
+                            var b = ReadOperand(inst.B!);
+                            var c = ReadOperand(inst.C!);
+                            var a = SaturateTruncate(b.IntValue, c.Type, false);
+                            WriteOperand(inst.A!, a);
                             break;
                         }
                         case Opcode.PanicOnErr:
@@ -607,46 +615,61 @@ namespace Compiler.Interpreter
                         throw new ArgumentOutOfRangeException();
                 }
             }
+        }
 
-            // TODO Implement Unary operands signature
-            Variable SaturateTruncate(long a, CobType b, CobType c)
+        // TODO Optimize
+        // TODO Floats
+        private static Variable SaturateTruncate(long a, CobType b, CobType c, bool isChecked)
+        {
+            if (b == c)
+                return new Variable("$imm", b, a);
+
+            var t = b == eCobType.Signed || c == eCobType.Signed ? eCobType.Signed : eCobType.Unsigned;
+            var w = Math.Max(b.Size, c.Size);
+            return SaturateTruncate(a, t, w, isChecked);
+        }
+
+        private static Variable SaturateTruncate(long a, CobType b, bool isChecked)
+            => SaturateTruncate(a, b.Type, b.Size, isChecked);
+        
+        private static Variable SaturateTruncate(long a, eCobType t, int w, bool isChecked)
+        {
+            if (t == eCobType.Signed)
             {
-                // TODO Optimize
-                // TODO Floats
-
-                var t = b == eCobType.Signed || c == eCobType.Signed ? eCobType.Signed : eCobType.Unsigned;
-                var w = Math.Max(b.Size, c.Size);
-                if (t == eCobType.Signed)
-                {
-                    // Saturation
-                    if (w == 8)
-                        a = checked((sbyte)a);
-                    else if (w == 16)
-                        a = checked((short)a);
-                    else if (w == 32)
-                        a = checked((int)a);
-                    else if (w == 64)
-                        a = checked((long)a);
-                    else
-                        throw new InvalidOperationException($"Cannot saturate {w} bit integer");
-                }
+                // Saturation
+                if (w == -1)
+                    a = isChecked ? checked((long)a) : unchecked((long)a);  // TODO Not sure if this is strictly correct
+                else if (w == 8)
+                    a = isChecked ? checked((sbyte)a) : unchecked((sbyte)a);
+                else if (w == 16)
+                    a = isChecked ? checked((short)a) : unchecked((short)a);
+                else if (w == 32)
+                    a = isChecked ? checked((int)a) : unchecked((int)a);
+                else if (w == 64)
+                    a = isChecked ? checked((long)a) : unchecked((long)a);
                 else
-                {
-                    // Truncation
-                    if (w == 8)
-                        a = checked((byte)a);
-                    else if (w == 16)
-                        a = checked((ushort)a);
-                    else if (w == 32)
-                        a = checked((uint)a);
-                    else if (w == 64)
-                        a = checked(a);
-                    else
-                        throw new InvalidOperationException($"Cannot truncate {w} bit integer");
-                }
-
-                return new Variable("$imm", new CobType(t, w), a);
+                    throw new InvalidOperationException($"Cannot saturate {w} bit integer");
             }
+            else if (t == eCobType.Unsigned)
+            {
+                // Truncation
+                if (w == -1)
+                    a = isChecked ? checked((long)(ulong)a) : unchecked((long)(ulong)a); // TODO Not sure if this is strictly correct
+                else if (w == 8)
+                    a = isChecked ? checked((byte)a) : unchecked((byte)a);
+                else if (w == 16)
+                    a = isChecked ? checked((ushort)a) : unchecked((ushort)a);
+                else if (w == 32)
+                    a = isChecked ? checked((uint)a) : unchecked((uint)a);
+                else if (w == 64)
+                    a = isChecked ? checked((long)(ulong)a) : unchecked((long)(ulong)a);
+                else
+                    throw new InvalidOperationException($"Cannot truncate {w} bit integer");
+            }
+            else
+                throw new InvalidOperationException($"Cannot saturate/truncate type {t}");
+
+            return new Variable("$imm", new CobType(t, w), a);
         }
 
         public void Dispose()

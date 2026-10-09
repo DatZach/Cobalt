@@ -2232,19 +2232,25 @@ namespace Compiler.CodeGeneration
             );
         }
 
-        private static Storage EmitCast(Storage source, CobType dstType)
+        // NOTE Takes ownership of source; discards if needed
+        private Storage EmitCast(Storage source, CobType dstType)
         {
             var srcType = source.Type;
             if (srcType == dstType)
                 return source;
             
-            if (srcType == eCobType.Unsigned
-                ||  srcType == eCobType.Signed
-                ||  srcType == eCobType.Real)
+            if (srcType.Type is eCobType.Unsigned or eCobType.Signed or eCobType.Real
+            &&  dstType.Type is eCobType.Unsigned or eCobType.Signed or eCobType.Real)
             {
-                return source;
-                // TODO Reimplement
-                //return source with { Type = dstType };
+                var destination = CurrentFunction.AllocateRegisterStorage(dstType);
+                CurrentFunction.Body.Emit(
+                    Opcode.Cast,
+                    destination.Operand,
+                    source.Operand,
+                    dstType.ToOperand(artifact)
+                );
+                source.Free();
+                return destination;
             }
             else if (srcType == eCobType.Struct && dstType == eCobType.Trait)
             {
