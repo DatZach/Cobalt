@@ -86,27 +86,25 @@ namespace Compiler.Ast.Parselets
                 type = eCobType.Signed;
 
             long integerNumber;
-            double realNumber;
 
             if (hasHexSpecified)
             {
-                if (TryParse(value, 16, bitSize, out integerNumber))
+                if (TryParse(value, 16, type, bitSize, out integerNumber))
                     return new NumberLiteralExpression(token, integerNumber, type, bitSize);
             }
             else if (hasBinSpecified)
             {
-                if (TryParse(value, 2, bitSize, out integerNumber))
+                if (TryParse(value, 2, type, bitSize, out integerNumber))
                     return new NumberLiteralExpression(token, integerNumber, type, bitSize);
             }
-            else if (hasDotSpecified
-                 &&  double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out realNumber))
+            else if (hasDotSpecified)
             {
-                integerNumber = BitConverter.DoubleToInt64Bits(realNumber);
-                return new NumberLiteralExpression(token, integerNumber, type, bitSize);
+                if (TryParse(value, 10, type, bitSize, out integerNumber))
+                    return new NumberLiteralExpression(token, integerNumber, type, bitSize);
             }
             else
             {
-                if (TryParse(value, 10, bitSize, out integerNumber))
+                if (TryParse(value, 10, type, bitSize, out integerNumber))
                     return new NumberLiteralExpression(token, integerNumber, type, bitSize);
             }
 
@@ -114,22 +112,54 @@ namespace Compiler.Ast.Parselets
             return new NumberLiteralExpression(token, 0, eCobType.None, 0);
         }
 
-        private static bool TryParse(string value, int fromBase, int bitSize, out long result)
+        private static bool TryParse(string value, int fromBase, eCobType t, int w, out long result)
         {
             try
             {
-                if (bitSize == -1)
-                    result = Convert.ToInt64(value, fromBase);
-                else if (bitSize <= 8)
-                    result = Convert.ToSByte(value, fromBase);
-                else if (bitSize <= 16)
-                    result = Convert.ToInt16(value, fromBase);
-                else if (bitSize <= 32)
-                    result = Convert.ToInt32(value, fromBase);
-                else if (bitSize <= 64)
-                    result = Convert.ToInt64(value, fromBase);
+                if (t == eCobType.Signed)
+                {
+                    if (w == -1)
+                        result = Convert.ToInt64(value, fromBase);
+                    else if (w <= 8)
+                        result = Convert.ToSByte(value, fromBase);
+                    else if (w <= 16)
+                        result = Convert.ToInt16(value, fromBase);
+                    else if (w <= 32)
+                        result = Convert.ToInt32(value, fromBase);
+                    else if (w <= 64)
+                        result = Convert.ToInt64(value, fromBase);
+                    else
+                        throw new OverflowException();
+                }
+                else if (t == eCobType.Unsigned)
+                {
+                    if (w == -1)
+                        result = (long)Convert.ToUInt64(value, fromBase);
+                    else if (w <= 8)
+                        result = Convert.ToByte(value, fromBase);
+                    else if (w <= 16)
+                        result = Convert.ToUInt16(value, fromBase);
+                    else if (w <= 32)
+                        result = Convert.ToUInt32(value, fromBase);
+                    else if (w <= 64)
+                        result = (long)Convert.ToUInt64(value, fromBase);
+                    else
+                        throw new OverflowException();
+                }
+                else if (t == eCobType.Real)
+                {
+                    if (w == -1)
+                        result = BitConverter.DoubleToInt64Bits(double.Parse(value, NumberStyles.Float, CultureInfo.InvariantCulture));
+                    else if (w == 32)
+                        result = BitConverter.SingleToInt32Bits(float.Parse(value, NumberStyles.Float, CultureInfo.InvariantCulture));
+                    else if (w == 64)
+                        result = BitConverter.DoubleToInt64Bits(double.Parse(value, NumberStyles.Float, CultureInfo.InvariantCulture));
+                    else
+                        throw new OverflowException();
+                }
                 else
-                    throw new OverflowException();
+                    throw new ArgumentException();
+
                 return true;
             }
             catch

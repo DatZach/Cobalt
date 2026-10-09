@@ -182,174 +182,143 @@ namespace Compiler.Interpreter
                         }
                         case Opcode.BitShr:
                         {
-                            var b = ReadOperand(inst.B!).IntValue;
-                            b >>= (int)ReadOperand(inst.C!).IntValue;
-                            WriteOperand(inst.A!, b.ToCobVariable());
+                            var b = ReadOperand(inst.B!);
+                            var c = ReadOperand(inst.C!);
+                            var a = SaturateTruncate(b.IntValue >> (int)c.IntValue, b.Type, c.Type);
+                            WriteOperand(inst.A!, a);
                             break;
                         }
                         case Opcode.BitShl:
                         {
-                            var b = ReadOperand(inst.B!).IntValue;
-                            b <<= (int)ReadOperand(inst.C!).IntValue;
-                            WriteOperand(inst.A!, b.ToCobVariable());
+                            var b = ReadOperand(inst.B!);
+                            var c = ReadOperand(inst.C!);
+                            var a = SaturateTruncate(b.IntValue << (int)c.IntValue, b.Type, c.Type);
+                            WriteOperand(inst.A!, a);
                             break;
                         }
                         case Opcode.BitRol:
                         {
-                            var b = ReadOperand(inst.B!).IntValue;
-                            var c = ReadOperand(inst.C!).IntValue;
-                            b = (long)BitOperations.RotateLeft((ulong)b, (int)c);
-                            WriteOperand(inst.A!, b.ToCobVariable());
+                            throw new NotImplementedException(); // BitOperations.RotateLeft
                             break;
                         }
                         case Opcode.BitRor:
                         {
-                            var b = ReadOperand(inst.B!).IntValue;
-                            var c = ReadOperand(inst.C!).IntValue;
-                            b = (long)BitOperations.RotateRight((ulong)b, (int)c);
-                            WriteOperand(inst.A!, b.ToCobVariable());
+                            throw new NotImplementedException(); // BitOperations.RotateRight
                             break;
                         }
                         case Opcode.BitAnd:
                         {
-                            var b = ReadOperand(inst.B!).IntValue;
-                            b &= ReadOperand(inst.C!).IntValue;
-                            WriteOperand(inst.A!, b.ToCobVariable());
+                            var b = ReadOperand(inst.B!);
+                            var c = ReadOperand(inst.C!);
+                            var a = SaturateTruncate(b.IntValue & c.IntValue, b.Type, c.Type);
+                            WriteOperand(inst.A!, a);
                             break;
                         }
                         case Opcode.BitXor:
                         {
-                            var b = ReadOperand(inst.B!).IntValue;
-                            b ^= ReadOperand(inst.C!).IntValue;
-                            WriteOperand(inst.A!, b.ToCobVariable());
+                            var b = ReadOperand(inst.B!);
+                            var c = ReadOperand(inst.C!);
+                            var a = SaturateTruncate(b.IntValue ^ c.IntValue, b.Type, c.Type);
+                            WriteOperand(inst.A!, a);
                             break;
                         }
                         case Opcode.BitOr:
                         {
-                            var b = ReadOperand(inst.B!).IntValue;
-                            b |= ReadOperand(inst.C!).IntValue;
-                            WriteOperand(inst.A!, b.ToCobVariable());
+                            var b = ReadOperand(inst.B!);
+                            var c = ReadOperand(inst.C!);
+                            var a = SaturateTruncate(b.IntValue | c.IntValue, b.Type, c.Type);
+                            WriteOperand(inst.A!, a);
                             break;
                         }
                         case Opcode.BitNot:
                         {
-                            var b = ReadOperand(inst.B!).IntValue;
-                            b = ~b;
-                            WriteOperand(inst.A!, b.ToCobVariable());
+                            var b = ReadOperand(inst.B!);
+                            var a = SaturateTruncate(~b.IntValue, b.Type, b.Type);
+                            WriteOperand(inst.A!, a);
                             break;
                         }
                         case Opcode.Not:
                         {
-                            var b = ReadOperand(inst.B!).IntValue;
-                            b = b != 0 ? 0 : 1;
-                            WriteOperand(inst.A!, b.ToCobVariable());
+                            var b = ReadOperand(inst.B!);
+                            var a = SaturateTruncate(b.IntValue != 0 ? 0 : 1, b.Type, b.Type);
+                            WriteOperand(inst.A!, a);
                             break;
                         }
                         case Opcode.Neg:
                         {
-                            var b = ReadOperand(inst.B!).IntValue;
-                            b = -b;
-                            WriteOperand(inst.A!, b.ToCobVariable());
+                            var b = ReadOperand(inst.B!);
+                            var a = SaturateTruncate(-b.IntValue, b.Type, b.Type);
+                            WriteOperand(inst.A!, a);
                             break;
                         }
                         case Opcode.Add:
                         {
                             var b = ReadOperand(inst.B!);
                             var c = ReadOperand(inst.C!);
-                            var a = b.IntValue + c.IntValue;
-
-                            var t = b.Type == eCobType.Signed || c.Type == eCobType.Signed ? eCobType.Signed : eCobType.Unsigned;
-                            var w = Math.Max(b.Type.Size, c.Type.Size);
-                            if (t == eCobType.Signed)
-                            {
-                                // Saturation
-                                if (w == 8)
-                                    a = (sbyte)a;
-                                else if (w == 16)
-                                    a = (short)a;
-                                else if (w == 32)
-                                    a = (int)a;
-                                else if (w == 64)
-                                    a = (long)a;
-                                else
-                                    throw new InvalidOperationException($"Cannot saturate {w} bit integer");
-                            }
-                            else
-                            {
-                                // Truncation
-                                if (w == 8)
-                                    a = (byte)a;
-                                else if (w == 16)
-                                    a = (ushort)a;
-                                else if (w == 32)
-                                    a = (uint)a;
-                                else if (w == 64)
-                                    a = a;
-                                else
-                                    throw new InvalidOperationException($"Cannot truncate {w} bit integer");
-                            }
-
-                            WriteOperand(inst.A!, new Variable("$imm", new CobType(t, w), a));
+                            var a = SaturateTruncate(b.IntValue + c.IntValue, b.Type, c.Type);
+                            WriteOperand(inst.A!, a);
                             break;
                         }
                         case Opcode.Sub:
                         {
-                            var b = ReadOperand(inst.B!).IntValue;
-                            b -= ReadOperand(inst.C!).IntValue;
-                            WriteOperand(inst.A!, b.ToCobVariable());
+                            var b = ReadOperand(inst.B!);
+                            var c = ReadOperand(inst.C!);
+                            var a = SaturateTruncate(b.IntValue - c.IntValue, b.Type, c.Type);
+                            WriteOperand(inst.A!, a);
                             break;
                         }
                         case Opcode.Mul:
                         {
-                            var b = ReadOperand(inst.B!).IntValue;
-                            b *= ReadOperand(inst.C!).IntValue;
-                            WriteOperand(inst.A!, b.ToCobVariable());
+                            var b = ReadOperand(inst.B!);
+                            var c = ReadOperand(inst.C!);
+                            var a = SaturateTruncate(b.IntValue * c.IntValue, b.Type, c.Type);
+                            WriteOperand(inst.A!, a);
                             break;
                         }
                         case Opcode.Pow:
                         {
-                            var b = ReadOperand(inst.B!).IntValue;
-                            var c = ReadOperand(inst.C!).IntValue;
-                            b = (long)Math.Pow(b, c);
-                            WriteOperand(inst.A!, b.ToCobVariable());
+                            throw new NotImplementedException();
                             break;
                         }
                         case Opcode.Div:
                         {
-                            var b = ReadOperand(inst.B!).IntValue;
-                            b /= ReadOperand(inst.C!).IntValue;
-                            WriteOperand(inst.A!, b.ToCobVariable());
+                            var b = ReadOperand(inst.B!);
+                            var c = ReadOperand(inst.C!);
+                            var a = SaturateTruncate(b.IntValue / c.IntValue, b.Type, c.Type);
+                            WriteOperand(inst.A!, a);
                             break;
                         }
                         case Opcode.DivCeil:
                         {
-                            var b = ReadOperand(inst.B!).IntValue;
-                            var c = ReadOperand(inst.C!).IntValue;
-                            b = (b + c - 1) / c;
-                            WriteOperand(inst.A!, b.ToCobVariable());
+                            var b = ReadOperand(inst.B!);
+                            var c = ReadOperand(inst.C!);
+                            var a = SaturateTruncate((b.IntValue + c.IntValue - 1) / c.IntValue, b.Type, c.Type);
+                            WriteOperand(inst.A!, a);
                             break;
                         }
                         case Opcode.DivFloor:
                         {
                             // TODO Technically only useful for floats
-                            var b = ReadOperand(inst.B!).IntValue;
-                            b /= ReadOperand(inst.C!).IntValue;
-                            WriteOperand(inst.A!, b.ToCobVariable());
+                            var b = ReadOperand(inst.B!);
+                            var c = ReadOperand(inst.C!);
+                            var a = SaturateTruncate(b.IntValue / c.IntValue, b.Type, c.Type);
+                            WriteOperand(inst.A!, a);
                             break;
                         }
                         case Opcode.Mod:
                         {
-                            var b = ReadOperand(inst.B!).IntValue;
-                            b %= ReadOperand(inst.C!).IntValue;
-                            WriteOperand(inst.A!, b.ToCobVariable());
+                            var b = ReadOperand(inst.B!);
+                            var c = ReadOperand(inst.C!);
+                            var a = SaturateTruncate(b.IntValue % c.IntValue, b.Type, c.Type);
+                            WriteOperand(inst.A!, a);
                             break;
                         }
                         case Opcode.Rem:
                         {
-                            var b = ReadOperand(inst.B!).IntValue;
-                            var c = ReadOperand(inst.C!).IntValue;
-                            b = ((b % c) + c) % c;
-                            WriteOperand(inst.A!, b.ToCobVariable());
+                            var b = ReadOperand(inst.B!);
+                            var c = ReadOperand(inst.C!);
+                            var a = SaturateTruncate(((b.IntValue % c.IntValue) + c.IntValue) % c.IntValue, b.Type, c.Type);
+                            WriteOperand(inst.A!, a);
                             break;
                         }
                         case Opcode.CondAnd:
@@ -637,6 +606,46 @@ namespace Compiler.Interpreter
                     default:
                         throw new ArgumentOutOfRangeException();
                 }
+            }
+
+            // TODO Implement Unary operands signature
+            Variable SaturateTruncate(long a, CobType b, CobType c)
+            {
+                // TODO Optimize
+                // TODO Floats
+
+                var t = b == eCobType.Signed || c == eCobType.Signed ? eCobType.Signed : eCobType.Unsigned;
+                var w = Math.Max(b.Size, c.Size);
+                if (t == eCobType.Signed)
+                {
+                    // Saturation
+                    if (w == 8)
+                        a = checked((sbyte)a);
+                    else if (w == 16)
+                        a = checked((short)a);
+                    else if (w == 32)
+                        a = checked((int)a);
+                    else if (w == 64)
+                        a = checked((long)a);
+                    else
+                        throw new InvalidOperationException($"Cannot saturate {w} bit integer");
+                }
+                else
+                {
+                    // Truncation
+                    if (w == 8)
+                        a = checked((byte)a);
+                    else if (w == 16)
+                        a = checked((ushort)a);
+                    else if (w == 32)
+                        a = checked((uint)a);
+                    else if (w == 64)
+                        a = checked(a);
+                    else
+                        throw new InvalidOperationException($"Cannot truncate {w} bit integer");
+                }
+
+                return new Variable("$imm", new CobType(t, w), a);
             }
         }
 
