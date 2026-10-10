@@ -7,23 +7,38 @@ namespace Compiler.Ast.Parselets
     {
         public Expression Parse(Parser parser, Token token)
         {
+            Expression? countExpression = null;
             var elements = new List<Expression>();
 
             if (!parser.Match(TokenType.RightSquare))
             {
-                do
+                bool takeElements;
+                countExpression = parser.ParseExpression();
+                if (parser.MatchAndTakeToken(TokenType.Semicolon) == null)
                 {
-                    var element = parser.ParseExpression();
-                    elements.Add(element);
+                    elements.Add(countExpression);
+                    countExpression = null;
+                    takeElements = parser.MatchAndTakeToken(TokenType.Comma) != null;
+                }
+                else
+                    takeElements = true;
 
-                    if (!parser.Match(TokenType.RightSquare))
-                        parser.Take(TokenType.Comma);
-                } while (!parser.IsEndOfStream && !parser.Match(TokenType.RightSquare));
+                if (takeElements)
+                {
+                    do
+                    {
+                        var element = parser.ParseExpression();
+                        elements.Add(element);
+
+                        if (!parser.Match(TokenType.RightSquare))
+                            parser.Take(TokenType.Comma);
+                    } while (!parser.IsEndOfStream && !parser.Match(TokenType.RightSquare));
+                }
             }
 
             parser.Take(TokenType.RightSquare);
 
-            return new ArrayLiteralExpression(token, elements);
+            return new ArrayLiteralExpression(token, null, countExpression, elements);
         }
     }
 }

@@ -25,7 +25,7 @@ struct Array `T {
         };
     }
 
-    function Add(T value) {
+    function Add(T value) { // intrinsic
         if (Length >= data.Length) {
             data = Heap.ReAlloc(data, data.Length << 1);
         }
@@ -34,9 +34,14 @@ struct Array `T {
         Length += 1;
     }
 
-    function AddRange(T[] value) {
+    function AddRange(T[] value) { // intrinsic
         for (var i in ..value.Length)
             Add(value[i]);
+    }
+
+    function AddRangeLiteral(T value, u32 count) { // intrinsic
+        for (var i in ..count)
+            Add(value);
     }
 
     function Reverse() {

@@ -151,6 +151,9 @@ namespace Compiler
             Console.WriteLine("Functions");
             foreach (var function in artifact.Functions)
             {
+                if (function == artifact.EntryFunction)
+                    continue;
+
                 Console.WriteLine($"\t{function.FullyQualifiedName} -> {function.ReturnType}; .locals = {function.Locals.Count}; .cconv = {function.CallingConvention}");
                 if (function.Body.Instructions.Count == 0)
                     Console.WriteLine("\t\t(EMPTY)");
@@ -164,6 +167,25 @@ namespace Compiler
                 }
 
                 Console.WriteLine();
+            }
+
+            Console.WriteLine();
+
+            Console.WriteLine("Entry Point Function");
+            if (artifact.EntryFunction == null)
+                Console.WriteLine("(NOT DECLARED)");
+            else
+            {
+                var function = artifact.EntryFunction;
+                Console.WriteLine($"\t{function.FullyQualifiedName} -> {function.ReturnType}; .locals = {function.Locals.Count}; .cconv = {function.CallingConvention}");
+                for (var i = 0; i < function.Body.Instructions.Count; ++i)
+                {
+                    var inst = function.Body.Instructions[i];
+                    foreach (var label in function.Body.Labels.Where(x => x.Location == i))
+                        Console.WriteLine($"\t{label}:");
+
+                    Console.WriteLine($"\t\t{inst}");
+                }
             }
 
             Console.WriteLine();

@@ -305,6 +305,10 @@ namespace Compiler.Ast
 
         public static Def IllegalOperationBetweenTypes { get; } = new(MessageType.Error, "Cannot perform {0} operation between types '{1}' and '{2}'");
 
+        public static Def FixedArrayDimensionMismatch { get; } = new(MessageType.Error, "Fixed Array Literal expects {0} elements to be initialized but only {1} may be");
+
+        public static Def CannotSpreadNumberHere { get; } = new(MessageType.Error, "Cannot spread number literal here");
+
         public sealed record Def(
             MessageType Type,
             string Content,

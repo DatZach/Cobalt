@@ -6,11 +6,22 @@ namespace Compiler.Ast.Expressions
 {
     internal sealed class ArrayLiteralExpression : Expression
     {
+        public TypeName? ElementTypeName { get; }
+
+        public Expression? CountExpression { get; }
+
         public IReadOnlyList<Expression> Elements { get; }
 
-        public ArrayLiteralExpression(Token token, IReadOnlyList<Expression> elements)
+        public ArrayLiteralExpression(
+            Token token,
+            TypeName? elementTypeName,
+            Expression? countExpression,
+            IReadOnlyList<Expression>? elements
+        )
             : base(token)
         {
+            ElementTypeName = elementTypeName;
+            CountExpression = countExpression;
             Elements = elements;
         }
 

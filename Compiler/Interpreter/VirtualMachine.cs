@@ -563,7 +563,7 @@ namespace Compiler.Interpreter
                         parameters[(int)operand.Value] = value;
                         break;
                     default:
-                        throw new ArgumentOutOfRangeException();
+                        throw new InvalidOperationException();
                 }
             }
             
@@ -612,7 +612,7 @@ namespace Compiler.Interpreter
                         return new Variable("$type", type, false);
                     }
                     default:
-                        throw new ArgumentOutOfRangeException();
+                        throw new InvalidOperationException();
                 }
             }
         }

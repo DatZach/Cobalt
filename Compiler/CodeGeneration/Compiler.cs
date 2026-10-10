@@ -2038,7 +2038,9 @@ namespace Compiler.CodeGeneration
             }
 
             // RESOLVE TYPE
-            var bType = CobType.U8; // TODO Implement correctly
+            var bType = expression.ElementTypeName == null
+                      ? CobType.U8 // TODO This needs to infer the type from the elements, implement in the future
+                      : CobType.FromTypeName(expression.ElementTypeName, CurrentContext);
             var tag = Intrinsics.Array;
             tag = tag.FindConcretizedRecord(bType) ?? tag.AllocateConcretizedRecord(bType);
             var cobType = new CobType(eCobType.Struct, tag: tag);
@@ -2048,11 +2050,20 @@ namespace Compiler.CodeGeneration
 
             var storage = CurrentFunction.AllocateRegisterStorage(cobType);
 
-            // ALLOCATE & ADD ELEMENTS
-            if (elements.Count == 2 && elements[0].IsSpread && elements[0].Storage?.Type == CobType.Int)
+            // ALLOCATE
+            Storage? countStorage;
+            if (expression.CountExpression != null)
             {
                 // Fill Elements
                 // TODO Validate types match
+                countStorage = expression.CountExpression.Accept(this);
+                var countValue = countStorage.Operand.Type.IsImmediate() ? countStorage.Operand.Value : -1;
+
+                if (!elements.Any(x => x.IsSpread && x.Storage.Operand.Type.IsImmediate()) && countValue != -1 && countValue != elements.Count)
+                {
+                    messages.Add(Message.FixedArrayDimensionMismatch, expression, countValue, elements.Count);
+                    return null;
+                }
 
                 function = tag.FindFactory("New");
                 functionStorage = tag.EmitGetForSymbol(function);
@@ -2061,39 +2072,9 @@ namespace Compiler.CodeGeneration
                     Opcode.Call,
                     functionStorage.Operand,
                     storage.Operand,
-                    new []{ elements[0].Storage.Operand }
+                    new []{ countStorage.Operand }
                 );
                 functionStorage.Free();
-
-                var countStorage = CurrentFunction.AllocateRegisterStorage(CobType.Int);
-                var resultStorage = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
-                var loopLabel = CurrentFunction.Body.AllocateLabel();
-                var endLabel = CurrentFunction.Body.AllocateLabel();
-
-                CurrentFunction.Body.Emit(Opcode.Move, countStorage.Operand, elements[0].Storage!.Operand);
-                loopLabel.Mark();
-                CurrentFunction.Body.Emit(Opcode.CmpLT, resultStorage.Operand, countStorage.Operand, Operand.ImmediateUnsigned(0));
-                CurrentFunction.Body.Emit(Opcode.JmpT, resultStorage.Operand, endLabel);
-
-                function = tag.FindFunction("Add");
-                functionStorage = tag.EmitGetForSymbol(function);
-
-                CurrentFunction.Body.Emit(
-                    Opcode.Call,
-                    functionStorage.Operand,
-                    Operand.None,
-                    new[] { storage.Operand, elements[1].Storage.Operand }
-                );
-
-                CurrentFunction.Body.Emit(Opcode.Sub, countStorage.Operand, countStorage.Operand, Operand.ImmediateUnsigned(1));
-                CurrentFunction.Body.Emit(Opcode.Jmp, loopLabel);
-                endLabel.Mark();
-
-                functionStorage.Free();
-                resultStorage.Free();
-                countStorage.Free();
-                elements[0].Storage.Free();
-                elements[1].Storage.Free();
             }
             else
             {
@@ -2111,30 +2092,60 @@ namespace Compiler.CodeGeneration
                 );
                 functionStorage.Free();
 
-                foreach (var element in elements)
+                countStorage = null;
+            }
+
+            // ADD ELEMENTS
+            for (var i = 0; i < elements.Count; ++i)
+            {
+                var element = elements[i];
+
+                IReadOnlyList<Operand> arguments;
+                if (element.IsSpread)
                 {
-                    if (element.IsSpread)
+                    if (element.Storage.Type.Type is eCobType.Unsigned or eCobType.Signed or eCobType.Real)
                     {
-                        function = tag.FindFunction("AddRange");
+                        if (countStorage == null)
+                        {
+                            messages.Add(Message.CannotSpreadNumberHere, expression);
+                            return null;
+                        }
+
+                        var repeatStorage = CurrentFunction.AllocateRegisterStorage(CobType.Int);
+                        CurrentFunction.Body.Emit(Opcode.Move, repeatStorage.Operand, countStorage.Operand);
+                        CurrentFunction.Body.Emit(Opcode.Sub, repeatStorage.Operand, repeatStorage.Operand, Operand.ImmediateUnsigned(i));
+
+                        function = tag.FindFunction("AddRangeLiteral"); // TODO Find a better name
                         functionStorage = tag.EmitGetForSymbol(function);
+                        arguments = new[] { storage.Operand, element.Storage.Operand, repeatStorage.Operand };
+                        repeatStorage.Free();
                     }
                     else
                     {
-                        function = tag.FindFunction("Add");
+                        function = tag.FindFunction("AddRange");
                         functionStorage = tag.EmitGetForSymbol(function);
+                        arguments = new[] { storage.Operand, element.Storage.Operand };
                     }
-
-                    CurrentFunction.Body.Emit(
-                        Opcode.Call,
-                        functionStorage.Operand,
-                        Operand.None,
-                        new[] { storage.Operand, element.Storage.Operand }
-                    );
-
-                    functionStorage.Free();
-                    element.Storage.Free();
                 }
+                else
+                {
+                    function = tag.FindFunction("Add");
+                    functionStorage = tag.EmitGetForSymbol(function);
+                    arguments = new[] { storage.Operand, element.Storage.Operand };
+                }
+
+                CurrentFunction.Body.Emit(
+                    Opcode.Call,
+                    functionStorage.Operand,
+                    Operand.None,
+                    arguments
+                );
+
+                functionStorage.Free();
+                element.Storage.Free();
             }
+
+            countStorage?.Free();
 
             return storage;
         }

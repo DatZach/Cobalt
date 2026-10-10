@@ -111,6 +111,18 @@
         //public static Operand StructType(int value) => new() { Type = OperandType.StructType, Value = value };
     }
 
+    public static class OperandUtility
+    {
+        public static bool IsImmediate(this OperandType type)
+        {
+            return type is OperandType.ImmediateSigned8 or OperandType.ImmediateSigned16
+                        or OperandType.ImmediateSigned32 or OperandType.ImmediateSigned64
+                        or OperandType.ImmediateUnsigned8 or OperandType.ImmediateUnsigned16
+                        or OperandType.ImmediateUnsigned32 or OperandType.ImmediateUnsigned64
+                        or OperandType.ImmediateReal32 or OperandType.ImmediateReal64;
+        }
+    }
+
     internal enum Opcode
     {
         None,
