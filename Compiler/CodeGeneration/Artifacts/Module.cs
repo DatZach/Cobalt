@@ -16,7 +16,7 @@ namespace Compiler.CodeGeneration.Artifacts
         private readonly List<Module> modules;
         private readonly List<TraitType> traitTypes;
         private readonly List<RecordType> recordTypes;
-        private readonly List<DistinctType> distinctTypes;
+        private readonly List<CobType> distinctTypes;
         private readonly List<Function> functions;
         private readonly List<Variable> globals;
         private readonly Compiler compiler;
@@ -30,7 +30,7 @@ namespace Compiler.CodeGeneration.Artifacts
             modules = new List<Module>();
             traitTypes = new List<TraitType>();
             recordTypes = new List<RecordType>();
-            distinctTypes = new List<DistinctType>();
+            distinctTypes = new List<CobType>();
             functions = new List<Function>();
             globals = new List<Variable>();
 
@@ -88,15 +88,24 @@ namespace Compiler.CodeGeneration.Artifacts
             return recordTypes.FirstOrDefault(x => x.Name == name);
         }
 
-        public DistinctType AllocateDistinctType(string name, CobType subType)
+        // TODO Find a better name...
+        public CobType AllocateDistinctType(string subTypeName, CobType superType)
         {
-            var distinctType = new DistinctType(name, subType);
-            distinctTypes.Add(distinctType);
+            var subType = new CobType(
+                superType.Type,
+                superType.Size,
+                superType.ElementType,
+                superType.UnionedTypes,
+                superType,
+                subTypeName,
+                superType.Tag
+            );
+            distinctTypes.Add(subType);
 
-            return distinctType;
+            return subType;
         }
 
-        public DistinctType? FindDistinctType(string name)
+        public CobType? FindDistinctType(string name)
         {
             return distinctTypes.FirstOrDefault(x => x.Name == name);
         }

@@ -10,6 +10,7 @@ namespace Compiler.Lexer
     // TODO struct?
     internal class TypeName
     {
+        public static readonly TypeName None = new() { Type = eTypeName.None };
         public static readonly TypeName Any = new() { Type = eTypeName.Identifier, Identifier = "any" };
 
         public eTypeName Type { get; init; }

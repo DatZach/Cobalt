@@ -11,7 +11,7 @@ namespace Compiler.Ast.Visitors
         T Visit(ExportStatement expression);
         T Visit(ArtifactStatement expression);
         T Visit(ModuleStatement expression);
-        T Visit(TypeAliasStatement expression);
+        T Visit(TypeDeclStatement expression);
         T Visit(TraitStatement expression);
         T Visit(ErrorStatement expression);
         T Visit(TupleDeclStatement expression);

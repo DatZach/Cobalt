@@ -1,4 +1,4 @@
-type string     Lens`u8;
+type string = Lens`u8;
 //type cstring    LPVOID;
 
 function string(int value, int radix = 10) string {

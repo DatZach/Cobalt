@@ -107,8 +107,6 @@
         public static Operand Label(int value) => new() { Type = OperandType.Label, Value = value };
         public static Operand Function(int value) => new() { Type = OperandType.Function, Value = value };
         public static Operand _Type(long value) => new() { Type = OperandType.Type, Value = value };
-        //public static Operand TupleType(int value) => new() { Type = OperandType.TupleType, Value = value };
-        //public static Operand StructType(int value) => new() { Type = OperandType.StructType, Value = value };
     }
 
     public static class OperandUtility

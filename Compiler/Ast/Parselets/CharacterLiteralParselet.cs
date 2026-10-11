@@ -35,7 +35,7 @@ namespace Compiler.Ast.Parselets
 
                 longValue <<= typeSuffix.Size - resultBytes.Length * 8;
 
-                return new NumberLiteralExpression(token, longValue, typeSuffix.Type, typeSuffix.Size);
+                return new NumberLiteralExpression(token, longValue, typeSuffixName);
             }
             else
             {

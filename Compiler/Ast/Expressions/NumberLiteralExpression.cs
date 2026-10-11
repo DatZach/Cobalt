@@ -1,7 +1,6 @@
 ﻿using Compiler.Lexer;
 using Compiler.Ast.Visitors;
 using System.Diagnostics;
-using Compiler.CodeGeneration.Artifacts;
 
 namespace Compiler.Ast.Expressions
 {
@@ -9,16 +8,17 @@ namespace Compiler.Ast.Expressions
     {
         public long LongValue { get; }
 
-        public eCobType Type { get; }
+        //public eCobType Type { get; }
 
-        public int BitSize { get; }
+        //public int BitSize { get; }
 
-        public NumberLiteralExpression(Token token, long longValue, eCobType type, int bitSize)
+        public TypeName TypeName { get; }
+
+        public NumberLiteralExpression(Token token, long longValue, TypeName typeName)
             : base(token)
         {
             LongValue = longValue;
-            Type = type;
-            BitSize = bitSize;
+            TypeName = typeName;
         }
 
         [DebuggerStepThrough]

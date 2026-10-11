@@ -163,31 +163,35 @@ namespace Compiler.CodeGeneration.Artifacts
 
     internal sealed record CobType
     {
-        public readonly static CobType None = eCobType.None;
-        public readonly static CobType Any = eCobType.Any;
-        public readonly static CobType Function = eCobType.Function;
-        public readonly static CobType Boolean = new(eCobType.Boolean);
-        public readonly static CobType Int = new (eCobType.Signed);
-        public readonly static CobType S8 = new (eCobType.Signed, 8);
-        public readonly static CobType S16 = new (eCobType.Signed, 16);
-        public readonly static CobType S32 = new(eCobType.Signed, 32);
-        public readonly static CobType S64 = new(eCobType.Signed, 64);
-        public readonly static CobType UInt = new (eCobType.Unsigned);
-        public readonly static CobType U8 = new (eCobType.Unsigned, 8);
-        public readonly static CobType U16 = new (eCobType.Unsigned, 16);
-        public readonly static CobType U32 = new(eCobType.Unsigned, 32);
-        public readonly static CobType U64 = new(eCobType.Unsigned, 64);
-        public readonly static CobType Real = new (eCobType.Real);
-        public readonly static CobType R32 = new(eCobType.Real, 32);
-        public readonly static CobType R64 = new(eCobType.Real, 64);
-        public readonly static CobType Module = eCobType.Module;
-        public readonly static CobType Error = eCobType.Error;
-        public readonly static CobType Nil = eCobType.Nil;
-        public readonly static CobType Generic = eCobType.Generic;
-        public static CobType String => new (eCobType.Tuple, tag: Intrinsics.Lens.FindConcretizedRecord(U8) ?? throw new ArgumentNullException());
+        public readonly static CobType None = new(eCobType.None, name: null);
+        public readonly static CobType Any = new(eCobType.Any, name: "any");
+        public readonly static CobType Function = new(eCobType.Function, name: "function");
+        public readonly static CobType Boolean = new(eCobType.Boolean, name: "bool");
+        public readonly static CobType Int = new (eCobType.Signed, -1, name: "int");
+        public readonly static CobType S8 = new (eCobType.Signed, 8, name: "s8");
+        public readonly static CobType S16 = new (eCobType.Signed, 16, name: "s16");
+        public readonly static CobType S32 = new(eCobType.Signed, 32, name: "s32");
+        public readonly static CobType S64 = new(eCobType.Signed, 64, name: "s64");
+        public readonly static CobType UInt = new (eCobType.Unsigned, -1, name: "uint");
+        public readonly static CobType U8 = new (eCobType.Unsigned, 8, name: "u8");
+        public readonly static CobType U16 = new (eCobType.Unsigned, 16, name: "u16");
+        public readonly static CobType U32 = new(eCobType.Unsigned, 32, name: "u32");
+        public readonly static CobType U64 = new(eCobType.Unsigned, 64, name: "u64");
+        public readonly static CobType Real = new (eCobType.Real, -1, name: "real");
+        public readonly static CobType R32 = new(eCobType.Real, 32, name: "r32");
+        public readonly static CobType R64 = new(eCobType.Real, 64, name: "r64");
+        public readonly static CobType Module = new(eCobType.Module, name: null);
+        public readonly static CobType Error = new(eCobType.Error, name: "error");
+        public readonly static CobType Nil = new(eCobType.Nil, name: "nil");
+        public readonly static CobType Generic = new(eCobType.Generic, name: null);
+        public static CobType String => stringType ??= new (eCobType.Tuple, tag: Intrinsics.Lens.FindConcretizedRecord(U8) ?? throw new ArgumentNullException(), name: "string"); private static CobType? stringType;
 
         public const int SizeUnadorned = -1;
         public const int SizePlatformSpecified = -2;
+
+        public CobType? Parent { get; }
+
+        public string? Name { get; }
 
         public eCobType Type { get; }
 
@@ -212,8 +216,13 @@ namespace Compiler.CodeGeneration.Artifacts
             int size = SizeUnadorned,
             CobType? elementType = null,
             IReadOnlyList<CobType>? unionedTypes = null,
+            CobType? parent = null,
+            string? name = null,
             object? tag = null
         ) {
+            Parent = parent;
+            Name = name;
+
             Type = type;
             Size = size;
             ElementType = elementType;
@@ -221,11 +230,6 @@ namespace Compiler.CodeGeneration.Artifacts
             Tag = tag;
         }
 
-        public static implicit operator CobType(eCobType type)
-        {
-            return new CobType(type);
-        }
-        
         public override int GetHashCode()
         {
             return HashCode.Combine((int)Type, Size, ElementType, Tag);
@@ -260,22 +264,42 @@ namespace Compiler.CodeGeneration.Artifacts
             if (typeName.Type == eTypeName.Identifier)
             {
                 var ident = typeName.Identifier!;
-                if (ident.Length >= 2 && ident[0] == 's' && char.IsDigit(ident[1]))
-                    type = new CobType(eCobType.Signed, int.Parse(ident[1..]));
-                else if (ident.Length >= 2 && ident[0] == 'u' && char.IsDigit(ident[1]))
-                    type = new CobType(eCobType.Unsigned, int.Parse(ident[1..]));
-                else if (ident.Length >= 2 &&  ident[0] == 'f' && char.IsDigit(ident[1]))
-                    type = new CobType(eCobType.Real, int.Parse(ident[1..]));
-                else if (ident == "any")
+                //if (ident.Length >= 2 && ident[0] == 's' && char.IsDigit(ident[1]))
+                //    type = new CobType(eCobType.Signed, int.Parse(ident[1..]));
+                //else if (ident.Length >= 2 && ident[0] == 'u' && char.IsDigit(ident[1]))
+                //    type = new CobType(eCobType.Unsigned, int.Parse(ident[1..]));
+                //else if (ident.Length >= 2 &&  ident[0] == 'f' && char.IsDigit(ident[1]))
+                //    type = new CobType(eCobType.Real, int.Parse(ident[1..]));
+                if (ident == "any")
                     type = Any;
                 else if (ident == "bool")
                     type = Boolean;
                 else if (ident == "int")
                     type = Int;
+                else if (ident == "s8")
+                    type = S8;
+                else if (ident == "s16")
+                    type = S16;
+                else if (ident == "s32")
+                    type = S32;
+                else if (ident == "s64")
+                    type = S64;
                 else if (ident == "uint")
                     type = UInt;
-                else if (ident == "float")
+                else if (ident == "u8")
+                    type = U8;
+                else if (ident == "u16")
+                    type = U16;
+                else if (ident == "u32")
+                    type = U32;
+                else if (ident == "u64")
+                    type = U64;
+                else if (ident == "real")
                     type = Real;
+                else if (ident == "r32")
+                    type = R32;
+                else if (ident == "r64")
+                    type = R64;
                 else if (ident == "error")
                     type = Error;
                 else if (ident == "nil")
@@ -290,13 +314,13 @@ namespace Compiler.CodeGeneration.Artifacts
                         {
                             TraitType? traitType;
                             RecordType? recordType;
-                            DistinctType? distinctType;
+                            CobType? distinctType;
                             if ((traitType = module.FindTraitType(ident)) != null)
                                 type = new CobType(eCobType.Trait, tag: traitType);
                             else if ((recordType = module.FindRecordType(ident)) != null)
                                 type = recordType.ThisType;
                             else if ((distinctType = module.FindDistinctType(ident)) != null)
-                                type = distinctType.SubType;
+                                type = distinctType;
                         }
                         else if (ctx is RecordType recordType)
                         {
@@ -446,7 +470,7 @@ namespace Compiler.CodeGeneration.Artifacts
                     };
                 }
 
-                return new CobType(Type, Size, ElementType, UnionedTypes, tag);
+                return new CobType(Type, Size, ElementType, UnionedTypes, Parent, Name, tag);
             }
             else
                 return this;
@@ -656,7 +680,7 @@ namespace Compiler.CodeGeneration.Artifacts
             if (Type != eCobType.Union || UnionedTypes == null)
                 throw new InvalidOperationException();
 
-            var unionedTypes = UnionedTypes.Where(x => x.Type != exclusion).ToList();
+            var unionedTypes = UnionedTypes.Where(x => x != exclusion).ToList();
             if (unionedTypes.Count == 0)
                 return None;
             else if (unionedTypes.Count == 1)
@@ -674,7 +698,7 @@ namespace Compiler.CodeGeneration.Artifacts
             }
             else
             {
-                yield return new CobType(Type, Size, ElementType);
+                yield return this;
             }
         }
 

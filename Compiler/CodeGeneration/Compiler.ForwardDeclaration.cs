@@ -207,19 +207,20 @@ namespace Compiler.CodeGeneration
             return Unit.Value;
         }
 
-        public Unit Visit(TypeAliasStatement expression)
+        public Unit Visit(TypeDeclStatement expression)
         {
             if (phase != DeclPhase.Types)
                 return Unit.Value;
 
-            if (CurrentModule.FindDistinctType(expression.Name) != null)
+            if (CurrentModule.FindDistinctType(expression.SubTypeName) != null)
             {
-                messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
+                messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.SubTypeName);
                 return Unit.Value;
             }
 
-            var typeName = CobType.FromTypeName(expression.TypeName, CurrentModule);
-            CurrentModule.AllocateDistinctType(expression.Name, typeName);
+            // type Sub = Super;
+            var superType = CobType.FromTypeName(expression.SuperTypeName, CurrentModule);
+            CurrentModule.AllocateDistinctType(expression.SubTypeName, superType);
 
             return Unit.Value;
         }

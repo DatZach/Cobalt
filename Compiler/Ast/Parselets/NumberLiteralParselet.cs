@@ -9,6 +9,8 @@ namespace Compiler.Ast.Parselets
     {
         private static readonly char[] TypeSpecifiers = { 'u', 's', 'r' };
 
+        // TODO Clean up typename code
+
         public Expression Parse(Parser parser, Token token)
         {
             var value = token.Value;
@@ -85,31 +87,51 @@ namespace Compiler.Ast.Parselets
             if (type == eCobType.None)
                 type = eCobType.Signed;
 
+            var strTypeName = type switch
+            {
+                eCobType.Signed when bitSize == 8 => CobType.S8.Name,
+                eCobType.Signed when bitSize == 16 => CobType.S16.Name,
+                eCobType.Signed when bitSize == 32 => CobType.S32.Name,
+                eCobType.Signed when bitSize == 64 => CobType.S64.Name,
+                eCobType.Signed when bitSize is -1 or -2 => CobType.Int.Name,
+                eCobType.Unsigned when bitSize == 8 => CobType.U8.Name,
+                eCobType.Unsigned when bitSize == 16 => CobType.U16.Name,
+                eCobType.Unsigned when bitSize == 32 => CobType.U32.Name,
+                eCobType.Unsigned when bitSize == 64 => CobType.U64.Name,
+                eCobType.Unsigned when bitSize is -1 or -2 => CobType.UInt.Name,
+                eCobType.Real when bitSize == 32 => CobType.R32.Name,
+                eCobType.Real when bitSize == 64 => CobType.R64.Name,
+                eCobType.Real when bitSize is -1 or -2 => CobType.Real.Name,
+                _ => throw new InvalidOperationException()
+            };
+
+            var typeName = new TypeName { Type = eTypeName.Identifier, Identifier = strTypeName };
+
             long integerNumber;
 
             if (hasHexSpecified)
             {
                 if (TryParse(value, 16, type, bitSize, out integerNumber))
-                    return new NumberLiteralExpression(token, integerNumber, type, bitSize);
+                    return new NumberLiteralExpression(token, integerNumber, typeName);
             }
             else if (hasBinSpecified)
             {
                 if (TryParse(value, 2, type, bitSize, out integerNumber))
-                    return new NumberLiteralExpression(token, integerNumber, type, bitSize);
+                    return new NumberLiteralExpression(token, integerNumber, typeName);
             }
             else if (hasDotSpecified)
             {
                 if (TryParse(value, 10, type, bitSize, out integerNumber))
-                    return new NumberLiteralExpression(token, integerNumber, type, bitSize);
+                    return new NumberLiteralExpression(token, integerNumber, typeName);
             }
             else
             {
                 if (TryParse(value, 10, type, bitSize, out integerNumber))
-                    return new NumberLiteralExpression(token, integerNumber, type, bitSize);
+                    return new NumberLiteralExpression(token, integerNumber, typeName);
             }
 
             parser.Messages.Add(Message.IllegalNumber, token, token.Value);
-            return new NumberLiteralExpression(token, 0, eCobType.None, 0);
+            return new NumberLiteralExpression(token, 0, TypeName.None);
         }
 
         private static bool TryParse(string value, int fromBase, eCobType t, int w, out long result)

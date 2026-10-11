@@ -125,7 +125,7 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
-        public Storage? Visit(TypeAliasStatement expression)
+        public Storage? Visit(TypeDeclStatement expression)
         {
             return null;
         }
@@ -2152,13 +2152,15 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(NumberLiteralExpression expression)
         {
+            var type = CobType.FromTypeName(expression.TypeName, CurrentContext);
+            var typeSize = type.Size == -1 ? ArtifactFactory.ResolveMinimumBusWidthForSpecifiedArchitectures(artifact.ArtifactDirectives) : type.Size;
             return new Storage(
-                new CobType(expression.Type, expression.BitSize),
-                expression.Type switch
+                type,
+                type.Type switch
                 {
-                    eCobType.Unsigned => Operand.ImmediateUnsigned((ulong)expression.LongValue, expression.BitSize),
-                    eCobType.Signed => Operand.ImmediateSigned(expression.LongValue, expression.BitSize),
-                    eCobType.Real => Operand.ImmediateReal(expression.LongValue, expression.BitSize),
+                    eCobType.Unsigned => Operand.ImmediateUnsigned((ulong)expression.LongValue, typeSize),
+                    eCobType.Signed => Operand.ImmediateSigned(expression.LongValue, typeSize),
+                    eCobType.Real => Operand.ImmediateReal(expression.LongValue, typeSize),
                     _ => throw new InvalidOperationException()
                 }
             );

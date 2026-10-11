@@ -309,6 +309,8 @@ namespace Compiler.Ast
 
         public static Def CannotSpreadNumberHere { get; } = new(MessageType.Error, "Cannot spread number literal here");
 
+        public static Def ExpectedTypeName { get; } = new(MessageType.Error, "Expected type name");
+
         public sealed record Def(
             MessageType Type,
             string Content,

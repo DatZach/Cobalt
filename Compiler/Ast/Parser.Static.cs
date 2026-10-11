@@ -107,7 +107,7 @@ namespace Compiler.Ast
             // Statements
             Register(TokenType.Artifact, new ArtifactParselet());
             Register(TokenType.Module, new ModuleParselet());
-            Register(TokenType.Type, new TypeAliasParselet());
+            Register(TokenType.Type, new TypeDeclParselet());
             Register(TokenType.Error, new ErrorParselet());
             Register(TokenType.Error, new IdentifierParselet());
             Register(TokenType.Trait, new TraitParselet());
