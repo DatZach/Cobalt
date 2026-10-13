@@ -752,8 +752,8 @@ namespace Compiler.CodeGeneration
             {
                 if (CurrentFunction.ReturnType == eCobType.None)
                     CurrentFunction.ReturnType = rhs.Type;
-                //else if (!CobType.IsImplicitCastable(CurrentFunction.ReturnType, rhs.Type))
-                else if (!rhs.IsAssignableToType(CurrentFunction.ReturnType))
+                else if (!CobType.IsImplicitCastable(CurrentFunction.ReturnType, rhs.Type, rhs.Operand.Value) && !CobType.IsAncestorOf(CurrentFunction.ReturnType, rhs.Type))
+                //else if (!rhs.IsAssignableToType(CurrentFunction.ReturnType) && !CobType.IsAncestorOf(CurrentFunction.ReturnType, rhs.Type))
                     messages.Add(Message.ReturnTypeMismatch, expression, CurrentFunction.ReturnType, rhs.Type);
                 
                 CurrentFunction.Body.Emit(Opcode.Return, rhs.Operand);
@@ -1515,8 +1515,8 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(CallExpression expression)
         {
-            // CAST
-            var storage = VisitCastExpression(expression);
+            // EXPLICIT CAST
+            var storage = VisitExplicitCastExpression(expression);
             if (storage != null)
                 return storage;
 
@@ -1535,7 +1535,7 @@ namespace Compiler.CodeGeneration
             return storage;
         }
 
-        private Storage? VisitCastExpression(CallExpression expression)
+        private Storage? VisitExplicitCastExpression(CallExpression expression)
         {
             if (expression.FunctionExpression is not IdentifierExpression ie)
                 return null;
@@ -1728,7 +1728,7 @@ namespace Compiler.CodeGeneration
                 if (argument.Operand == Operand.None && argument.Type.Tag is FunctionCandidates argumentCandidates)
                     argument = function.Parent.EmitGetForSymbol(argumentCandidates.ResolveSingle(null));
 
-                if (!argument.IsAssignableToType(parameter.Type))
+                if (!CobType.IsImplicitCastable(parameter.Type, argument.Type, argument.Operand.Value))
                     messages.Add(Message.IllegalAssignmentTypeMismatch, expression, argument.Type, parameter.Type);
 
                 if (i < arguments.Count)
@@ -1786,8 +1786,7 @@ namespace Compiler.CodeGeneration
                             unionedTypes: symbol.Type.YieldTypesInUnion().Append(AssignmentRHS.Type).ToList()
                         ));
                     }
-                    //else if (!CobType.IsImplicitCastable(symbol.Type, AssignmentRHS.Type))
-                    else if (!AssignmentRHS!.IsAssignableToType(symbol.Type))
+                    else if (!CobType.IsImplicitCastable(symbol.Type, AssignmentRHS.Type, AssignmentRHS.Operand.Value))
                         messages.Add(Message.IllegalAssignmentTypeMismatch, expression, AssignmentRHS.Type, symbol.Type);
 
                     var result = scope.EmitSetForSymbol(symbol);
@@ -1888,9 +1887,12 @@ namespace Compiler.CodeGeneration
             }
             else // GET
             {
-                if ((source.Type == eCobType.Struct || source.Type == eCobType.Tuple)
-                &&  source.Type.Tag is RecordType recordType 
-                &&  recordType.Indexer != null)
+                var recordType = source.Type.FirstAncestorWhere(
+                    x => (x == eCobType.Struct || x == eCobType.Tuple)
+                      &&  x.Tag is RecordType { Indexer: not null }
+                )?.Tag as RecordType;
+
+                if (recordType != null)
                 {
                     function = index.Type.Tag == Intrinsics.Range
                              ? recordType.FindFunction("Slice")
@@ -2245,6 +2247,8 @@ namespace Compiler.CodeGeneration
             );
         }
 
+        // TODO Only job here is to emit the required cast instructions either remove cast checks
+        //      or merge behavior to check and emit
         // NOTE Takes ownership of source; discards if needed
         private Storage EmitCast(Storage source, CobType dstType)
         {
@@ -2276,6 +2280,13 @@ namespace Compiler.CodeGeneration
             else if (srcType == eCobType.Tuple && dstType == eCobType.Tuple)
             {
                 return source; // TODO Definitely not right
+            }
+            else if (dstType == eCobType.Distinct)
+            {
+                if (!CobType.IsAncestorOf(dstType, srcType))
+                    return null;
+
+                return new Storage(source, dstType);
             }
             else
                 throw new NotImplementedException();

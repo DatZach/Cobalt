@@ -1,5 +1,6 @@
 ﻿using System.Buffers;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Compiler.Lexer;
 
 namespace Compiler.CodeGeneration.Artifacts
@@ -527,6 +528,7 @@ namespace Compiler.CodeGeneration.Artifacts
                                                                         // Tag == Intrinsics.Array ? Any.ToManagedType().MakeArrayType() :  throw new NotImplementedException(), // ???
                 eCobType.Tuple => throw new NotImplementedException(), // ???
                 eCobType.Function => throw new NotImplementedException(), // ???
+                eCobType.Distinct => Parent?.ToManagedType() ?? throw new InvalidOperationException(),
                 _ => throw new ArgumentOutOfRangeException()
             };
         }
@@ -702,6 +704,21 @@ namespace Compiler.CodeGeneration.Artifacts
             }
         }
 
+        // TODO Places where this is used might actually want the full ancestry
+        public CobType? FirstAncestorWhere(Func<CobType, bool> predicate)
+        {
+            CobType? x = this;
+            while (x != null)
+            {
+                if (predicate(x))
+                    return x;
+
+                x = x.Parent;
+            }
+
+            return null;
+        }
+
         public override string ToString()
         {
             if (HasErrorFlag)
@@ -739,6 +756,9 @@ namespace Compiler.CodeGeneration.Artifacts
                 case eCobType.Module:
                     return Tag?.ToString() ?? $"(NULL {Type.ToString()})";
 
+                case eCobType.Distinct:
+                    return Name ?? "(distinct)";
+
                 case eCobType.None:
                     return "(none)";
 
@@ -748,7 +768,7 @@ namespace Compiler.CodeGeneration.Artifacts
         }
 
         // dst = src
-        public static bool IsImplicitCastable(CobType dstType, CobType srcType)
+        public static bool IsImplicitCastable(CobType dstType, CobType srcType, long? srcValue = null)
         {
             if (srcType == dstType)
                 return true;
@@ -769,17 +789,26 @@ namespace Compiler.CodeGeneration.Artifacts
             }
 
             // NUMBERS
-            if (srcType.Type is eCobType.Unsigned or eCobType.Signed or eCobType.Real
-            &&  dstType.Type is eCobType.Unsigned or eCobType.Signed or eCobType.Real)
+            if (srcType.Type is eCobType.Unsigned or eCobType.Signed
+            &&  dstType.Type is eCobType.Unsigned or eCobType.Signed)
             {
-                // TODO Verify no data loss
-                if (srcType.Size == SizeUnadorned || dstType.Size == SizeUnadorned)
-                    return true;
-
-                if (srcType.Type != dstType.Type)
+                if (dstType.Type == eCobType.Unsigned && srcType.Type == eCobType.Signed)
                     return false;
 
-                return dstType.Size >= srcType.Size; // u64 >= u32
+                // NOTE Casts where data MIGHT be lost when only the types are known are not permitted, if a more
+                //      precise result is required then IsImplicitCastable(CobType, Variable) should be used instead
+                if (!IsIntegerTypeCapableOfStoringValueWithoutTruncation(dstType, srcType, srcValue))
+                    return false;
+
+                return true;
+
+                //if (srcType.Size == SizeUnadorned || dstType.Size == SizeUnadorned)
+                //    return true;
+
+                //if (srcType.Type != dstType.Type)
+                //    return false;
+
+                //return dstType.Size >= srcType.Size; // u64 >= u32
             }
 
             if (srcType.Type is eCobType.Tuple or eCobType.Struct && dstType.Type == eCobType.Trait)
@@ -809,8 +838,45 @@ namespace Compiler.CodeGeneration.Artifacts
             if (srcType == eCobType.Function && dstType == eCobType.Function && dstType.Tag is FunctionSignature)
                 return true;
 
-            // TODO Distant aliases
-            // NOTE Immediate aliases should be functional as their type is directly encoded
+            return false;
+        }
+
+        private static readonly long[] SignedMin = { sbyte.MinValue, short.MinValue, int.MinValue, int.MinValue, long.MinValue, long.MinValue, long.MinValue, long.MinValue };
+        private static readonly long[] SignedMax = { (long)sbyte.MaxValue, (long)short.MaxValue, int.MaxValue, int.MaxValue, long.MaxValue, long.MaxValue, long.MaxValue, long.MaxValue };
+        private static readonly long[] UnsignedMin = { 0, 0, 0, 0, 0, 0, 0, 0 };
+        private static readonly long[] UnsignedMax = { byte.MaxValue, ushort.MaxValue, uint.MaxValue, uint.MaxValue, long.MaxValue, long.MaxValue, long.MaxValue, long.MaxValue  };
+        private static bool IsIntegerTypeCapableOfStoringValueWithoutTruncation(CobType dstType, CobType srcType, long? srcValue)
+        {
+            if (dstType.Size == SizeUnadorned)
+                return true;
+
+            if (srcType.Size == SizeUnadorned)
+            {
+                if (srcValue != null)
+                {
+                    // if WillNotTruncateValue
+                    var minTable = srcType.Type == eCobType.Signed ? SignedMin : UnsignedMin;
+                    var maxTable = srcType.Type == eCobType.Signed ? SignedMax : UnsignedMax;
+                    var min = minTable[dstType.Size / 8 - 1];
+                    var max = maxTable[dstType.Size / 8 - 1];
+
+                    // TODO Technically doesn't work for u64 with MSB set
+                    return srcValue >= min && srcValue <= max;
+
+                    //if (dstType == eCobType.Real && Type.Type == eCobType.Real)
+                    //{
+                    //    var a = BitConverter.Int64BitsToDouble(Operand.Value);
+                    //    if (dstType.Size == 32)
+                    //        return ((double)(float)a).Equals(a);
+                    //    else if (dstType.Size == 64)
+                    //        return true;
+                    //}
+                }
+                else
+                    return true;
+            }
+            else if (dstType.Size >= srcType.Size)
+                return true;
 
             return false;
         }
@@ -919,6 +985,27 @@ namespace Compiler.CodeGeneration.Artifacts
                     return None;
             }
         }
+
+        // TODO Might need to merge this into IsImplicitCastable OR FirstAncestorWhere
+        public static bool IsAncestorOf(CobType? subType, CobType? superType)
+        {
+            if (superType == null)
+                return false; // TODO ??
+
+            while (subType != null)
+            {
+                if (subType == superType)
+                    return true;
+
+                // TODO Ehh?? This is so that DWORD(0) can work int -> u32 -> DWORD
+                if (CobType.IsImplicitCastable(superType, subType))
+                    return true;
+
+                subType = subType.Parent;
+            }
+
+            return false;
+        }
     }
 
     internal enum eCobType
@@ -938,6 +1025,7 @@ namespace Compiler.CodeGeneration.Artifacts
         Error,
         Nil,
         Generic,
+        Distinct,
         Mask = 0x0F
     }
 

@@ -12,12 +12,12 @@ const hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
 const hStdIn = GetStdHandle(STD_INPUT_HANDLE);
 
 function Write(string value) {
-    WriteConsoleA(hStdOut, value.Address, value.Length, NULL, NULL);
+    WriteConsoleA(hStdOut, value.Address, value.Length, 0, 0);
 }
 
 function WriteLn(string value) {
-    WriteConsoleA(hStdOut, value.Address, value.Length, NULL, NULL);
-    WriteConsoleA(hStdOut, "^n".Address, 1, NULL, NULL);
+    WriteConsoleA(hStdOut, value.Address, value.Length, 0, 0);
+    WriteConsoleA(hStdOut, "^n".Address, 1, 0, 0);
 }
 
 function ReadLine() string {

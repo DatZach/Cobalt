@@ -85,7 +85,7 @@ namespace Compiler.Ast.Parselets
             }
 
             if (type == eCobType.None)
-                type = eCobType.Signed;
+                type = eCobType.Unsigned;
 
             var strTypeName = type switch
             {

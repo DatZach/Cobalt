@@ -92,13 +92,10 @@ namespace Compiler.CodeGeneration.Artifacts
         public CobType AllocateDistinctType(string subTypeName, CobType superType)
         {
             var subType = new CobType(
-                superType.Type,
-                superType.Size,
-                superType.ElementType,
-                superType.UnionedTypes,
-                superType,
-                subTypeName,
-                superType.Tag
+                eCobType.Distinct,
+                parent: superType,
+                name: subTypeName,
+                tag: superType.Tag // TODO EHh?? Probably not strictly correct
             );
             distinctTypes.Add(subType);
 

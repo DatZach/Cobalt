@@ -394,7 +394,7 @@ namespace Compiler.CodeGeneration.Artifacts
                     else
                         b = x.Parameters[i + paramOffset].Type;
 
-                    if (!CobType.IsImplicitCastable(b, a))
+                    if (!CobType.IsImplicitCastable(b, a) && !CobType.IsAncestorOf(b, a))
                         return false;
                 }
 
@@ -432,49 +432,15 @@ namespace Compiler.CodeGeneration.Artifacts
 
         }
 
+        public Storage(Storage other, CobType type)
+            : this(type, other.Operand, other.context)
+        {
+            // NOTE Ctor intended for explicit casts between sub/super types
+        }
+
         public void Free()
         {
             context?.FreeStorage(Operand);
-        }
-
-        private static readonly long[] SignedMin = { sbyte.MinValue, short.MinValue, int.MinValue, int.MinValue, long.MinValue, long.MinValue, long.MinValue, long.MinValue };
-        private static readonly long[] SignedMax = { (long)sbyte.MaxValue, (long)short.MaxValue, int.MaxValue, int.MaxValue, long.MaxValue, long.MaxValue, long.MaxValue, long.MaxValue };
-        private static readonly long[] UnsignedMin = { 0, 0, 0, 0, 0, 0, 0, 0 };
-        private static readonly long[] UnsignedMax = { byte.MaxValue, ushort.MaxValue, uint.MaxValue, uint.MaxValue, long.MaxValue, long.MaxValue, long.MaxValue, long.MaxValue  };
-        public bool IsAssignableToType(CobType dstType)
-        {
-            if (!CobType.IsImplicitCastable(dstType, Type))
-                return false;
-
-            if (Type.Size == CobType.SizeUnadorned)
-            {
-                if (dstType.Size == CobType.SizeUnadorned)
-                    return true;
-
-                if (dstType.Type is eCobType.Signed or eCobType.Unsigned
-                    && Type.Type is eCobType.Signed or eCobType.Unsigned)
-                {
-                    var minTable = Type == eCobType.Signed ? SignedMin : UnsignedMin;
-                    var maxTable = Type == eCobType.Signed ? SignedMax : UnsignedMax;
-                    var min = minTable[dstType.Size / 8 - 1];
-                    var max = maxTable[dstType.Size / 8 - 1];
-
-                    // TODO Technically doesn't work for u64 with MSB set
-                    return Operand.Value >= min && Operand.Value <= max;
-                }
-                else if (dstType == eCobType.Real && Type.Type == eCobType.Real)
-                {
-                    var a = BitConverter.Int64BitsToDouble(Operand.Value);
-                    if (dstType.Size == 32)
-                        return ((double)(float)a).Equals(a);
-                    else if (dstType.Size == 64)
-                        return true;
-                }
-                else
-                    return false;
-            }
-
-            return true;
         }
     }
 }
