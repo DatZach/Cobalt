@@ -14,8 +14,8 @@ function string(int value, int radix = 10) string {
         v /= radix;
 
         result.Add((i < 10) :: {
-            true  => i + '0',
-            false => i + 'A' - 10
+            true  => u8(i + '0'),
+            false => u8(i + 'A' - 10)
         });
     }
 

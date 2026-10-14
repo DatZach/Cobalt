@@ -767,12 +767,58 @@ namespace Compiler.CodeGeneration.Artifacts
             }
         }
 
+        // TODO Passing an optional long srcValue for integer types specifically is very awkward, should find
+        //      some way to universalize or specialize the function signatures below...
+
+        // dst = src
+        public static bool IsExplicitCastable(CobType dstType, CobType srcType, long? srcValue = null)
+        {
+            //
+            // SPECIAL CONDITIONS
+            if (dstType == srcType)
+                return true;
+
+            //if (dstType == eCobType.Distinct && dstType.Parent != null)
+            //    return IsExplicitCastable(dstType.Parent, srcType, srcValue);
+
+
+            //
+            // ACTUAL TYPE CAST CHECK LOGIC
+
+            // - All implicit casts may be explicit
+            if (IsImplicitCastable(dstType, srcType, srcValue))
+                return true;
+
+            // - A super-type may explicit cast only to immediate sub-types
+            //if (srcType == eCobType.Distinct && srcType.Parent != null
+            //&&  IsImplicitCastable(srcType.Parent, dstType))
+            if (dstType.Parent == srcType)
+                return true;
+
+            // - A sub-type may explicit cast to any ancestor super-type
+            var x = srcType.Parent;
+            while (x != null)
+            {
+                if (x == dstType)
+                    return true;
+
+                x = x.Parent;
+            }
+
+            // NUMBERS
+            if (dstType.Type is eCobType.Unsigned or eCobType.Signed or eCobType.Real
+            &&  srcType.Type is eCobType.Unsigned or eCobType.Signed or eCobType.Real)
+                return true;
+
+            return false;
+        }
+
         // dst = src
         public static bool IsImplicitCastable(CobType dstType, CobType srcType, long? srcValue = null)
         {
             //
             // SPECIAL CONDITIONS
-            if (srcType == dstType)
+            if (dstType == srcType)
                 return true;
 
             // NOTE any -> discrete requires runtime
@@ -797,8 +843,8 @@ namespace Compiler.CodeGeneration.Artifacts
             // ACTUAL TYPE CAST CHECK LOGIC
 
             // NUMBERS
-            if (srcType.Type is eCobType.Unsigned or eCobType.Signed
-            &&  dstType.Type is eCobType.Unsigned or eCobType.Signed)
+            if (dstType.Type is eCobType.Unsigned or eCobType.Signed
+            &&  srcType.Type is eCobType.Unsigned or eCobType.Signed)
             {
                 if (dstType.Type == eCobType.Unsigned && srcType.Type == eCobType.Signed)
                     return false;
@@ -819,13 +865,13 @@ namespace Compiler.CodeGeneration.Artifacts
                 //return dstType.Size >= srcType.Size; // u64 >= u32
             }
 
-            if (srcType.Type is eCobType.Tuple or eCobType.Struct && dstType.Type == eCobType.Trait)
+            if (dstType.Type == eCobType.Trait && srcType.Type is eCobType.Tuple or eCobType.Struct)
             {
                 var recordType = srcType.Tag as RecordType;
                 return recordType?.HasTrait(dstType.Tag as TraitType) ?? false;
             }
 
-            if (srcType.Type == eCobType.Tuple && dstType.Type == eCobType.Tuple)
+            if (dstType.Type == eCobType.Tuple && srcType.Type == eCobType.Tuple)
             {
                 if (srcType.Tag == dstType.Tag)
                     return true;
@@ -992,27 +1038,6 @@ namespace Compiler.CodeGeneration.Artifacts
                 default:
                     return None;
             }
-        }
-
-        // TODO Might need to merge this into IsImplicitCastable OR FirstAncestorWhere
-        public static bool IsAncestorOf(CobType? subType, CobType? superType)
-        {
-            if (superType == null)
-                return false; // TODO ??
-
-            while (subType != null)
-            {
-                if (subType == superType)
-                    return true;
-
-                // TODO Ehh?? This is so that DWORD(0) can work int -> u32 -> DWORD
-                if (CobType.IsImplicitCastable(superType, subType))
-                    return true;
-
-                subType = subType.Parent;
-            }
-
-            return false;
         }
     }
 

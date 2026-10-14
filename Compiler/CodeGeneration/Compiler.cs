@@ -752,8 +752,7 @@ namespace Compiler.CodeGeneration
             {
                 if (CurrentFunction.ReturnType == eCobType.None)
                     CurrentFunction.ReturnType = rhs.Type;
-                else if (!CobType.IsImplicitCastable(CurrentFunction.ReturnType, rhs.Type, rhs.Operand.Value) && !CobType.IsAncestorOf(CurrentFunction.ReturnType, rhs.Type))
-                //else if (!rhs.IsAssignableToType(CurrentFunction.ReturnType) && !CobType.IsAncestorOf(CurrentFunction.ReturnType, rhs.Type))
+                else if (!CobType.IsExplicitCastable(CurrentFunction.ReturnType, rhs.Type, rhs.Operand.Value))
                     messages.Add(Message.ReturnTypeMismatch, expression, CurrentFunction.ReturnType, rhs.Type);
                 
                 CurrentFunction.Body.Emit(Opcode.Return, rhs.Operand);
@@ -1544,10 +1543,10 @@ namespace Compiler.CodeGeneration
             //      Probably shouldn't even have to disambiguate the expression at this point in time, should be in
             //      the AST
             var typeName = new TypeName { Type = eTypeName.Identifier, Identifier = ie.Value };
-            if (!CobType.TryParse(typeName, CurrentContext, out var castType)
-            ||  castType.Type == eCobType.Tuple
-            ||  castType.Type == eCobType.Struct
-            ||  castType.Type == eCobType.None)
+            if (!CobType.TryParse(typeName, CurrentContext, out var dstType)
+            ||  dstType.Type == eCobType.Tuple
+            ||  dstType.Type == eCobType.Struct
+            ||  dstType.Type == eCobType.None)
                 return null;
 
             var arguments = expression.Arguments;
@@ -1558,7 +1557,15 @@ namespace Compiler.CodeGeneration
             }
 
             var source = arguments[0].Accept(this);
-            var target = EmitCast(source, castType);
+            var srcType = source.Type;
+
+            if (!CobType.IsExplicitCastable(dstType, srcType))
+            {
+                messages.Add(Message.CannotCastType, expression, srcType, dstType);
+                return source; // NOTE Non-null return prevents superfluous errors from being raised
+            }
+
+            var target = EmitCast(source, dstType);
 
             return target;
         }
@@ -1634,7 +1641,10 @@ namespace Compiler.CodeGeneration
 
             if (function == null)
             {
-                messages.Add(Message.NoMatchingFunctionCandidate, expression.FunctionExpression, candidatesStorage?.Type.Tag);
+                messages.Add(Message.NoMatchingFunctionCandidate, expression.FunctionExpression,
+                    $"({string.Join(", ", arguments.Select(x => x.Type))})",
+                    candidatesStorage?.Type.Tag
+                );
                 return null;
             }
 
@@ -2240,8 +2250,6 @@ namespace Compiler.CodeGeneration
             );
         }
 
-        // TODO Only job here is to emit the required cast instructions either remove cast checks
-        //      or merge behavior to check and emit
         // NOTE Takes ownership of source; discards if needed
         private Storage EmitCast(Storage source, CobType dstType)
         {
@@ -2249,6 +2257,9 @@ namespace Compiler.CodeGeneration
             if (srcType == dstType)
                 return source;
             
+            // NOTE Emit instructions to handle casts as needed
+
+            // INTEGERS
             if (srcType.Type is eCobType.Unsigned or eCobType.Signed or eCobType.Real
             &&  dstType.Type is eCobType.Unsigned or eCobType.Signed or eCobType.Real)
             {
@@ -2273,27 +2284,8 @@ namespace Compiler.CodeGeneration
                     return destination;
                 }
             }
-            else if (srcType == eCobType.Struct && dstType == eCobType.Trait)
-            {
-                return source; // TODO ??
-            }
-            else if (srcType == eCobType.Function && dstType == eCobType.Function)
-            {
-                return source; // TODO ??
-            }
-            else if (srcType == eCobType.Tuple && dstType == eCobType.Tuple)
-            {
-                return source; // TODO Definitely not right
-            }
-            else if (dstType == eCobType.Distinct)
-            {
-                if (!CobType.IsAncestorOf(dstType, srcType))
-                    return null;
 
-                return new Storage(source, dstType);
-            }
-            else
-                throw new NotImplementedException();
+            return new Storage(source, dstType);
         }
 
         public static bool IsSymbolVisible(IScopeContext? context, IScopeContext? parent, string? name)

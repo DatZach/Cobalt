@@ -247,7 +247,7 @@ namespace Compiler.Ast
 
         public static Def CannotResolveThis { get; } = new(MessageType.Error, "Unable to resolve to 'this' symbol for thiscall function");
 
-        public static Def NoMatchingFunctionCandidate { get; } = new(MessageType.Error, "No candidate matches provided signature. Considered:\n{0}");
+        public static Def NoMatchingFunctionCandidate { get; } = new(MessageType.Error, "No candidate matches signature: {0}. Considered:\n{1}");
 
         public static Def CannotErrorCoalesceType { get; } = new(MessageType.Error, "Cannot error coalesce type '{0}'");
 
@@ -310,6 +310,8 @@ namespace Compiler.Ast
         public static Def CannotSpreadNumberHere { get; } = new(MessageType.Error, "Cannot spread number literal here");
 
         public static Def ExpectedTypeName { get; } = new(MessageType.Error, "Expected type name");
+
+        public static Def CannotCastType { get; } = new(MessageType.Error, "Cannot cast type '{0}' to '{1}'");
 
         public sealed record Def(
             MessageType Type,

@@ -1,7 +1,7 @@
 module Logger;
 
-const STD_INPUT_HANDLE = DWORD(-10);
-const STD_OUTPUT_HANDLE = DWORD(-11);
+const STD_INPUT_HANDLE = DWORD(0xFFFF_FFF6);
+const STD_OUTPUT_HANDLE = DWORD(0xFFFF_FFF5);
 const NULL = LPVOID(0);
 
 import kernel32 GetStdHandle function (DWORD nStdHandle) HANDLE, stdcall;

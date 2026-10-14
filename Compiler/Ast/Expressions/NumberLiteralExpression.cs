@@ -8,10 +8,6 @@ namespace Compiler.Ast.Expressions
     {
         public long LongValue { get; }
 
-        //public eCobType Type { get; }
-
-        //public int BitSize { get; }
-
         public TypeName TypeName { get; }
 
         public NumberLiteralExpression(Token token, long longValue, TypeName typeName)

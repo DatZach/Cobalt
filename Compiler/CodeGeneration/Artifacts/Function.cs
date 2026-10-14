@@ -394,7 +394,7 @@ namespace Compiler.CodeGeneration.Artifacts
                     else
                         b = x.Parameters[i + paramOffset].Type;
 
-                    if (!CobType.IsImplicitCastable(b, a) && !CobType.IsAncestorOf(b, a))
+                    if (!CobType.IsExplicitCastable(b, a))
                         return false;
                 }
 
