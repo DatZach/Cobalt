@@ -770,6 +770,8 @@ namespace Compiler.CodeGeneration.Artifacts
         // dst = src
         public static bool IsImplicitCastable(CobType dstType, CobType srcType, long? srcValue = null)
         {
+            //
+            // SPECIAL CONDITIONS
             if (srcType == dstType)
                 return true;
 
@@ -787,6 +789,12 @@ namespace Compiler.CodeGeneration.Artifacts
                 else
                     return dstType.UnionedTypes.Any(x => IsImplicitCastable(x, srcType));
             }
+
+            if (dstType == eCobType.Distinct && dstType.Parent != null)
+                return IsImplicitCastable(dstType.Parent, srcType, srcValue);
+
+            //
+            // ACTUAL TYPE CAST CHECK LOGIC
 
             // NUMBERS
             if (srcType.Type is eCobType.Unsigned or eCobType.Signed
@@ -845,7 +853,7 @@ namespace Compiler.CodeGeneration.Artifacts
         private static readonly long[] SignedMax = { (long)sbyte.MaxValue, (long)short.MaxValue, int.MaxValue, int.MaxValue, long.MaxValue, long.MaxValue, long.MaxValue, long.MaxValue };
         private static readonly long[] UnsignedMin = { 0, 0, 0, 0, 0, 0, 0, 0 };
         private static readonly long[] UnsignedMax = { byte.MaxValue, ushort.MaxValue, uint.MaxValue, uint.MaxValue, long.MaxValue, long.MaxValue, long.MaxValue, long.MaxValue  };
-        private static bool IsIntegerTypeCapableOfStoringValueWithoutTruncation(CobType dstType, CobType srcType, long? srcValue)
+        public static bool IsIntegerTypeCapableOfStoringValueWithoutTruncation(CobType dstType, CobType srcType, long? srcValue)
         {
             if (dstType.Size == SizeUnadorned)
                 return true;
@@ -855,8 +863,8 @@ namespace Compiler.CodeGeneration.Artifacts
                 if (srcValue != null)
                 {
                     // if WillNotTruncateValue
-                    var minTable = srcType.Type == eCobType.Signed ? SignedMin : UnsignedMin;
-                    var maxTable = srcType.Type == eCobType.Signed ? SignedMax : UnsignedMax;
+                    var minTable = dstType.Type == eCobType.Signed ? SignedMin : UnsignedMin;
+                    var maxTable = dstType.Type == eCobType.Signed ? SignedMax : UnsignedMax;
                     var min = minTable[dstType.Size / 8 - 1];
                     var max = maxTable[dstType.Size / 8 - 1];
 

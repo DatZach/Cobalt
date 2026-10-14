@@ -1720,16 +1720,19 @@ namespace Compiler.CodeGeneration
                         arguments.RemoveAt(j);
                 }
 
-                // Casting
+                // Implicit Casting
                 if (argument.Type != parameter.Type)
+                {
+                    if (argument.Operand.Type.IsImmediate()
+                    && !CobType.IsImplicitCastable(parameter.Type, argument.Type, argument.Operand.Value))
+                        messages.Add(Message.IllegalAssignmentTypeMismatch, expression, argument.Type, parameter.Type);
+                    
                     argument = EmitCast(argument, parameter.Type);
+                }
 
                 // TODO HACK Resolve function candidates to matching signature
                 if (argument.Operand == Operand.None && argument.Type.Tag is FunctionCandidates argumentCandidates)
                     argument = function.Parent.EmitGetForSymbol(argumentCandidates.ResolveSingle(null));
-
-                if (!CobType.IsImplicitCastable(parameter.Type, argument.Type, argument.Operand.Value))
-                    messages.Add(Message.IllegalAssignmentTypeMismatch, expression, argument.Type, parameter.Type);
 
                 if (i < arguments.Count)
                     arguments[i] = argument;
@@ -2155,17 +2158,7 @@ namespace Compiler.CodeGeneration
         public Storage? Visit(NumberLiteralExpression expression)
         {
             var type = CobType.FromTypeName(expression.TypeName, CurrentContext);
-            var typeSize = type.Size == -1 ? ArtifactFactory.ResolveMinimumBusWidthForSpecifiedArchitectures(artifact.ArtifactDirectives) : type.Size;
-            return new Storage(
-                type,
-                type.Type switch
-                {
-                    eCobType.Unsigned => Operand.ImmediateUnsigned((ulong)expression.LongValue, typeSize),
-                    eCobType.Signed => Operand.ImmediateSigned(expression.LongValue, typeSize),
-                    eCobType.Real => Operand.ImmediateReal(expression.LongValue, typeSize),
-                    _ => throw new InvalidOperationException()
-                }
-            );
+            return new Storage(type, Operand.Immediate(expression.LongValue, type));
         }
 
         public Storage? Visit(BooleanLiteralExpression expression)
@@ -2259,15 +2252,26 @@ namespace Compiler.CodeGeneration
             if (srcType.Type is eCobType.Unsigned or eCobType.Signed or eCobType.Real
             &&  dstType.Type is eCobType.Unsigned or eCobType.Signed or eCobType.Real)
             {
-                var destination = CurrentFunction.AllocateRegisterStorage(dstType);
-                CurrentFunction.Body.Emit(
-                    Opcode.Cast,
-                    destination.Operand,
-                    source.Operand,
-                    dstType.ToOperand(artifact)
-                );
-                source.Free();
-                return destination;
+                if (source.Operand.Type.IsImmediate()
+                &&  CobType.IsIntegerTypeCapableOfStoringValueWithoutTruncation(dstType, srcType, source.Operand.Value))
+                {
+                    return new Storage(
+                        dstType,
+                        Operand.Immediate(source.Operand.Value, dstType)
+                    );
+                }
+                else
+                {
+                    var destination = CurrentFunction.AllocateRegisterStorage(dstType);
+                    CurrentFunction.Body.Emit(
+                        Opcode.Cast,
+                        destination.Operand,
+                        source.Operand,
+                        dstType.ToOperand(artifact)
+                    );
+                    source.Free();
+                    return destination;
+                }
             }
             else if (srcType == eCobType.Struct && dstType == eCobType.Trait)
             {

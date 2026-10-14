@@ -571,6 +571,8 @@ namespace Compiler.Interpreter
             {
                 switch (operand.Type)
                 {
+                    case OperandType.ImmediateSigned:
+                        return new Variable("$imm", CobType.Int, false, operand.Value);
                     case OperandType.ImmediateSigned8:
                         return new Variable("$imm", CobType.S8, false, operand.Value);
                     case OperandType.ImmediateSigned16:
@@ -579,6 +581,8 @@ namespace Compiler.Interpreter
                         return new Variable("$imm", CobType.S32, false, operand.Value);
                     case OperandType.ImmediateSigned64:
                         return new Variable("$imm", CobType.S64, false, operand.Value);
+                    case OperandType.ImmediateUnsigned:
+                        return new Variable("$imm", CobType.UInt, false, operand.Value);
                     case OperandType.ImmediateUnsigned8:
                         return new Variable("$imm", CobType.U8, false, operand.Value);
                     case OperandType.ImmediateUnsigned16:
@@ -587,6 +591,8 @@ namespace Compiler.Interpreter
                         return new Variable("$imm", CobType.U32, false, operand.Value);
                     case OperandType.ImmediateUnsigned64:
                         return new Variable("$imm", CobType.U64, false, operand.Value);
+                    case OperandType.ImmediateReal:
+                        return new Variable("$imm", CobType.Real, false, operand.Value);
                     case OperandType.ImmediateReal32:
                         return new Variable("$imm", CobType.R32, false, operand.Value);
                     case OperandType.ImmediateReal64:

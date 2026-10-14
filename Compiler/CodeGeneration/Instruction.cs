@@ -1,4 +1,6 @@
-﻿namespace Compiler.CodeGeneration
+﻿using Compiler.CodeGeneration.Artifacts;
+
+namespace Compiler.CodeGeneration
 {
     internal sealed record Instruction
     {
@@ -24,7 +26,7 @@
         }
     }   
 
-    public sealed record Operand
+    internal sealed record Operand
     {
         public static readonly Operand None = new() { Type = OperandType.None, Value = 0 };
 
@@ -41,20 +43,34 @@
             return Type switch
             {
                 OperandType.None => "<none>",
+                OperandType.ImmediateSigned => Value.ToString("D"),
                 OperandType.ImmediateSigned8 => Value.ToString("D") + "_s8",
                 OperandType.ImmediateSigned16 => Value.ToString("D") + "_s16",
                 OperandType.ImmediateSigned32 => Value.ToString("D") + "_s32",
                 OperandType.ImmediateSigned64 => Value.ToString("D") + "_s64",
+                OperandType.ImmediateUnsigned => Value.ToString("D"),
                 OperandType.ImmediateUnsigned8 => ((ulong)Value).ToString("D") + "_u8",
                 OperandType.ImmediateUnsigned16 => ((ulong)Value).ToString("D") + "_u16",
                 OperandType.ImmediateUnsigned32 => ((ulong)Value).ToString("D") + "_u32",
                 OperandType.ImmediateUnsigned64 => ((ulong)Value).ToString("D") + "_u64",
+                OperandType.ImmediateReal => BitConverter.Int64BitsToDouble(Value).ToString("F"),
                 OperandType.ImmediateReal32 => BitConverter.Int64BitsToDouble(Value).ToString("F") + "_r32",
                 OperandType.ImmediateReal64 => BitConverter.Int64BitsToDouble(Value).ToString("F") + "_r64",
                 OperandType.Register or OperandType.Argument or OperandType.Local or OperandType.Global
                     or OperandType.Function
                     or OperandType.Type => Type.ToString()[..1].ToLowerInvariant() + Value.ToString("G"),
                 OperandType.Label => $".label_{Value}",
+                _ => throw new ArgumentOutOfRangeException()
+            };
+        }
+
+        public static Operand Immediate(long value, CobType dstType)
+        {
+            return dstType.Type switch
+            {
+                eCobType.Unsigned => ImmediateUnsigned((ulong)value, dstType.Size),
+                eCobType.Signed   => ImmediateSigned(value, dstType.Size),
+                eCobType.Real     => ImmediateReal(value, dstType.Size),
                 _ => throw new ArgumentOutOfRangeException()
             };
         }
@@ -67,7 +83,7 @@
                 16 => OperandType.ImmediateSigned16,
                 32 => OperandType.ImmediateSigned32,
                 64 => OperandType.ImmediateSigned64,
-                -1 => OperandType.ImmediateSigned64, // TODO Might not be right
+                -1 => OperandType.ImmediateSigned,
                 _ => throw new ArgumentOutOfRangeException(nameof(width))
             },
             Value = value
@@ -81,7 +97,7 @@
                 16 => OperandType.ImmediateUnsigned16,
                 32 => OperandType.ImmediateUnsigned32,
                 64 => OperandType.ImmediateUnsigned64,
-                -1 => OperandType.ImmediateUnsigned64, // TODO Might not be right
+                -1 => OperandType.ImmediateUnsigned,
                 _ => throw new ArgumentOutOfRangeException(nameof(width))
             },
             Value = (long)value
@@ -94,7 +110,7 @@
             {
                 32 => OperandType.ImmediateReal32,
                 64 => OperandType.ImmediateReal64,
-                -1 => OperandType.ImmediateReal64, // TODO Might not be right
+                -1 => OperandType.ImmediateReal,
                 _ => throw new ArgumentOutOfRangeException(nameof(width))
             },
             Value = BitConverter.DoubleToInt64Bits(value)
@@ -113,10 +129,13 @@
     {
         public static bool IsImmediate(this OperandType type)
         {
-            return type is OperandType.ImmediateSigned8 or OperandType.ImmediateSigned16
+            return type is OperandType.ImmediateSigned
+                        or OperandType.ImmediateSigned8 or OperandType.ImmediateSigned16
                         or OperandType.ImmediateSigned32 or OperandType.ImmediateSigned64
+                        or OperandType.ImmediateUnsigned
                         or OperandType.ImmediateUnsigned8 or OperandType.ImmediateUnsigned16
                         or OperandType.ImmediateUnsigned32 or OperandType.ImmediateUnsigned64
+                        or OperandType.ImmediateReal
                         or OperandType.ImmediateReal32 or OperandType.ImmediateReal64;
         }
     }
@@ -190,16 +209,19 @@
         Function,
         Type,
 
+        ImmediateSigned,
         ImmediateSigned8,
         ImmediateSigned16,
         ImmediateSigned32,
         ImmediateSigned64,
 
+        ImmediateUnsigned,
         ImmediateUnsigned8,
         ImmediateUnsigned16,
         ImmediateUnsigned32,
         ImmediateUnsigned64,
 
+        ImmediateReal,
         ImmediateReal32,
         ImmediateReal64
     }
