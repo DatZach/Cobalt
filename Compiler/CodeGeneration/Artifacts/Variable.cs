@@ -162,7 +162,7 @@ namespace Compiler.CodeGeneration.Artifacts
         void RebindType(CobType type);
     }
 
-    internal sealed record CobType
+    internal sealed record CobType : ISymbol
     {
         public readonly static CobType None = new(eCobType.None, name: null);
         public readonly static CobType Any = new(eCobType.Any, name: "any");
@@ -211,6 +211,12 @@ namespace Compiler.CodeGeneration.Artifacts
         public Function? TagFunction => Tag as Function;
 
         public FunctionCandidates? TagFunctionCandidates => Tag as FunctionCandidates;
+
+        CobType ISymbol.Type => this;
+
+        bool ISymbol.Mutable => false;
+
+        bool ISymbol.IsVisibleTo(IScopeContext context) => true; // TODO Not... really
 
         public CobType(
             eCobType type,
@@ -593,6 +599,11 @@ namespace Compiler.CodeGeneration.Artifacts
                         // ArtifactIndex = SSSS SSSS SSSS
                         result |= ((uint)artifact.Modules.IndexOf((Module)type.Tag!) & 0xFFFFFF) << i; i += 12;
                         break;
+                    case eCobType.Distinct:
+                        // TODO Collapse Struct, Tuple types into Distinct like this
+                        // ArtifactIndex = SSSS SSSS SSSS
+                        result |= ((uint)artifact.RecordTypes.IndexOf((RecordType)type.Tag!) & 0xFFFFFF) << i; i += 12;
+                        break;
                     default:
                         throw new ArgumentOutOfRangeException();
                 }
@@ -613,10 +624,13 @@ namespace Compiler.CodeGeneration.Artifacts
                 {
                     case eCobType.None:
                     case eCobType.Any:
+                        return Any;
                     case eCobType.Boolean:
+                        return Boolean;
                     case eCobType.Error:
+                        return Error;
                     case eCobType.Nil:
-                        return new CobType(type);
+                        return Nil;
                     case eCobType.Union:
                     {
                         // Count = SSS
@@ -634,6 +648,41 @@ namespace Compiler.CodeGeneration.Artifacts
                         // Size = 1 << SSS
                         int size = (int)((ulong)(value >> i) & 0x7); i += 3;
                             size = size != 0 ? 1 << size : SizeUnadorned; // TODO PlatformSize
+                        if (type == eCobType.Signed)
+                        {
+                            if (size == -1)
+                                return Int;
+                            else if (size == 8)
+                                return S8;
+                            else if (size == 16)
+                                return S16;
+                            else if (size == 32)
+                                return S32;
+                            else if (size == 64)
+                                return S64;
+                        }
+                        else if (type == eCobType.Unsigned)
+                        {
+                            if (size == -1)
+                                return UInt;
+                            else if (size == 8)
+                                return U8;
+                            else if (size == 16)
+                                return U16;
+                            else if (size == 32)
+                                return U32;
+                            else if (size == 64)
+                                return U64;
+                        }
+                        else if (type == eCobType.Real)
+                        {
+                            if (size == -1)
+                                return Real;
+                            else if (size == 32)
+                                return R32;
+                            else if (size == 64)
+                                return R64;
+                        }
                         return new CobType(type, size: size);
                     }
                     case eCobType.Trait:
@@ -669,6 +718,14 @@ namespace Compiler.CodeGeneration.Artifacts
                         // ArtifactIndex = SSSS SSSS SSSS
                         var idx = (int)((ulong)(value >> i) & 0xFFFFFF); i += 12;
                         var tag = artifact.Modules[idx];
+                        return new CobType(type, tag: tag);
+                    }
+                    case eCobType.Distinct:
+                    {
+                        // TODO Collapse Struct, Tuple types into Distinct like this
+                        // ArtifactIndex = SSSS SSSS SSSS
+                        var idx = (int)((ulong)(value >> i) & 0xFFFFFF); i += 12;
+                        var tag = artifact.RecordTypes[idx];
                         return new CobType(type, tag: tag);
                     }
                     default:
@@ -778,10 +835,6 @@ namespace Compiler.CodeGeneration.Artifacts
             if (dstType == srcType)
                 return true;
 
-            //if (dstType == eCobType.Distinct && dstType.Parent != null)
-            //    return IsExplicitCastable(dstType.Parent, srcType, srcValue);
-
-
             //
             // ACTUAL TYPE CAST CHECK LOGIC
 
@@ -790,8 +843,6 @@ namespace Compiler.CodeGeneration.Artifacts
                 return true;
 
             // - A super-type may explicit cast only to immediate sub-types
-            //if (srcType == eCobType.Distinct && srcType.Parent != null
-            //&&  IsImplicitCastable(srcType.Parent, dstType))
             if (dstType.Parent == srcType)
                 return true;
 

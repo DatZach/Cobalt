@@ -1361,6 +1361,15 @@ namespace Compiler.CodeGeneration
 
                 lhs.Free();
 
+                // Narrowing
+                if (conditionalStack > 0
+                &&  expression.Left is IdentifierExpression ie)
+                {
+                    var narrowLocal = CurrentFunction.AllocateLocal(ie.Value, type, true);
+                    var narrowIdx = CurrentFunction.FindLocalIndex(narrowLocal);
+                    CurrentFunction.Body.Emit(Opcode.Move, Operand.Local(narrowIdx), lhs.Operand);
+                }
+
                 return c;
             }
             else if (expression.RightMulti != null)
@@ -1519,7 +1528,7 @@ namespace Compiler.CodeGeneration
             if (storage != null)
                 return storage;
 
-            var candidatesStorage = expression.FunctionExpression.Accept(this);
+            var candidatesStorage = expression.FunctionExpression.Accept(this); // TODO Cleanup, merge this with other implementations
 
             // TUPLE ALLOCATION
             if (storage == null)
@@ -1536,29 +1545,45 @@ namespace Compiler.CodeGeneration
 
         private Storage? VisitExplicitCastExpression(CallExpression expression)
         {
-            if (expression.FunctionExpression is not IdentifierExpression ie)
+            var dstStorage = expression.FunctionExpression.Accept(this);
+            if (dstStorage == null || dstStorage.Operand.Type != OperandType.None) // TODO Would be better to check against Type not None Operand
                 return null;
-
-            // TODO Bit of a hack to create a typename like this
-            //      Probably shouldn't even have to disambiguate the expression at this point in time, should be in
-            //      the AST
-            var typeName = new TypeName { Type = eTypeName.Identifier, Identifier = ie.Value };
-            if (!CobType.TryParse(typeName, CurrentContext, out var dstType)
-            ||  dstType.Type == eCobType.Tuple
-            ||  dstType.Type == eCobType.Struct
-            ||  dstType.Type == eCobType.None)
-                return null;
-
-            var arguments = expression.Arguments;
-            if (arguments.Count != 1)
+            
+            var arguments = new List<Storage>();
+            foreach (var argExpression in expression.Arguments)
             {
-                messages.Add(Message.FunctionParameterCountMismatch, expression, 1, arguments.Count);
-                return null;
+                var argStorage = argExpression.Accept(this);
+                if (argStorage == null)
+                    continue;
+
+                arguments.Add(argStorage);
             }
 
-            var source = arguments[0].Accept(this);
-            var srcType = source.Type;
+            var function = dstStorage.Type.Tag switch
+            {
+                FunctionCandidates x => x.ResolveSingle(arguments.Select(y => y.Type).ToList()),
+                Function x => x,
+                _ => null
+            };
 
+            // NOTE The outer call expression handles function calls and tuple ctors
+            if (function != null || dstStorage.Type.Tag is RecordType)// && !function.IsCasting)
+            {
+                arguments.ForEach(x => x.Free());
+                dstStorage.Free();
+                return null; // TODO Handle the call here?
+            }
+
+            var source = arguments.FirstOrDefault();
+            if (source == null)
+            {
+                messages.Add(Message.FunctionParameterCountMismatch, expression, 1, arguments.Count);
+                return source;
+            }
+
+            var dstType = dstStorage.Type; // dstType :: int | string | function() This | ...
+            var srcType = source.Type;
+            
             if (!CobType.IsExplicitCastable(dstType, srcType))
             {
                 messages.Add(Message.CannotCastType, expression, srcType, dstType);
@@ -1566,8 +1591,30 @@ namespace Compiler.CodeGeneration
             }
 
             var target = EmitCast(source, dstType);
-
             return target;
+
+
+            // OLD
+
+            //var arguments = expression.Arguments;
+            //if (arguments.Count != 1)
+            //{
+            //    messages.Add(Message.FunctionParameterCountMismatch, expression, 1, arguments.Count);
+            //    return null;
+            //}
+
+            //var source = arguments[0].Accept(this);
+            //var srcType = source.Type;
+
+            //if (!CobType.IsExplicitCastable(dstType, srcType))
+            //{
+            //    messages.Add(Message.CannotCastType, expression, srcType, dstType);
+            //    return source; // NOTE Non-null return prevents superfluous errors from being raised
+            //}
+
+            //var target = EmitCast(source, dstType);
+
+            //return target;
         }
 
         private Storage? VisitTupleLiteralExpression(CallExpression expression, Storage? functionStorage)

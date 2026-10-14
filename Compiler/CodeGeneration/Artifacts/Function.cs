@@ -1,6 +1,4 @@
-﻿using System.ComponentModel;
-using System.Diagnostics;
-using System.Reflection.Metadata;
+﻿using System.Diagnostics;
 using System.Text;
 using Compiler.Ast.Expressions;
 using Compiler.Interpreter;
@@ -31,6 +29,8 @@ namespace Compiler.CodeGeneration.Artifacts
         public Label ReturnLabel { get; }
 
         public string FullyQualifiedName => Parent.Name + '_' + Name;
+
+        public bool IsCasting => ReturnType.Name == Name;
 
         private int freeRegisterIndex;
         private int registers;

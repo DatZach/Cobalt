@@ -40,24 +40,25 @@ namespace Compiler.Ast.Parselets
 
             return new PatternMatchExpression(token, left, rightSingle, rightMulti);
 
+            // 0
+            // 1, 2, 3
+            // .Monday
+            // string x
+            // nil
+            // int 0, 1, 2
             PatternMatchExpression.Pattern ParsePattern()
             {
-                Token? token = null;
-                TypeName? typeName = null;
                 Expression? valueExpr = null;
                 Expression? right = null;
 
-                if (parser.Match(TokenType.Identifier) || parser.Match(TokenType.Error) || parser.Match(TokenType.Nil))
-                {
-                    token = parser.Peek();
-                    typeName = parser.ParseTypeName();
-                }
+                var token = parser.Peek();
+                var typeName = parser.ParseTypeName();
 
-                if (!parser.Match(TokenType.FatArrow) && !parser.Match(TokenType.LeftBrace))
-                {
-                    token = parser.Peek();
+                if (parser.Match(TokenType.Identifier) || parser.Match(TokenType.Dot)
+                ||  parser.Match(TokenType.Number) || parser.Match(TokenType.String)
+                ||  parser.Match(TokenType.Character)
+                ||  parser.Match(TokenType.True) || parser.Match(TokenType.False))
                     valueExpr = parser.ParseExpression(Precedence);
-                }
 
                 if (parser.Match(TokenType.FatArrow))
                 {

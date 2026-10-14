@@ -114,6 +114,8 @@ namespace Compiler.Ast
 
         public void Print()
         {
+            int preambleLineCount = Program.PreambleSource.Count(x => x == '\n');
+
             int errorCount = 0;
             int warnCount = 0;
             int suggestionCount = 0;
@@ -180,7 +182,7 @@ namespace Compiler.Ast
                     var line = FileSystem.GetLine(startToken.Filename, startToken.Line) ?? "(missing line)";
 
                     Console.ForegroundColor = ConsoleColor.Cyan;
-                    Console.Write($"{{0,{indentCount}}} | ", i + 1);
+                    Console.Write($"{{0,{indentCount}}} | ", i - preambleLineCount + 1);
                     Console.ForegroundColor = ConsoleColor.Gray;
                     Console.WriteLine(line);
                     Console.ForegroundColor = ConsoleColor.Cyan;

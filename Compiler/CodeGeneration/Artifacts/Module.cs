@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using Compiler.Lexer;
 
 namespace Compiler.CodeGeneration.Artifacts
 {
@@ -172,6 +173,19 @@ namespace Compiler.CodeGeneration.Artifacts
             if ((tupleType = FindRecordType(name)) != null)
                 return tupleType;
 
+            // TYPES
+            CobType? type;
+            if ((type = FindDistinctType(name)) != null)
+                return type;
+
+            try
+            {
+                if ((type = CobType.FromTypeName(new TypeName { Identifier = name, Type = eTypeName.Identifier },
+                        this)) != null)
+                    return type;
+            }
+            catch { }
+
             return null;
         }
 
@@ -234,6 +248,15 @@ namespace Compiler.CodeGeneration.Artifacts
             {
                 return new Storage(
                     recordType.ThisType,
+                    Operand.None
+                );
+            }
+
+            // RECORD TYPES
+            if (symbol is CobType cobType)
+            {
+                return new Storage(
+                    cobType,
                     Operand.None
                 );
             }
