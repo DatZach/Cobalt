@@ -498,7 +498,7 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(IfStatement expression)
         {
-            CurrentFunction.PushNewBlockScope();
+            var scope = CurrentFunction.PushBlockScope();
 
             ++conditionalStack;
             var conditional = expression.Conditional.Accept(this);
@@ -522,15 +522,19 @@ namespace Compiler.CodeGeneration
             CurrentFunction.Body.Emit(Opcode.JmpF, conditional.Operand, elseLabel);
             conditional.Free();
 
-            CurrentFunction.PushNewBlockScope();
-            expression.Then.Accept(this)?.Free();
+            CurrentFunction.PushBlockScope();
+            scope.CommitNarrowingDirectives(false);
+                expression.Then.Accept(this)?.Free();
+            scope.RevertNarrowingDirectives();
             CurrentFunction.PopBlockScope();
             CurrentFunction.Body.Emit(Opcode.Jmp, endLabel);
 
             elseLabel.Mark();
 
-            CurrentFunction.PushNewBlockScope();
-            expression.Else?.Accept(this)?.Free();
+            CurrentFunction.PushBlockScope();
+            scope.CommitNarrowingDirectives(true);
+                expression.Else?.Accept(this)?.Free();
+            scope.RevertNarrowingDirectives();
             CurrentFunction.PopBlockScope();
 
             endLabel.Mark();
@@ -551,7 +555,7 @@ namespace Compiler.CodeGeneration
             var endLabel = CurrentFunction.Body.AllocateLabel();
 
             loopStack.Push(new LoopContext(expression.Tag?.Value, startLabel, endLabel));
-            forTempBlockScope = CurrentFunction.PushNewBlockScope();
+            forTempBlockScope = CurrentFunction.PushBlockScope();
 
             // ENUMERABLE
             var enumerableStorage = expression.Enumerable.Accept(this);
@@ -672,7 +676,7 @@ namespace Compiler.CodeGeneration
             var endLabel = CurrentFunction.Body.AllocateLabel();
 
             loopStack.Push(new LoopContext(expression.Tag?.Value, startLabel, endLabel));
-            CurrentFunction.PushNewBlockScope();
+            CurrentFunction.PushBlockScope();
 
             // INITIALIZER
             expression.Initializer?.Accept(this)?.Free();
@@ -787,7 +791,7 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(BlockExpression expression)
         {
-            CurrentFunction.PushNewBlockScope();
+            CurrentFunction.PushBlockScope();
 
             for (var i = 0; i < expression.Expressions.Count; i++)
             {
@@ -1359,16 +1363,11 @@ namespace Compiler.CodeGeneration
                     type.ToOperand(artifact)
                 );
 
-                lhs.Free();
-
                 // Narrowing
-                if (conditionalStack > 0
-                &&  expression.Left is IdentifierExpression ie)
-                {
-                    var narrowLocal = CurrentFunction.AllocateLocal(ie.Value, type, true);
-                    var narrowIdx = CurrentFunction.FindLocalIndex(narrowLocal);
-                    CurrentFunction.Body.Emit(Opcode.Move, Operand.Local(narrowIdx), lhs.Operand);
-                }
+                if (conditionalStack > 0)
+                    CurrentFunction.AddNarrowingDirective(lhs.Operand, type);
+
+                lhs.Free();
 
                 return c;
             }

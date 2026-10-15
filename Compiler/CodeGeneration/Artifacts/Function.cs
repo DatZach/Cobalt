@@ -64,7 +64,7 @@ namespace Compiler.CodeGeneration.Artifacts
             freeRegisterIndex = 0;
             registers = 0;
 
-            PushNewBlockScope();
+            PushBlockScope();
         }
 
         //public Storage AllocateStorage(CobType type, Operand operand)
@@ -116,7 +116,7 @@ namespace Compiler.CodeGeneration.Artifacts
             freeRegisterIndex = register;
         }
 
-        public IScopeContext PushNewBlockScope()
+        public BlockScope PushBlockScope()
         {
             var blockScope = new BlockScope(this);
             blockScopeStack.Push(blockScope);
@@ -126,6 +126,14 @@ namespace Compiler.CodeGeneration.Artifacts
         public void PopBlockScope()
         {
             blockScopeStack.Pop();
+        }
+
+        public void AddNarrowingDirective(Operand operand, CobType type)
+        {
+            if (blockScopeStack.Count == 0)
+                return;
+
+            blockScopeStack.Peek().AddNarrowingDirective(operand, type);
         }
 
         public Variable AllocateLocal(string name, CobType type, bool mutable)
@@ -303,13 +311,15 @@ namespace Compiler.CodeGeneration.Artifacts
             IScopeContext IScopeContext.Parent => parent;
 
             private readonly Dictionary<string, Variable> locals;
-            private readonly IScopeContext parent;
+            private readonly List<NarrowingDirective> narrows;
+            private readonly Function parent;
 
-            public BlockScope(IScopeContext parent)
+            public BlockScope(Function parent)
             {
                 this.parent = parent;
 
                 locals = new Dictionary<string, Variable>();
+                narrows = new List<NarrowingDirective>();
             }
 
             public void AddLocal(Variable local)
@@ -320,6 +330,52 @@ namespace Compiler.CodeGeneration.Artifacts
             public Variable? FindLocal(string name)
             {
                 return locals.GetValueOrDefault(name);
+            }
+
+            public void CommitNarrowingDirectives(bool invert)
+            {
+                foreach (var narrow in narrows)
+                {
+                    if (narrow.Committed)
+                        continue;
+
+                    var oldType = narrow.Variable.Type;
+                    var newType = narrow.Type;
+                    if (invert)
+                        newType = oldType.Bust(newType);
+                    ((ILateTypeBinding)narrow.Variable).RebindType(newType);
+                    narrow.Type = oldType;
+                    narrow.Committed = true;
+                }
+            }
+
+            public void RevertNarrowingDirectives()
+            {
+                foreach (var narrow in narrows)
+                {
+                    if (!narrow.Committed)
+                        continue;
+
+                    var oldType = narrow.Variable.Type;
+                    ((ILateTypeBinding)narrow.Variable).RebindType(narrow.Type);
+                    narrow.Type = oldType;
+                    narrow.Committed = false;
+                }
+            }
+
+            public void AddNarrowingDirective(Operand operand, CobType type)
+            {
+                // TODO Support !::
+
+                Variable? target;
+                if (operand.Type == OperandType.Local)
+                    target = parent.Locals[(int)operand.Value];
+                else if (operand.Type == OperandType.Global)
+                    target = parent.compiler.Globals[(int)operand.Value];
+                else
+                    return;
+
+                narrows.Add(new NarrowingDirective(target, type));
             }
 
             ISymbol? IScopeContext.FindSymbol(string name)
@@ -335,6 +391,23 @@ namespace Compiler.CodeGeneration.Artifacts
             bool IScopeContext.EmitSetForSymbol(ISymbol symbol)
             {
                 return false;
+            }
+
+            private sealed class NarrowingDirective
+            {
+                public Variable Variable { get; }
+
+                public CobType Type { get; set; }
+
+
+                public bool Committed { get; set; }
+
+                public NarrowingDirective(Variable variable, CobType type)
+                {
+                    Variable = variable;
+                    Type = type;
+                    Committed = false;
+                }
             }
         }
     }

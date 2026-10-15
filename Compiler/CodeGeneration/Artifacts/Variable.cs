@@ -1,6 +1,5 @@
 ﻿using System.Buffers;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using Compiler.Lexer;
 
 namespace Compiler.CodeGeneration.Artifacts
@@ -486,12 +485,12 @@ namespace Compiler.CodeGeneration.Artifacts
         // TODO This should probably be moved elsewhere
         public CobType ToImpliedType(Compiler compiler)
         {
-            if (Type is eCobType.Signed or eCobType.Unsigned or eCobType.Real
-            &&  Size is SizeUnadorned or SizePlatformSpecified)
-            {
-                var minSize = ArtifactFactory.ResolveMinimumBusWidthForSpecifiedArchitectures(compiler.ArtifactDirectives);
-                return new CobType(Type, minSize);
-            }
+            //if (Type is eCobType.Signed or eCobType.Unsigned or eCobType.Real
+            //&&  Size is SizeUnadorned or SizePlatformSpecified)
+            //{
+            //    var minSize = ArtifactFactory.ResolveMinimumBusWidthForSpecifiedArchitectures(compiler.ArtifactDirectives);
+            //    return new CobType(Type, minSize);
+            //}
 
             return this;
         }
