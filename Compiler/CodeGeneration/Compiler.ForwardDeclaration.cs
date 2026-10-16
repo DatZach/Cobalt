@@ -393,19 +393,18 @@ namespace Compiler.CodeGeneration
             if (phase != DeclPhase.Functions)
                 return Unit.Value;
 
-            //var parameters = new List<Function.Parameter>(expression.Parameters.Count);
-            //foreach (var x in expression.Parameters)
-            //{
-            //    var typeName = CobType.FromString(x.TypeName, CurrentContext);
-            //    if (x.TypeName.StartsWith('(')) // HACK Tuple Signature
-            //        typeName = 
-            //}
-
             var parameters = expression.Parameters.Select(
                 x => new Function.Parameter(x.Name, CobType.FromTypeName(x.TypeName, CurrentContext), x.IsSpread, x.DefaultValue)
             ).ToList();
 
-            var returnType = CobType.FromTypeName(expression.ReturnTypeName, CurrentContext);
+            // HACK Return Type cannot result This because the function context has not yet been allocated
+            //      Need to find a way to improve this, maybe late binding return types?
+            var returnTypeName = expression.ReturnTypeName;
+            if (returnTypeName != null
+            &&  returnTypeName.Type == eTypeName.Identifier && returnTypeName.Identifier == "This")
+                returnTypeName = new TypeName { Type = eTypeName.Identifier, Identifier = expression.Name };
+
+            var returnType = CobType.FromTypeName(returnTypeName, CurrentContext);
 
             if (CurrentContext is TraitType traitType)
             {

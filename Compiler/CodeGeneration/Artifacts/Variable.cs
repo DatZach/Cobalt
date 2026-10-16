@@ -185,7 +185,6 @@ namespace Compiler.CodeGeneration.Artifacts
         public readonly static CobType Nil = new(eCobType.Nil, name: "nil");
         public readonly static CobType Generic = new(eCobType.Generic, name: null);
         public static CobType String => Intrinsics.StringType;
-        //public static CobType String => stringType ??= new (eCobType.Tuple, tag: Intrinsics.Lens.FindConcretizedRecord(U8) ?? throw new ArgumentNullException(), name: "string"); private static CobType? stringType;
 
         public const int SizeUnadorned = -1;
         public const int SizePlatformSpecified = -2;
@@ -271,12 +270,10 @@ namespace Compiler.CodeGeneration.Artifacts
             if (typeName.Type == eTypeName.Identifier)
             {
                 var ident = typeName.Identifier!;
-                //if (ident.Length >= 2 && ident[0] == 's' && char.IsDigit(ident[1]))
-                //    type = new CobType(eCobType.Signed, int.Parse(ident[1..]));
-                //else if (ident.Length >= 2 && ident[0] == 'u' && char.IsDigit(ident[1]))
-                //    type = new CobType(eCobType.Unsigned, int.Parse(ident[1..]));
-                //else if (ident.Length >= 2 &&  ident[0] == 'f' && char.IsDigit(ident[1]))
-                //    type = new CobType(eCobType.Real, int.Parse(ident[1..]));
+
+                if (ident == "This" && context != null)
+                    ident = context.Name;
+
                 if (ident == "any")
                     type = Any;
                 else if (ident == "bool")
