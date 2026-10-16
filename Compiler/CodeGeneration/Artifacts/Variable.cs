@@ -161,7 +161,7 @@ namespace Compiler.CodeGeneration.Artifacts
         void RebindType(CobType type);
     }
 
-    internal sealed record CobType : ISymbol
+    internal sealed class CobType : ISymbol, IEquatable<CobType>
     {
         public readonly static CobType None = new(eCobType.None, name: null);
         public readonly static CobType Any = new(eCobType.Any, name: "any");
@@ -236,9 +236,42 @@ namespace Compiler.CodeGeneration.Artifacts
             Tag = tag;
         }
 
+        public bool Equals(CobType? other)
+        {
+            if (other is null)
+                return false;
+            if (ReferenceEquals(this, other))
+                return true;
+
+            if (Type == eCobType.Distinct) // Distinct types must equal by reference
+                return false;
+
+            return Equals(Parent, other.Parent)
+                && Type == other.Type
+                && Size == other.Size
+                && Equals(ElementType, other.ElementType)
+                && Equals(UnionedTypes, other.UnionedTypes)
+                && Equals(Tag, other.Tag);
+        }
+
+        public override bool Equals(object? obj)
+        {
+            return ReferenceEquals(this, obj) || obj is CobType other && Equals(other);
+        }
+
         public override int GetHashCode()
         {
             return HashCode.Combine((int)Type, Size, ElementType, Tag);
+        }
+
+        public static bool operator ==(CobType left, CobType right)
+        {
+            return Equals(left, right);
+        }
+
+        public static bool operator !=(CobType left, CobType right)
+        {
+            return !Equals(left, right);
         }
 
         public static bool operator ==(CobType left, eCobType right)
@@ -731,7 +764,7 @@ namespace Compiler.CodeGeneration.Artifacts
         public CobType Bust(CobType exclusion)
         {
             if (Type != eCobType.Union || UnionedTypes == null)
-                throw new InvalidOperationException();
+                return None; //throw new InvalidOperationException();
 
             var unionedTypes = UnionedTypes.Where(x => x != exclusion).ToList();
             if (unionedTypes.Count == 0)

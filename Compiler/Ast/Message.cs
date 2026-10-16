@@ -315,6 +315,8 @@ namespace Compiler.Ast
 
         public static Def CannotCastType { get; } = new(MessageType.Error, "Cannot cast type '{0}' to '{1}'");
 
+        public static Def IllegalNarrowingConstraints { get; } = new(MessageType.Error, "Cannot satisfy narrowing constraints");
+
         public sealed record Def(
             MessageType Type,
             string Content,

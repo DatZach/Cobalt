@@ -525,19 +525,28 @@ namespace Compiler.CodeGeneration
             conditional.Free();
 
             CurrentFunction.PushBlockScope();
-            scope.CommitNarrowingDirectives(false);
-                expression.Then.Accept(this)?.Free();
+            if (!scope.CommitNarrowingDirectives(false))
+                messages.Add(Message.IllegalNarrowingConstraints, expression.Else);
+
+            expression.Then.Accept(this)?.Free();
+            
             scope.RevertNarrowingDirectives();
             CurrentFunction.PopBlockScope();
+            
             CurrentFunction.Body.Emit(Opcode.Jmp, endLabel);
-
             elseLabel.Mark();
 
-            CurrentFunction.PushBlockScope();
-            scope.CommitNarrowingDirectives(true);
-                expression.Else?.Accept(this)?.Free();
-            scope.RevertNarrowingDirectives();
-            CurrentFunction.PopBlockScope();
+            if (expression.Else != null)
+            {
+                CurrentFunction.PushBlockScope();
+                if (!scope.CommitNarrowingDirectives(true))
+                    messages.Add(Message.IllegalNarrowingConstraints, expression.Else);
+                
+                expression.Else.Accept(this)?.Free();
+                
+                scope.RevertNarrowingDirectives();
+                CurrentFunction.PopBlockScope();
+            }
 
             endLabel.Mark();
 
@@ -1396,7 +1405,7 @@ namespace Compiler.CodeGeneration
                     var labelCaseEnd = CurrentFunction.Body.AllocateLabel();
 
                     var isDefaultBranch = branch.TypeName?.Identifier == "default";
-                    var useDynamicTypeCheck = lhs.Type == eCobType.Union;
+                    var useDynamicTypeCheck = lhs.Type.Type is eCobType.Union or eCobType.Any;
 
                     if (isDefaultBranch)
                     {

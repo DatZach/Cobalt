@@ -133,7 +133,8 @@ namespace Compiler.CodeGeneration.Artifacts
             if (blockScopeStack.Count == 0)
                 return;
 
-            blockScopeStack.Peek().AddNarrowingDirective(operand, type);
+            var scope = blockScopeStack.Peek();
+            scope.AddNarrowingDirective(operand, type);
         }
 
         public Variable AllocateLocal(string name, CobType type, bool mutable)
@@ -332,7 +333,7 @@ namespace Compiler.CodeGeneration.Artifacts
                 return locals.GetValueOrDefault(name);
             }
 
-            public void CommitNarrowingDirectives(bool invert)
+            public bool CommitNarrowingDirectives(bool invert)
             {
                 foreach (var narrow in narrows)
                 {
@@ -343,10 +344,16 @@ namespace Compiler.CodeGeneration.Artifacts
                     var newType = narrow.Type;
                     if (invert)
                         newType = oldType.Bust(newType);
+
+                    if (newType == eCobType.None)
+                        return false;
+
                     ((ILateTypeBinding)narrow.Variable).RebindType(newType);
                     narrow.Type = oldType;
                     narrow.Committed = true;
                 }
+
+                return true;
             }
 
             public void RevertNarrowingDirectives()
@@ -372,8 +379,10 @@ namespace Compiler.CodeGeneration.Artifacts
                     target = parent.Locals[(int)operand.Value];
                 else if (operand.Type == OperandType.Global)
                     target = parent.compiler.Globals[(int)operand.Value];
+                else if (operand.Type == OperandType.Argument)
+                    target = parent.Parameters[(int)operand.Value];
                 else
-                    return;
+                    throw new NotImplementedException();//return;
 
                 narrows.Add(new NarrowingDirective(target, type));
             }
