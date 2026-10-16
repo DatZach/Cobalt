@@ -220,7 +220,7 @@ namespace Compiler.CodeGeneration
 
             // type Sub = Super;
             var superType = CobType.FromTypeName(expression.SuperTypeName, CurrentModule);
-            CurrentModule.AllocateDistinctType(expression.SubTypeName, superType);
+            CurrentModule.AllocateDistinctType(expression.SubTypeName, superType, expression.RefinementExpression);
 
             return Unit.Value;
         }

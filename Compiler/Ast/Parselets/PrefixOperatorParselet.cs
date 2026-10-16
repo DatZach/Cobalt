@@ -21,6 +21,16 @@ namespace Compiler.Ast.Parselets
                 var right = parser.ParseExpression(precedence, allowEmpty: true);
                 return new BinaryOperatorExpression(token, empty, right);
             }
+            else if (token.Type == TokenType.Dot)
+            {
+                if (parser.Match(TokenType.Identifier))
+                {
+                    var right = parser.ParseExpression(precedence);
+                    return new PrefixOperatorExpression(token, right);
+                }
+                else
+                    return new IdentifierExpression(token);
+            }
             else
             {
                 var right = parser.ParseExpression(precedence);

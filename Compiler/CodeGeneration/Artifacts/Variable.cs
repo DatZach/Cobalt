@@ -1,5 +1,6 @@
 ﻿using System.Buffers;
 using System.Diagnostics;
+using Compiler.Ast.Expressions;
 using Compiler.Lexer;
 
 namespace Compiler.CodeGeneration.Artifacts
@@ -211,6 +212,8 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public FunctionCandidates? TagFunctionCandidates => Tag as FunctionCandidates;
 
+        public Expression? Refinement { get; }
+
         CobType ISymbol.Type => this;
 
         bool ISymbol.Mutable => false;
@@ -224,7 +227,8 @@ namespace Compiler.CodeGeneration.Artifacts
             IReadOnlyList<CobType>? unionedTypes = null,
             CobType? parent = null,
             string? name = null,
-            object? tag = null
+            object? tag = null,
+            Expression? refinement = null
         ) {
             Parent = parent;
             Name = name;
@@ -234,8 +238,13 @@ namespace Compiler.CodeGeneration.Artifacts
             ElementType = elementType;
             UnionedTypes = unionedTypes;
             Tag = tag;
+            Refinement = refinement;
         }
 
+        public static bool operator ==(CobType? left, eCobType right) => !ReferenceEquals(left, null) && left.Type == right;
+        public static bool operator !=(CobType? left, eCobType right) => ReferenceEquals(left, null) || left.Type != right;
+        public static bool operator ==(CobType left, CobType right) => Equals(left, right);
+        public static bool operator !=(CobType left, CobType right) => !Equals(left, right);
         public bool Equals(CobType? other)
         {
             if (other is null)
@@ -262,34 +271,6 @@ namespace Compiler.CodeGeneration.Artifacts
         public override int GetHashCode()
         {
             return HashCode.Combine((int)Type, Size, ElementType, Tag);
-        }
-
-        public static bool operator ==(CobType left, CobType right)
-        {
-            return Equals(left, right);
-        }
-
-        public static bool operator !=(CobType left, CobType right)
-        {
-            return !Equals(left, right);
-        }
-
-        public static bool operator ==(CobType left, eCobType right)
-        {
-            return EqualsType(left, right);
-        }
-
-        public static bool operator !=(CobType left, eCobType right)
-        {
-            return !EqualsType(left, right);
-        }
-
-        private static bool EqualsType(CobType left, eCobType right)
-        {
-            if (left == null)
-                return false;
-
-            return left.Type == right;
         }
 
         // TODO Return CobType? and have consumers check if null for proper error reporting

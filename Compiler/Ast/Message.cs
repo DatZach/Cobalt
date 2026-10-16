@@ -317,6 +317,10 @@ namespace Compiler.Ast
 
         public static Def IllegalNarrowingConstraints { get; } = new(MessageType.Error, "Cannot satisfy narrowing constraints");
 
+        public static Def RefinementMustResolveToBoolean { get; } = new(MessageType.Error, "Refinment expression must result in a boolean");
+
+        public static Def RefinementViolated { get; } = new(MessageType.Error, "Refinement is violated");
+
         public sealed record Def(
             MessageType Type,
             string Content,

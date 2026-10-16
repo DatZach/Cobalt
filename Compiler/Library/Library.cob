@@ -13,6 +13,7 @@ error {
     Infinity,
 
     Panic,
+    RefinementViolation,
     DivideByZero,
     Overflow,
     OutOfBounds

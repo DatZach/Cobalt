@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using Compiler.Ast.Expressions;
 using Compiler.Lexer;
 
 namespace Compiler.CodeGeneration.Artifacts
@@ -90,13 +91,14 @@ namespace Compiler.CodeGeneration.Artifacts
         }
 
         // TODO Find a better name...
-        public CobType AllocateDistinctType(string subTypeName, CobType superType)
+        public CobType AllocateDistinctType(string subTypeName, CobType superType, Expression? refinementExpression)
         {
             var subType = new CobType(
                 eCobType.Distinct,
                 parent: superType,
                 name: subTypeName,
-                tag: superType.Tag // TODO EHh?? Probably not strictly correct
+                tag: superType.Tag, // TODO EHh?? Probably not strictly correct
+                refinement: refinementExpression
             );
             distinctTypes.Add(subType);
             compiler.Types.Add(subType);

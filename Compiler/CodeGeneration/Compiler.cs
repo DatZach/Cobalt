@@ -43,7 +43,7 @@ namespace Compiler.CodeGeneration
 
         public Function CurrentFunction => contextStack.OfType<Function>().First();
 
-        private Expression? implicitContext;
+        private Storage? implicitContext;
         private IScopeContext? forTempBlockScope;
 
         private readonly List<GenericTypeAstReference> genericTypeAstReferences;
@@ -1068,7 +1068,7 @@ namespace Compiler.CodeGeneration
                         concreteTypeAstReferences.Add(new ConcreteTypeAstReference(recordType.HACK_PendingSuperType, recordType));
                 }
 
-                implicitContext = expression.Left;
+                implicitContext = lhs;//expression.Left;
                 contextStack.Push(context);
 
                 var rhs = expression.Right.Accept(this);
@@ -1287,11 +1287,12 @@ namespace Compiler.CodeGeneration
                     return null;
                 }
 
-                var prevAsnSrc = AssignmentRHS;
-                AssignmentRHS = null;
-                var lhs = implicitContext.Accept(this);
-                AssignmentRHS = prevAsnSrc;
+                //var prevAsnSrc = AssignmentRHS;
+                //AssignmentRHS = null;
+                //var lhs = implicitContext.Accept(this);
+                //AssignmentRHS = prevAsnSrc;
                 var prevBinOpLHS = BinOpLHS;
+                var lhs = implicitContext;
                 BinOpLHS = lhs;
 
                 contextStack.Push((IScopeContext)lhs!.Type.Tag!);
@@ -1578,7 +1579,7 @@ namespace Compiler.CodeGeneration
             };
 
             // NOTE The outer call expression handles function calls and tuple ctors
-            if (function != null || dstStorage.Type.Tag is RecordType)// && !function.IsCasting)
+            if (function != null || dstStorage.Type == eCobType.Tuple)// && !function.IsCasting)
             {
                 arguments.ForEach(x => x.Free());
                 dstStorage.Free();
@@ -1601,7 +1602,7 @@ namespace Compiler.CodeGeneration
                 return source; // NOTE Non-null return prevents superfluous errors from being raised
             }
 
-            var target = EmitCast(source, dstType);
+            var target = EmitCast(source, dstType, expression);
             return target;
 
 
@@ -1795,7 +1796,7 @@ namespace Compiler.CodeGeneration
                     && !CobType.IsImplicitCastable(parameter.Type, argument.Type, argument.Operand.Value))
                         messages.Add(Message.IllegalAssignmentTypeMismatch, expression, argument.Type, parameter.Type);
                     
-                    argument = EmitCast(argument, parameter.Type);
+                    argument = EmitCast(argument, parameter.Type, null);
                 }
 
                 // TODO HACK Resolve function candidates to matching signature
@@ -1834,6 +1835,9 @@ namespace Compiler.CodeGeneration
         public Storage? Visit(IdentifierExpression expression)
         {
             var inAssignment = AssignmentRHS != null;
+
+            if (implicitContext != null && expression.Value == "." && !inAssignment)
+                return implicitContext;//.Accept(this);
 
             foreach (var scope in contextStack)
             {
@@ -2309,7 +2313,8 @@ namespace Compiler.CodeGeneration
         }
 
         // NOTE Takes ownership of source; discards if needed
-        private Storage EmitCast(Storage source, CobType dstType)
+        // TODO Expression? expression is super weird here
+        private Storage EmitCast(Storage source, CobType dstType, Expression? expression)
         {
             var srcType = source.Type;
             if (srcType == dstType)
@@ -2343,6 +2348,71 @@ namespace Compiler.CodeGeneration
                 }
             }
 
+            // REFINEMENTS
+            if (dstType.Refinement != null)
+            {
+                if (source.Operand.Type.IsImmediate() && IsCompileTimeResolvable(dstType.Refinement))
+                {
+                    // TODO Could probably merge this into a common function for AOT eval
+                    var function = new Function(
+                        "$aot_eval$",
+                        CurrentModule,
+                        this,
+                        CallingConvention.CCall,
+                        Array.Empty<Function.Parameter>(),
+                        CobType.None
+                    );
+
+                    contextStack.Push(function);
+
+                    var prevImplicitContext = implicitContext;
+                    implicitContext = source;
+
+                    ++conditionalStack;
+                    var evalStorage = dstType.Refinement.Accept(this);
+                    --conditionalStack;
+
+                    implicitContext = prevImplicitContext;
+
+                    if (evalStorage == null || evalStorage.Type != eCobType.Boolean)
+                        messages.Add(Message.RefinementMustResolveToBoolean, dstType.Refinement);
+
+                    function.ReturnType = evalStorage.Type;
+                    CurrentFunction.Body.Emit(Opcode.Return, evalStorage.Operand);
+                    evalStorage.Free();
+
+                    function.ReturnLabel.Mark();
+            
+                    contextStack.Pop();
+
+                    using var vm = new VirtualMachine(artifact);
+                    var result = vm.ExecuteFunction(function);
+
+                    if (result == null || result.IntValue != 1)
+                        messages.Add(Message.RefinementViolated, expression);
+                }
+                else
+                {
+                    var prevImplicitContext = implicitContext;
+                    implicitContext = source;
+
+                    ++conditionalStack;
+                    var result = dstType.Refinement.Accept(this);
+                    --conditionalStack;
+
+                    if (result == null || result.Type != eCobType.Boolean)
+                        messages.Add(Message.RefinementMustResolveToBoolean, dstType.Refinement);
+
+                    var labelLegal = CurrentFunction.Body.AllocateLabel();
+                    CurrentFunction.Body.Emit(Opcode.JmpT, result.Operand, labelLegal);
+                    CurrentFunction.Body.Emit(Opcode.PanicOnErr, Operand.Global(Globals.IndexOf(Globals.First(x => x.Type == eCobType.Error && x.Name == "RefinementViolation"))));
+                    labelLegal.Mark();
+                    result.Free();
+
+                    implicitContext = prevImplicitContext;
+                }
+            }
+
             return new Storage(source, dstType);
         }
 
@@ -2355,6 +2425,16 @@ namespace Compiler.CodeGeneration
             }
 
             return !string.IsNullOrEmpty(name) && char.IsUpper(name[0]);
+        }
+
+        public static bool IsCompileTimeResolvable(Expression expression)
+        {
+            // TODO Not an exhaustive heuristic
+            return expression is BinaryOperatorExpression boe
+                && boe.Operator is TokenType.Equals or TokenType.NotEquals
+                                or TokenType.LessThan or TokenType.LessThanOrEquals
+                                or TokenType.MoreThan or TokenType.MoreThanOrEquals
+                                or TokenType.ConditionalAnd or TokenType.ConditionalOr;
         }
 
         public static Artifact Compile(ScriptExpression ast, MessageCollection messages)

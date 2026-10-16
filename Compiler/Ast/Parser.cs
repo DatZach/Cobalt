@@ -1,8 +1,10 @@
-﻿using System.Diagnostics;
-using System.Runtime.CompilerServices;
-using Compiler.Ast.Expressions;
+﻿using Compiler.Ast.Expressions;
+using Compiler.Ast.Expressions.Statements;
 using Compiler.CodeGeneration.Artifacts;
 using Compiler.Lexer;
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
+using Compiler.Ast.Parselets.Statements;
 
 namespace Compiler.Ast
 {
@@ -21,6 +23,8 @@ namespace Compiler.Ast
             this.tokens = tokens ?? throw new ArgumentNullException(nameof(tokens));
             Messages = messages ?? throw new ArgumentNullException(nameof(messages));
         }
+
+        // TODO Parse<T>, type validation on resulting T throws message ExpectedExpressionOfTypeT
 
         public Expression ParseExpression(int precedence = 0, bool isConditional = false, bool allowEmpty = false)
         {
@@ -227,7 +231,7 @@ namespace Compiler.Ast
             }
             else if (Match(TokenType.LeftBrace))
             {
-                throw new NotImplementedException();
+                throw new InvalidOperationException();
             }
             else if (Match(TokenType.Error)) // Unary !
                 type = eTypeName.None;
@@ -281,6 +285,7 @@ namespace Compiler.Ast
             };
         }
 
+        // TODO Replace with bool MatchAndTake(TokenType type) + bool MatchAndTake(TokenType type, out Token value)
         public Token? MatchAndTakeToken(TokenType type)
         {
             var token = Peek();
