@@ -28,8 +28,7 @@ function string(int value, int radix = 10) string {
 }
 
 // TODO Move to another file
-// TODO int
-function int_(string value, int radix = 10) int {
+function int(string value, int radix = 10) int {
     if (value.Length == 0)
         return 0;
     

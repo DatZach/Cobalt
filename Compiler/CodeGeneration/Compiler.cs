@@ -23,6 +23,8 @@ namespace Compiler.CodeGeneration
 
         public List<RecordType> RecordTypes => artifact.RecordTypes;
 
+        public List<CobType> Types => artifact.Types;
+
         public List<Function> Functions => artifact.Functions;
 
         public List<Variable> Globals => artifact.Globals;
@@ -1364,6 +1366,7 @@ namespace Compiler.CodeGeneration
                 );
 
                 // Narrowing
+                // TODO Nested narrowing scopes might not actually work as expected, keep track in Compiler instead?
                 if (conditionalStack > 0)
                     CurrentFunction.AddNarrowingDirective(lhs.Operand, type);
 

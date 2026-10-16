@@ -99,6 +99,7 @@ namespace Compiler.CodeGeneration.Artifacts
                 tag: superType.Tag // TODO EHh?? Probably not strictly correct
             );
             distinctTypes.Add(subType);
+            compiler.Types.Add(subType);
 
             return subType;
         }
@@ -178,6 +179,7 @@ namespace Compiler.CodeGeneration.Artifacts
             if ((type = FindDistinctType(name)) != null)
                 return type;
 
+            // TODO Remove the try..catch
             try
             {
                 if ((type = CobType.FromTypeName(new TypeName { Identifier = name, Type = eTypeName.Identifier },

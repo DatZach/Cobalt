@@ -184,7 +184,8 @@ namespace Compiler.CodeGeneration.Artifacts
         public readonly static CobType Error = new(eCobType.Error, name: "error");
         public readonly static CobType Nil = new(eCobType.Nil, name: "nil");
         public readonly static CobType Generic = new(eCobType.Generic, name: null);
-        public static CobType String => stringType ??= new (eCobType.Tuple, tag: Intrinsics.Lens.FindConcretizedRecord(U8) ?? throw new ArgumentNullException(), name: "string"); private static CobType? stringType;
+        public static CobType String => Intrinsics.StringType;
+        //public static CobType String => stringType ??= new (eCobType.Tuple, tag: Intrinsics.Lens.FindConcretizedRecord(U8) ?? throw new ArgumentNullException(), name: "string"); private static CobType? stringType;
 
         public const int SizeUnadorned = -1;
         public const int SizePlatformSpecified = -2;
@@ -599,9 +600,8 @@ namespace Compiler.CodeGeneration.Artifacts
                         result |= ((uint)artifact.Modules.IndexOf((Module)type.Tag!) & 0xFFFFFF) << i; i += 12;
                         break;
                     case eCobType.Distinct:
-                        // TODO Collapse Struct, Tuple types into Distinct like this
                         // ArtifactIndex = SSSS SSSS SSSS
-                        result |= ((uint)artifact.RecordTypes.IndexOf((RecordType)type.Tag!) & 0xFFFFFF) << i; i += 12;
+                        result |= ((uint)artifact.Types.IndexOf(type) & 0xFFFFFF) << i; i += 12;
                         break;
                     default:
                         throw new ArgumentOutOfRangeException();
@@ -721,11 +721,9 @@ namespace Compiler.CodeGeneration.Artifacts
                     }
                     case eCobType.Distinct:
                     {
-                        // TODO Collapse Struct, Tuple types into Distinct like this
                         // ArtifactIndex = SSSS SSSS SSSS
                         var idx = (int)((ulong)(value >> i) & 0xFFFFFF); i += 12;
-                        var tag = artifact.RecordTypes[idx];
-                        return new CobType(type, tag: tag);
+                        return artifact.Types[idx];
                     }
                     default:
                         throw new ArgumentOutOfRangeException();
@@ -781,6 +779,8 @@ namespace Compiler.CodeGeneration.Artifacts
                 return Bust(Error).ToString() + '!';
             if (HasNilFlag)
                 return Bust(Nil).ToString() + '?';
+            if (Name != null)
+                return Name;
 
             switch (Type)
             {
@@ -813,7 +813,7 @@ namespace Compiler.CodeGeneration.Artifacts
                     return Tag?.ToString() ?? $"(NULL {Type.ToString()})";
 
                 case eCobType.Distinct:
-                    return Name ?? "(distinct)";
+                    return "(distinct)";
 
                 case eCobType.None:
                     return "(none)";
