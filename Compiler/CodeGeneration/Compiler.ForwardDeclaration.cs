@@ -220,7 +220,38 @@ namespace Compiler.CodeGeneration
 
             // type Sub = Super;
             var superType = CobType.FromTypeName(expression.SuperTypeName, CurrentModule);
-            CurrentModule.AllocateDistinctType(expression.SubTypeName, superType, expression.RefinementExpression);
+
+            // TODO Not strictly correct to put the tag of the super type on the sub type
+            var tag = superType.Tag;
+            if (expression.RefinementExpression is EnumRefinementDeclStatement)
+                tag = new EnumRefinement(expression.SubTypeName, CurrentContext, compiler);
+            
+            var subType = CurrentModule.AllocateDistinctType(
+                expression.SubTypeName,
+                superType,
+                tag,
+                expression.RefinementExpression
+            );
+
+            if (tag is EnumRefinement enumRefinement
+            &&  expression.RefinementExpression is EnumRefinementDeclStatement enumRefinementStatement)
+            {
+                ((ILateTypeBinding)enumRefinement).RebindType(subType);
+                for (var i = 0; i < enumRefinementStatement.Members.Count; i++)
+                {
+                    var member = enumRefinementStatement.Members[i];
+                    enumRefinement.AllocateMember(member.Name, i);
+                }
+            }
+
+
+            return Unit.Value;
+        }
+
+        public Unit Visit(EnumRefinementDeclStatement expression)
+        {
+            if (phase != DeclPhase.Types)
+                return Unit.Value;
 
             return Unit.Value;
         }

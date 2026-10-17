@@ -443,7 +443,7 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public Function? ResolveSingle(IReadOnlyList<CobType>? arguments)
         {
-            return candidates.SingleOrDefault(x =>
+            var list = candidates.Where(x =>
             {
                 if (arguments == null)
                     return true;
@@ -481,7 +481,8 @@ namespace Compiler.CodeGeneration.Artifacts
                 }
 
                 return true;
-            });
+            }).ToList();
+            return list.Count != 1 ? null : list[0];
         }
 
         CobType ISymbol.Type => CobType.Function;

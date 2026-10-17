@@ -2,6 +2,10 @@
 
 namespace Compiler.Lexer
 {
+    // TODO Token(Type, int Position, int Length)
+    // TODO List<int> LinePositions; BinarySearch to find line index, column = token.Position - lineIdx
+    // TODO int FileId
+    // TODO Value as property, lazy cache backing field
     internal sealed record Token(
         TokenType Type,
         string Value,

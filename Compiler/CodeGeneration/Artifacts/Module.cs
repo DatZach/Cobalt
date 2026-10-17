@@ -91,14 +91,15 @@ namespace Compiler.CodeGeneration.Artifacts
         }
 
         // TODO Find a better name...
-        public CobType AllocateDistinctType(string subTypeName, CobType superType, Expression? refinementExpression)
+        public CobType AllocateDistinctType(string name, CobType superType, object? tag, Expression? refinement)
         {
+            // TODO EHh?? Probably not strictly correct
             var subType = new CobType(
                 eCobType.Distinct,
+                name: name,
                 parent: superType,
-                name: subTypeName,
-                tag: superType.Tag, // TODO EHh?? Probably not strictly correct
-                refinement: refinementExpression
+                tag: tag,
+                refinement: refinement
             );
             distinctTypes.Add(subType);
             compiler.Types.Add(subType);

@@ -132,6 +132,11 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
+        public Storage? Visit(EnumRefinementDeclStatement expression)
+        {
+            return null;
+        }
+
         public Storage? Visit(TraitStatement expression)
         {
             return null;
@@ -1287,10 +1292,6 @@ namespace Compiler.CodeGeneration
                     return null;
                 }
 
-                //var prevAsnSrc = AssignmentRHS;
-                //AssignmentRHS = null;
-                //var lhs = implicitContext.Accept(this);
-                //AssignmentRHS = prevAsnSrc;
                 var prevBinOpLHS = BinOpLHS;
                 var lhs = implicitContext;
                 BinOpLHS = lhs;
@@ -2632,4 +2633,92 @@ namespace Compiler.CodeGeneration
     }
 
     internal sealed record LoopContext(string? Tag, Label Continue, Label Break);
+
+    internal sealed class EnumRefinement : IScopeContext, ILateTypeBinding
+    {
+        public string Name { get; }
+
+        public IScopeContext? Parent { get; }
+
+        public CobType ThisType { get; private set; }
+
+        private readonly List<Member> members;
+
+        private readonly Compiler compiler;
+
+        public EnumRefinement(
+            string name,
+            IScopeContext parent,
+            Compiler compiler
+        ) {
+            Name = name;
+            Parent = parent;
+
+            members = new List<Member>();
+
+            this.compiler = compiler;
+        }
+
+        public void AllocateMember(string name, int value)
+        {
+            members.Add(new Member(name, value, this));
+        }
+
+        public Member? FindMember(string name)
+        {
+            return members.FirstOrDefault(x => x.Name == name);
+        }
+
+        public ISymbol? FindSymbol(string name)
+        {
+            Member? member;
+            if ((member = FindMember(name)) != null)
+                return member;
+
+            return null;
+        }
+
+        public Storage? EmitGetForSymbol(ISymbol symbol)
+        {
+            if (symbol is Member member)
+                return new Storage(ThisType, Operand.ImmediateSigned(member.Value));
+
+            return null;
+        }
+
+        public bool EmitSetForSymbol(ISymbol symbol)
+        {
+            return false;
+        }
+
+        void ILateTypeBinding.RebindType(CobType type)
+        {
+            if (ThisType != null!)
+                throw new InvalidOperationException();
+
+            ThisType = type;
+        }
+
+        public sealed class Member : ISymbol
+        {
+            public string Name { get; }
+
+            public int Value { get; }
+
+            public CobType Type => parent.ThisType;
+
+            public bool Mutable => false;
+
+            private readonly EnumRefinement parent;
+
+            public Member(string name, int value, EnumRefinement parent)
+            {
+                Name = name;
+                Value = value;
+                this.parent = parent;
+            }
+
+            public bool IsVisibleTo(IScopeContext context) => true;
+        }
+    }
 }

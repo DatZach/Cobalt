@@ -17,11 +17,37 @@ namespace Compiler.Ast.Parselets.Statements
                 typeName = TypeName.Any;
             }
 
-            var refinementExpression = parser.MatchAndTakeToken(TokenType.Colon) != null
-                                     ? parser.ParseExpression()
-                                     : null;
+            Expression? refinementExpression;
+            if (parser.MatchAndTakeToken(TokenType.Colon) != null)
+            {
+                if (parser.Match(TokenType.LeftBrace))
+                    refinementExpression = ParseEnumExpression(parser);
+                else
+                    refinementExpression = parser.ParseExpression();
+            }
+            else
+                refinementExpression = null;
 
             return new TypeDeclStatement(token, name.Value, typeName, refinementExpression);
+        }
+
+        private static Expression ParseEnumExpression(Parser parser)
+        {
+            var members = new List<EnumRefinementDeclStatement.EnumMember>();
+
+            var token = parser.Take(TokenType.LeftBrace);
+            while (parser.MatchAndTakeToken(TokenType.RightBrace) == null)
+            {
+                var name = parser.Take(TokenType.Identifier).Value;
+                var value = parser.MatchAndTakeToken(TokenType.Assign) != null
+                          ? parser.ParseExpression()
+                          : null;
+                members.Add(new EnumRefinementDeclStatement.EnumMember(name, value));
+
+                parser.MatchAndTakeToken(TokenType.Comma);
+            }
+
+            return new EnumRefinementDeclStatement(token, members);
         }
     }
 }
