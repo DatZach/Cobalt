@@ -44,6 +44,9 @@ namespace Compiler.Ast.Expressions.Statements
             return visitor.Visit(this);
         }
 
-        public sealed record EnumMember(string Name, Expression? Value);
+        public sealed record EnumMember(Token Token, Expression? Value)
+        {
+            public string Name => Token.Value;
+        }
     }
 }

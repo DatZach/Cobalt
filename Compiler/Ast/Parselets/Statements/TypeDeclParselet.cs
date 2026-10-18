@@ -38,7 +38,7 @@ namespace Compiler.Ast.Parselets.Statements
             var token = parser.Take(TokenType.LeftBrace);
             while (parser.MatchAndTakeToken(TokenType.RightBrace) == null)
             {
-                var name = parser.Take(TokenType.Identifier).Value;
+                var name = parser.Take(TokenType.Identifier);
                 var value = parser.MatchAndTakeToken(TokenType.Assign) != null
                           ? parser.ParseExpression()
                           : null;

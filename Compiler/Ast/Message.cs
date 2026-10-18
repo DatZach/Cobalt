@@ -321,6 +321,10 @@ namespace Compiler.Ast
 
         public static Def RefinementViolated { get; } = new(MessageType.Error, "Refinement is violated");
 
+        public static Def IllegalEnumRefinementSuperType { get; } = new(MessageType.Error, "Enum Refinement illegal for super-type '{0}'; expected int, uint, or string");
+
+        public static Def ValueOverflow { get; } = new(MessageType.Error, "Value would overflow type");
+
         public sealed record Def(
             MessageType Type,
             string Content,

@@ -1,10 +1,12 @@
-﻿using Compiler.Ast;
+﻿using System.Runtime.InteropServices;
+using Compiler.Ast;
 using Compiler.Ast.Expressions;
 using Compiler.Ast.Expressions.Statements;
 using Compiler.Ast.Visitors;
 using Compiler.CodeGeneration.Artifacts;
 using Compiler.Lexer;
 using Compiler.Utility;
+using CallingConvention = Compiler.CodeGeneration.Artifacts.CallingConvention;
 
 namespace Compiler.CodeGeneration
 {
@@ -233,14 +235,67 @@ namespace Compiler.CodeGeneration
                 expression.RefinementExpression
             );
 
+            // TODO Split into a different function?
             if (tag is EnumRefinement enumRefinement
             &&  expression.RefinementExpression is EnumRefinementDeclStatement enumRefinementStatement)
             {
-                ((ILateTypeBinding)enumRefinement).RebindType(subType);
-                for (var i = 0; i < enumRefinementStatement.Members.Count; i++)
+                var stringType = compiler.RootModule.FindDistinctType("string"); // HACK 1st Pass Intrinsics not yet evaluated
+                if (!CobType.IsImplicitCastable(CobType.Int, superType) && !CobType.IsImplicitCastable(stringType, superType))
+                    messages.Add(Message.IllegalEnumRefinementSuperType, expression, superType);
+                else
                 {
-                    var member = enumRefinementStatement.Members[i];
-                    enumRefinement.AllocateMember(member.Name, i);
+                    ((ILateTypeBinding)enumRefinement).RebindType(subType);
+
+                    long value = 0;
+                    int mode = 0; // 0 integer, 1 bitflag
+                    foreach (var member in enumRefinementStatement.Members)
+                    {
+                        if (member.Name != "_" && enumRefinement.FindMember(member.Name) != null)
+                        {
+                            messages.Add(Message.SymbolConflictsWithOther, member.Token, member.Name);
+                            continue;
+                        }
+
+                        string memberName = member.Name;
+                        object memberValue;
+                        if (superType == stringType)
+                        {
+                            if (member.Value is StringLiteralExpression sle)
+                                memberValue = sle.Value;
+                            else if (member.Value is null)
+                                memberValue = memberName;
+                            else
+                            {
+                                messages.Add(Message.TypeMismatch, member.Value, superType, member.Value.Token);
+                                memberValue = "";
+                            }
+                        }
+                        else
+                        {
+                            if (member.Value is NumberLiteralExpression nle)
+                            {
+                                value = nle.LongValue;
+                                mode = nle.Token.Value.StartsWith("0b") || nle.Token.Value.StartsWith("0x") ? 1 : 0;
+                            }
+                            else if (member.Value is not null)
+                                messages.Add(Message.TypeMismatch, member.Value, superType, member.Value.Token);
+
+                            if (!CobType.IsIntegerTypeCapableOfStoringValueWithoutTruncation(superType, CobType.Int, value))
+                                messages.Add(Message.ValueOverflow, member.Token);
+
+                            memberValue = value;
+
+                            if (mode == 0)
+                                ++value;
+                            else if (mode == 1)
+                                value = value == 0 ? 1 : value << 1;
+                            else
+                                throw new InvalidOperationException();
+                        }
+
+                        if (memberName != "_")
+                            enumRefinement.AllocateMember(memberName, memberValue);
+                    }
                 }
             }
 

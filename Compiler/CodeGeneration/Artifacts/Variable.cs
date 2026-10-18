@@ -863,6 +863,12 @@ namespace Compiler.CodeGeneration.Artifacts
                 if (x == dstType)
                     return true;
 
+                // HACK Handle implicit casts between number types
+                if (dstType.Type is eCobType.Unsigned or eCobType.Signed or eCobType.Real
+                &&  x.Type is eCobType.Unsigned or eCobType.Signed or eCobType.Real
+                &&  IsImplicitCastable(dstType, x, srcValue))
+                    return true;
+
                 x = x.Parent;
             }
 
@@ -1090,9 +1096,11 @@ namespace Compiler.CodeGeneration.Artifacts
                 case TokenType.BitAndAssign:
                 case TokenType.BitOrAssign:
                 case TokenType.BitXorAssign:
-                    if (lhsType != eCobType.Signed && lhsType != eCobType.Unsigned)
-                        return None;
-                    if (rhsType != eCobType.Signed && rhsType != eCobType.Unsigned)
+                    //if (lhsType != eCobType.Signed && lhsType != eCobType.Unsigned)
+                    //    return None;
+                    //if (rhsType != eCobType.Signed && rhsType != eCobType.Unsigned)
+                    //    return None;
+                    if (!IsExplicitCastable(Int, lhsType) || !IsExplicitCastable(Int, rhsType))
                         return None;
                     return lhsType;
 

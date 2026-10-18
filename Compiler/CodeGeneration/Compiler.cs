@@ -1596,6 +1596,10 @@ namespace Compiler.CodeGeneration
 
             var dstType = dstStorage.Type; // dstType :: int | string | function() This | ...
             var srcType = source.Type;
+
+            // HACK Resolve int() when no user-defined cast function is found...
+            if ((dstType.TagFunction != null || dstType.TagFunctionCandidates != null) && function == null)
+                dstType = CobType.FromTypeName(new TypeName { Type = eTypeName.Identifier, Identifier = "int" }, CurrentContext);
             
             if (!CobType.IsExplicitCastable(dstType, srcType))
             {
@@ -2659,9 +2663,21 @@ namespace Compiler.CodeGeneration
             this.compiler = compiler;
         }
 
-        public void AllocateMember(string name, int value)
+        public void AllocateMember(string name, object value)
         {
-            members.Add(new Member(name, value, this));
+            Operand operand;
+            if (value is long longValue)
+                operand = Operand.Immediate(longValue, ThisType.Parent!);
+            else if (value is string stringValue)
+            {
+                var global = Intrinsics.AllocateStringLiteral(stringValue, compiler);
+                var idx = compiler.Globals.IndexOf(global);
+                operand = Operand.Global(idx);
+            }
+            else
+                throw new InvalidOperationException();
+
+            members.Add(new Member(name, operand, this));
         }
 
         public Member? FindMember(string name)
@@ -2681,7 +2697,7 @@ namespace Compiler.CodeGeneration
         public Storage? EmitGetForSymbol(ISymbol symbol)
         {
             if (symbol is Member member)
-                return new Storage(ThisType, Operand.ImmediateSigned(member.Value));
+                return new Storage(ThisType, member.Value);
 
             return null;
         }
@@ -2703,7 +2719,7 @@ namespace Compiler.CodeGeneration
         {
             public string Name { get; }
 
-            public int Value { get; }
+            public Operand Value { get; }
 
             public CobType Type => parent.ThisType;
 
@@ -2711,7 +2727,7 @@ namespace Compiler.CodeGeneration
 
             private readonly EnumRefinement parent;
 
-            public Member(string name, int value, EnumRefinement parent)
+            public Member(string name, Operand value, EnumRefinement parent)
             {
                 Name = name;
                 Value = value;
