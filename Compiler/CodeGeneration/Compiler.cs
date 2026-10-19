@@ -2077,16 +2077,26 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(StructLiteralExpression expression)
         {
+            //var structTypeStorage = expression.StructTypeExpression.Accept(this);
+            //if (structTypeStorage == null || structTypeStorage.Type != eCobType.Struct
+            //||  structTypeStorage.Type.Tag is not RecordType structType
+            //||  structType.Type != eRecordType.Struct)
+            //{
+            //    messages.Add(Message.CannotInstantiateType, expression.StructTypeExpression, structTypeStorage?.Type);
+            //    return null;
+            //}
+
+            //var cobType = new CobType(eCobType.Struct, tag: structType);
+
             var structTypeStorage = expression.StructTypeExpression.Accept(this);
-            if (structTypeStorage == null || structTypeStorage.Type != eCobType.Struct
-            ||  structTypeStorage.Type.Tag is not RecordType structType
-            ||  structType.Type != eRecordType.Struct)
+            var structType = structTypeStorage?.Type.FirstAncestorWhere(x => x.Type == eCobType.Struct && x.Tag is RecordType);
+            if (structType == null)
             {
                 messages.Add(Message.CannotInstantiateType, expression.StructTypeExpression, structTypeStorage?.Type);
                 return null;
             }
 
-            var cobType = new CobType(eCobType.Struct, tag: structType);
+            var cobType = structTypeStorage.Type;
 
             var storage = CurrentFunction.AllocateRegisterStorage(cobType);
             CurrentFunction.Body.Emit(Opcode.New, storage.Operand, cobType.ToOperand(artifact));
@@ -2095,11 +2105,19 @@ namespace Compiler.CodeGeneration
             {
                 var prevBinOpLHS = BinOpLHS;
                 BinOpLHS = storage;
-                contextStack.Push(structType);
+                contextStack.Push((RecordType)structType.Tag);
                 for (var i = 0; i < expression.Assignments.Count; ++i)
                     expression.Assignments[i].Accept(this);
                 contextStack.Pop();
                 BinOpLHS = prevBinOpLHS;
+            }
+
+            if (cobType.Refinement != null)
+            {
+                var storage2 = CurrentFunction.AllocateRegisterStorage(cobType);
+                CurrentFunction.Body.Emit(Opcode.Move, storage2.Operand, storage.Operand);
+                EnforceRefinment(storage, cobType, expression);
+                storage2.Free();
             }
 
             return storage;
@@ -2354,71 +2372,76 @@ namespace Compiler.CodeGeneration
             }
 
             // REFINEMENTS
-            if (dstType.Refinement != null)
-            {
-                if (source.Operand.Type.IsImmediate() && IsCompileTimeResolvable(dstType.Refinement))
-                {
-                    // TODO Could probably merge this into a common function for AOT eval
-                    var function = new Function(
-                        "$aot_eval$",
-                        CurrentModule,
-                        this,
-                        CallingConvention.CCall,
-                        Array.Empty<Function.Parameter>(),
-                        CobType.None
-                    );
-
-                    contextStack.Push(function);
-
-                    var prevImplicitContext = implicitContext;
-                    implicitContext = source;
-
-                    ++conditionalStack;
-                    var evalStorage = dstType.Refinement.Accept(this);
-                    --conditionalStack;
-
-                    implicitContext = prevImplicitContext;
-
-                    if (evalStorage == null || evalStorage.Type != eCobType.Boolean)
-                        messages.Add(Message.RefinementMustResolveToBoolean, dstType.Refinement);
-
-                    function.ReturnType = evalStorage.Type;
-                    CurrentFunction.Body.Emit(Opcode.Return, evalStorage.Operand);
-                    evalStorage.Free();
-
-                    function.ReturnLabel.Mark();
-            
-                    contextStack.Pop();
-
-                    using var vm = new VirtualMachine(artifact);
-                    var result = vm.ExecuteFunction(function);
-
-                    if (result == null || result.IntValue != 1)
-                        messages.Add(Message.RefinementViolated, expression);
-                }
-                else
-                {
-                    var prevImplicitContext = implicitContext;
-                    implicitContext = source;
-
-                    ++conditionalStack;
-                    var result = dstType.Refinement.Accept(this);
-                    --conditionalStack;
-
-                    if (result == null || result.Type != eCobType.Boolean)
-                        messages.Add(Message.RefinementMustResolveToBoolean, dstType.Refinement);
-
-                    var labelLegal = CurrentFunction.Body.AllocateLabel();
-                    CurrentFunction.Body.Emit(Opcode.JmpT, result.Operand, labelLegal);
-                    CurrentFunction.Body.Emit(Opcode.PanicOnErr, Operand.Global(Globals.IndexOf(Globals.First(x => x.Type == eCobType.Error && x.Name == "RefinementViolation"))));
-                    labelLegal.Mark();
-                    result.Free();
-
-                    implicitContext = prevImplicitContext;
-                }
-            }
+            EnforceRefinment(source, dstType, expression);
 
             return new Storage(source, dstType);
+        }
+
+        private void EnforceRefinment(Storage source, CobType dstType, Expression? expression)
+        {
+            if (dstType.Refinement == null)
+                return;
+
+            if (source.Operand.Type.IsImmediate() && IsCompileTimeResolvable(dstType.Refinement))
+            {
+                // TODO Could probably merge this into a common function for AOT eval
+                var function = new Function(
+                    "$aot_eval$",
+                    CurrentModule,
+                    this,
+                    CallingConvention.CCall,
+                    Array.Empty<Function.Parameter>(),
+                    CobType.None
+                );
+
+                contextStack.Push(function);
+
+                var prevImplicitContext = implicitContext;
+                implicitContext = source;
+
+                ++conditionalStack;
+                var evalStorage = dstType.Refinement.Accept(this);
+                --conditionalStack;
+
+                implicitContext = prevImplicitContext;
+
+                if (evalStorage == null || evalStorage.Type != eCobType.Boolean)
+                    messages.Add(Message.RefinementMustResolveToBoolean, dstType.Refinement);
+
+                function.ReturnType = evalStorage.Type;
+                CurrentFunction.Body.Emit(Opcode.Return, evalStorage.Operand);
+                evalStorage.Free();
+
+                function.ReturnLabel.Mark();
+            
+                contextStack.Pop();
+
+                using var vm = new VirtualMachine(artifact);
+                var result = vm.ExecuteFunction(function);
+
+                if (result == null || result.IntValue != 1)
+                    messages.Add(Message.RefinementViolated, expression);
+            }
+            else
+            {
+                var prevImplicitContext = implicitContext;
+                implicitContext = source;
+
+                ++conditionalStack;
+                var result = dstType.Refinement.Accept(this);
+                --conditionalStack;
+
+                if (result == null || result.Type != eCobType.Boolean)
+                    messages.Add(Message.RefinementMustResolveToBoolean, dstType.Refinement);
+
+                var labelLegal = CurrentFunction.Body.AllocateLabel();
+                CurrentFunction.Body.Emit(Opcode.JmpT, result.Operand, labelLegal);
+                CurrentFunction.Body.Emit(Opcode.PanicOnErr, Operand.Global(Globals.IndexOf(Globals.First(x => x.Type == eCobType.Error && x.Name == "RefinementViolation"))));
+                labelLegal.Mark();
+                result.Free();
+
+                implicitContext = prevImplicitContext;
+            }
         }
 
         public static bool IsSymbolVisible(IScopeContext? context, IScopeContext? parent, string? name)
@@ -2638,6 +2661,7 @@ namespace Compiler.CodeGeneration
 
     internal sealed record LoopContext(string? Tag, Label Continue, Label Break);
 
+    // TODO Move into a seperate file
     internal sealed class EnumRefinement : IScopeContext, ILateTypeBinding
     {
         public string Name { get; }
@@ -2666,7 +2690,9 @@ namespace Compiler.CodeGeneration
         public void AllocateMember(string name, object value)
         {
             Operand operand;
-            if (value is long longValue)
+            if (value is Operand vOperand)
+                operand = vOperand;
+            else if (value is long longValue)
                 operand = Operand.Immediate(longValue, ThisType.Parent!);
             else if (value is string stringValue)
             {

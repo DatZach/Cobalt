@@ -487,11 +487,17 @@ namespace Compiler.Interpreter
 
                     var fullName = sbFullName.ToString();
 
-                    sbStackTrace.AppendLine($"  at {fullName}");
+                    sbStackTrace.AppendLine($"  at {fullName} @ {frame.IP}"); // TODO @ is temporary, replace with line number
                     
                 }
 
                 var stackTrace = sbStackTrace.ToString();
+                if (errorCode == -1)
+                {
+                    sbStackTrace.AppendLine();
+                    sbStackTrace.AppendLine("VM STACK TRACE");
+                    sbStackTrace.AppendLine(ex.StackTrace);
+                }
 
                 if (userPanicCallback != null)
                 {

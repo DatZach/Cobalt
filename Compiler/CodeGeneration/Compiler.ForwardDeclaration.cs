@@ -277,6 +277,15 @@ namespace Compiler.CodeGeneration
                                 value = nle.LongValue;
                                 mode = nle.Token.Value.StartsWith("0b") || nle.Token.Value.StartsWith("0x") ? 1 : 0;
                             }
+                            else if (member.Value is PrefixOperatorExpression poe && poe.Operator == TokenType.Dot
+                                 &&  poe.Right is IdentifierExpression poeIe)
+                            {
+                                var eMember = enumRefinement.FindMember(poeIe.Value);
+                                if (eMember == null)
+                                    messages.Add(Message.UndeclaredIdentifier, member.Token, poeIe.Value);
+                                else
+                                    value = eMember.Value.Value;
+                            }
                             else if (member.Value is not null)
                                 messages.Add(Message.TypeMismatch, member.Value, superType, member.Value.Token);
 

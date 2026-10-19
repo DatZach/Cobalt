@@ -1,4 +1,5 @@
 ﻿using System.Text;
+using Compiler.Ast.Expressions.Statements;
 using Compiler.CodeGeneration.Artifacts;
 
 namespace Compiler.Lexer
@@ -20,6 +21,8 @@ namespace Compiler.Lexer
         public FunctionSignature? Function { get; init; }
 
         public RecordSignature? Record { get; init; }
+
+        public RecordSignature2? Record2 { get; init; }
 
         public IReadOnlyList<TypeName>? Generic { get; init; } // [Name]`T1`T2
 
@@ -131,6 +134,16 @@ namespace Compiler.Lexer
                 public TypeName TypeName { get; init; }
             }
         }
+
+        public sealed class RecordSignature2
+        {
+            private static int uniqueId;
+            public int UniqueId { get; } = uniqueId++;
+
+            public eRecordType Type { get; init; }
+
+            public IReadOnlyList<FieldDefinition> Fields { get; init; }
+        }
     }
 
     internal enum eTypeName
@@ -138,6 +151,7 @@ namespace Compiler.Lexer
         None,
         Identifier,
         FunctionSignature,
-        RecordSignature
+        RecordSignature,
+        Record2Signature
     }
 }

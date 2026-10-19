@@ -1,8 +1,11 @@
 ﻿using Compiler.Ast.Expressions;
+using Compiler.Ast.Expressions.Statements;
 using Compiler.CodeGeneration.Artifacts;
 using Compiler.Lexer;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using Compiler.Ast.Parselets.Statements;
+using static Compiler.Lexer.TypeName.RecordSignature;
 
 namespace Compiler.Ast
 {
@@ -108,6 +111,7 @@ namespace Compiler.Ast
             string? identifier = null;
             TypeName.FunctionSignature? function = null;
             TypeName.RecordSignature? record = null;
+            TypeName.RecordSignature2? record2 = null;
             TypeName? union = null;
             List<TypeName>? generic = null;
             bool isArray = false;
@@ -229,7 +233,36 @@ namespace Compiler.Ast
             }
             else if (Match(TokenType.LeftBrace))
             {
-                throw new InvalidOperationException();
+                var fields = new List<FieldDefinition>();
+
+                Take(TokenType.LeftBrace);
+                while (MatchAndTakeToken(TokenType.RightBrace) == null)
+                {
+                    if (Match(TokenType.Factory)) // Factory
+                        throw new NotImplementedException();
+                    else if (Match(TokenType.Function)) // Function
+                        throw new NotImplementedException();
+                    else if (Match(TokenType.LeftSquare)) // Indexer
+                        throw new NotImplementedException();
+                    else // Field
+                    {
+                        var fieldType = ParseTypeName();
+                        var fieldName = Take(TokenType.Identifier);
+
+                        StructDeclParselet.ParseGetterSetters(this, out var getterExpression, out var setterExpression);
+
+                        fields.Add(new FieldDefinition(fieldName.Value, fieldType, getterExpression, setterExpression));
+                    }
+
+                    MatchAndTakeToken(TokenType.Semicolon);
+                }
+
+                type = eTypeName.Record2Signature;
+                record2 = new TypeName.RecordSignature2
+                {
+                    Type = eRecordType.Struct,
+                    Fields = fields
+                };
             }
             else if (Match(TokenType.Error)) // Unary !
                 type = eTypeName.None;
@@ -275,6 +308,7 @@ namespace Compiler.Ast
                 Identifier = identifier,
                 Function = function,
                 Record = record,
+                Record2 = record2,
                 Union = union,
                 Generic = generic,
                 IsArray = isArray,

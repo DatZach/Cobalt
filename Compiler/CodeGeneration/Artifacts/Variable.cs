@@ -243,8 +243,8 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public static bool operator ==(CobType? left, eCobType right) => !ReferenceEquals(left, null) && left.Type == right;
         public static bool operator !=(CobType? left, eCobType right) => ReferenceEquals(left, null) || left.Type != right;
-        public static bool operator ==(CobType left, CobType right) => Equals(left, right);
-        public static bool operator !=(CobType left, CobType right) => !Equals(left, right);
+        public static bool operator ==(CobType? left, CobType? right) => Equals(left, right);
+        public static bool operator !=(CobType left, CobType? right) => !Equals(left, right);
         public bool Equals(CobType? other)
         {
             if (other is null)
@@ -394,6 +394,31 @@ namespace Compiler.CodeGeneration.Artifacts
                 }
 
                 type = new CobType(eCobType.Tuple, tag: tupleType);
+            }
+            else if (typeName.Type == eTypeName.Record2Signature)
+            {
+                var ctx = context;
+                while (ctx != null && ctx.Parent != null)
+                    ctx = ctx.Parent;
+
+                var rootModule = (Module)ctx!; // NOTE Root is always $root module
+                var recordTypeIdentifier = $"AnonymousRecord'{typeName.Record2.UniqueId}";
+                var recordType = rootModule.FindRecordType(recordTypeIdentifier);
+                if (recordType == null)
+                {
+                    recordType = rootModule.AllocateRecordType(recordTypeIdentifier, typeName.Record2.Type);
+
+                    foreach (var x in typeName.Record2.Fields)
+                    {
+                        // TODO Null names not allowed for structs
+                        recordType.AllocateField(x.Name ?? "", FromTypeName(x.TypeName, recordType), false, false);
+                    }
+                }
+
+                type = new CobType(
+                    typeName.Record2.Type == eRecordType.Struct ? eCobType.Struct : eCobType.Tuple,
+                    tag: recordType
+                );
             }
             else
                 throw new ArgumentOutOfRangeException();
