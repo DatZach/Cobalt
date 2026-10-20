@@ -90,12 +90,14 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public Variable DeepClone()
         {
-            if (Type == eCobType.Struct) // Structs are reference types
-                return this;
-
             object? value;
-            if (Value is Variable[] srcStructValue) // Tuples are value types
+            if (Value is Variable[] srcStructValue) 
             {
+                // Structs are reference types
+                if (Type.TagRecord != null && Type.TagRecord.Type == eRecordType.Struct)
+                    return this;
+
+                // Tuples are value types
                 var dstStructValue = new Variable[srcStructValue.Length];
                 for (int i = 0; i < srcStructValue.Length; ++i)
                     dstStructValue[i] = srcStructValue[i].DeepClone();
@@ -379,10 +381,7 @@ namespace Compiler.CodeGeneration.Artifacts
                 var recordType = rootModule.FindRecordType(recordTypeIdentifier)
                               ?? rootModule.AllocateRecordType(recordTypeIdentifier, typeName.Record.Type);
 
-                type = new CobType(
-                    typeName.Record.Type == eRecordType.Struct ? eCobType.Struct : eCobType.Tuple,
-                    tag: recordType
-                );
+                type = new CobType(eCobType.Record, tag: recordType);
             }
             else
                 throw new ArgumentOutOfRangeException();
@@ -407,7 +406,7 @@ namespace Compiler.CodeGeneration.Artifacts
             if (typeName.IsArray)
             {
                 var tag = Intrinsics.Array.TagRecord.FindConcretizedRecord(type) ?? Intrinsics.Array.TagRecord.AllocateConcretizedRecord(type);
-                type = new CobType(eCobType.Struct, tag: tag);
+                type = new CobType(eCobType.Record, tag: tag);
             }
 
             if (typeName.Union != null)
@@ -530,9 +529,8 @@ namespace Compiler.CodeGeneration.Artifacts
                     128 => typeof(decimal),
                     _ => throw new ArgumentOutOfRangeException()
                 },
-                eCobType.Struct => Any.ToManagedType().MakeArrayType(), // TODO Not correct
+                eCobType.Record => Any.ToManagedType().MakeArrayType(), // TODO Not correct
                                                                         // Tag == Intrinsics.Array ? Any.ToManagedType().MakeArrayType() :  throw new NotImplementedException(), // ???
-                eCobType.Tuple => throw new NotImplementedException(), // ???
                 eCobType.Function => throw new NotImplementedException(), // ???
                 eCobType.Distinct => Parent?.ToManagedType() ?? throw new InvalidOperationException(),
                 _ => throw new ArgumentOutOfRangeException()
@@ -579,11 +577,7 @@ namespace Compiler.CodeGeneration.Artifacts
                         result |= value << i; i += 3;
                         break;
                     }
-                    case eCobType.Struct:
-                        // ArtifactIndex = SSSS SSSS SSSS
-                        result |= ((uint)artifact.RecordTypes.IndexOf((RecordType)type.Tag!) & 0xFFFFFF) << i; i += 12;
-                        break;
-                    case eCobType.Tuple:
+                    case eCobType.Record:
                         // ArtifactIndex = SSSS SSSS SSSS
                         result |= ((uint)artifact.RecordTypes.IndexOf((RecordType)type.Tag!) & 0xFFFFFF) << i; i += 12;
                         break;
@@ -680,14 +674,7 @@ namespace Compiler.CodeGeneration.Artifacts
                         }
                         return new CobType(type, size: size);
                     }
-                    case eCobType.Struct:
-                    {
-                        // ArtifactIndex = SSSS SSSS SSSS
-                        var idx = (int)((ulong)(value >> i) & 0xFFFFFF); i += 12;
-                        var tag = artifact.RecordTypes[idx];
-                        return new CobType(type, tag: tag);
-                    }
-                    case eCobType.Tuple:
+                    case eCobType.Record:
                     {
                         // ArtifactIndex = SSSS SSSS SSSS
                         var idx = (int)((ulong)(value >> i) & 0xFFFFFF); i += 12;
@@ -794,8 +781,7 @@ namespace Compiler.CodeGeneration.Artifacts
                 case eCobType.Generic:
                     return "`T"; // TODO??
 
-                case eCobType.Struct:
-                case eCobType.Tuple:
+                case eCobType.Record:
                 case eCobType.Function:
                 case eCobType.Module:
                     return Tag?.ToString() ?? $"(NULL {Type.ToString()})";
@@ -913,13 +899,14 @@ namespace Compiler.CodeGeneration.Artifacts
 
 
             if (dstType.TagRecord != null && dstType.TagRecord.IsTrait
-            &&  srcType.Type is eCobType.Tuple or eCobType.Struct or eCobType.Distinct)
+            &&  srcType.Type is eCobType.Record or eCobType.Distinct)
             {
                 var recordType = srcType.Tag as RecordType;
                 return recordType?.HasTrait(dstType.Tag as RecordType) ?? false;
             }
 
-            if (dstType.Type == eCobType.Tuple && srcType.Type == eCobType.Tuple)
+            if (dstType.Type == eCobType.Record && dstType.TagRecord.Type == eRecordType.Tuple
+            &&  srcType.Type == eCobType.Record && srcType.TagRecord.Type == eRecordType.Tuple)
             {
                 if (srcType.Tag == dstType.Tag)
                     return true;
@@ -1096,8 +1083,7 @@ namespace Compiler.CodeGeneration.Artifacts
         None,
         Any,
         Union,
-        Struct, // TODO Merge Struct+Tuple -> Record?
-        Tuple,
+        Record,
         Signed,
         Unsigned,
         Real,

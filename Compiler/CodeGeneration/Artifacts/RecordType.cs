@@ -20,7 +20,7 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public bool IsTrait => functions.All(x => x.IsSignature);
 
-        public CobType ThisType => new (Type == eRecordType.Struct ? eCobType.Struct : eCobType.Tuple, tag: this);
+        public CobType ThisType => new (eCobType.Record, tag: this);
 
         // TODO  HACK Fix this nonsense
         private RecordType? pendingSuperType;

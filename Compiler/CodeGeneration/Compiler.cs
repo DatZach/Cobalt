@@ -877,7 +877,7 @@ namespace Compiler.CodeGeneration
                 {
                     var tag = recordType.FindConcretizedRecord(bType) ?? recordType.AllocateConcretizedRecord(bType);
 
-                    cType = new CobType(eCobType.Tuple, tag: tag);
+                    cType = new CobType(eCobType.Record, tag: tag);
 
                     if (tag.PopulateConcretizedRecordIfRequired())
                         concreteTypeAstReferences.Add(new ConcreteTypeAstReference(recordType, tag));
@@ -1684,7 +1684,7 @@ namespace Compiler.CodeGeneration
                     var bType = CobType.U8; // TODO Implement correctly
                     var tag = Intrinsics.Array.TagRecord;
                     tag = tag.FindConcretizedRecord(bType) ?? tag.AllocateConcretizedRecord(bType);
-                    var cobType = new CobType(eCobType.Struct, tag: tag);
+                    var cobType = new CobType(eCobType.Record, tag: tag);
 
                     if (tag.PopulateConcretizedRecordIfRequired())
                         concreteTypeAstReferences.Add(new ConcreteTypeAstReference(Intrinsics.Array.TagRecord, tag));
@@ -1888,7 +1888,7 @@ namespace Compiler.CodeGeneration
                 messages.Add(Message.CannotIndexType, expression, "none");
             else if (AssignmentRHS != null) // SET
             {
-                if ((source.Type == eCobType.Struct || source.Type == eCobType.Tuple)
+                if (source.Type == eCobType.Record
                 &&  source.Type.Tag is RecordType recordType 
                 &&  recordType.Indexer != null)
                 {
@@ -1900,8 +1900,8 @@ namespace Compiler.CodeGeneration
             else // GET
             {
                 var recordType = source.Type.FirstAncestorWhere(
-                    x => (x == eCobType.Struct || x == eCobType.Tuple)
-                      &&  x.Tag is RecordType { Indexer: not null }
+                    x => x == eCobType.Record
+                      && x.Tag is RecordType { Indexer: not null }
                 )?.Tag as RecordType;
 
                 if (recordType != null)
@@ -1986,7 +1986,7 @@ namespace Compiler.CodeGeneration
                         this
                     );
 
-                    cobType = new CobType(eCobType.Tuple, tag: tupleType);
+                    cobType = new CobType(eCobType.Record, tag: tupleType);
                 }
 
                 var storage = CurrentFunction.AllocateRegisterStorage(cobType);
@@ -2075,7 +2075,7 @@ namespace Compiler.CodeGeneration
                       : CobType.FromTypeName(expression.ElementTypeName, CurrentContext);
             var tag = Intrinsics.Array.TagRecord;
             tag = tag.FindConcretizedRecord(bType) ?? tag.AllocateConcretizedRecord(bType);
-            var cobType = new CobType(eCobType.Struct, tag: tag);
+            var cobType = new CobType(eCobType.Record, tag: tag);
 
             if (tag.PopulateConcretizedRecordIfRequired())
                 concreteTypeAstReferences.Add(new ConcreteTypeAstReference(Intrinsics.Array.TagRecord, tag));
