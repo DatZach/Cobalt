@@ -57,6 +57,7 @@ namespace Compiler.Ast.Expressions.Statements
     internal sealed record FieldDefinition(
         string? Name,
         TypeName TypeName,
+        bool IsFinal,
         Expression? GetterExpression,
         Expression? SetterExpression
     );

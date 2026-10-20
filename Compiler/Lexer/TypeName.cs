@@ -1,6 +1,7 @@
-﻿using System.Text;
+﻿using Compiler.Ast.Expressions;
 using Compiler.Ast.Expressions.Statements;
 using Compiler.CodeGeneration.Artifacts;
+using System.Text;
 
 namespace Compiler.Lexer
 {
@@ -22,7 +23,7 @@ namespace Compiler.Lexer
 
         public RecordSignature? Record { get; init; }
 
-        public RecordSignature2? Record2 { get; init; }
+        public StructDeclStatement? Record2 { get; init; } // TODO Rename type to RecordSignature
 
         public IReadOnlyList<TypeName>? Generic { get; init; } // [Name]`T1`T2
 
@@ -135,15 +136,17 @@ namespace Compiler.Lexer
             }
         }
 
-        public sealed class RecordSignature2
-        {
-            private static int uniqueId;
-            public int UniqueId { get; } = uniqueId++;
+        //public sealed class RecordSignature2
+        //{
+        //    private static int uniqueId;
+        //    public int UniqueId { get; } = uniqueId++;
 
-            public eRecordType Type { get; init; }
+        //    public eRecordType Type { get; init; }
 
-            public IReadOnlyList<FieldDefinition> Fields { get; init; }
-        }
+        //    public IReadOnlyList<FieldDefinition> Fields { get; init; }
+
+        //    public IReadOnlyList<FunctionDeclStatement> Functions { get; init; }
+        //}
     }
 
     internal enum eTypeName

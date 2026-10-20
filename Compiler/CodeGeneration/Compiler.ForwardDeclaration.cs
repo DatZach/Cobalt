@@ -1,5 +1,4 @@
-﻿using System.Runtime.InteropServices;
-using Compiler.Ast;
+﻿using Compiler.Ast;
 using Compiler.Ast.Expressions;
 using Compiler.Ast.Expressions.Statements;
 using Compiler.Ast.Visitors;
@@ -211,103 +210,63 @@ namespace Compiler.CodeGeneration
 
         public Unit Visit(TypeDeclStatement expression)
         {
-            if (phase != DeclPhase.Types)
-                return Unit.Value;
-
-            if (CurrentModule.FindDistinctType(expression.SubTypeName) != null)
+            if (phase == DeclPhase.Types)
             {
-                messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.SubTypeName);
-                return Unit.Value;
-            }
+                if (CurrentModule.FindDistinctType(expression.SubTypeName) != null)
+                {
+                    messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.SubTypeName);
+                    return Unit.Value;
+                }
 
-            // type Sub = Super;
-            var superType = CobType.FromTypeName(expression.SuperTypeName, CurrentModule);
+                // type Sub = Super;
+                var superType = CobType.FromTypeName(expression.SuperTypeName, CurrentModule);
 
-            // TODO Not strictly correct to put the tag of the super type on the sub type
-            var tag = superType.Tag;
-            if (expression.RefinementExpression is EnumRefinementDeclStatement)
-                tag = new EnumRefinement(expression.SubTypeName, CurrentContext, compiler);
-            
-            var subType = CurrentModule.AllocateDistinctType(
-                expression.SubTypeName,
-                superType,
-                tag,
-                expression.RefinementExpression
-            );
+                // TODO Not strictly correct to put the tag of the super type on the sub type
+                var tag = superType.Tag;
+                if (expression.RefinementExpression is EnumRefinementDeclStatement)
+                    tag = new EnumRefinement(expression.SubTypeName, CurrentContext, compiler);
+                
+                var subType = CurrentModule.AllocateDistinctType(
+                    expression.SubTypeName,
+                    superType,
+                    tag,
+                    expression.RefinementExpression
+                );
 
-            // TODO Split into a different function?
-            if (tag is EnumRefinement enumRefinement
-            &&  expression.RefinementExpression is EnumRefinementDeclStatement enumRefinementStatement)
-            {
-                var stringType = compiler.RootModule.FindDistinctType("string"); // HACK 1st Pass Intrinsics not yet evaluated
-                if (!CobType.IsImplicitCastable(CobType.Int, superType) && !CobType.IsImplicitCastable(stringType, superType))
-                    messages.Add(Message.IllegalEnumRefinementSuperType, expression, superType);
-                else
+                if (tag is EnumRefinement enumRefinement
+                &&  expression.RefinementExpression is EnumRefinementDeclStatement)
                 {
                     ((ILateTypeBinding)enumRefinement).RebindType(subType);
 
-                    long value = 0;
-                    int mode = 0; // 0 integer, 1 bitflag
-                    foreach (var member in enumRefinementStatement.Members)
-                    {
-                        if (member.Name != "_" && enumRefinement.FindMember(member.Name) != null)
-                        {
-                            messages.Add(Message.SymbolConflictsWithOther, member.Token, member.Name);
-                            continue;
-                        }
+                    contextStack.Push(enumRefinement);
+                    expression.RefinementExpression.Accept(this);
+                    contextStack.Pop();
+                }
 
-                        string memberName = member.Name;
-                        object memberValue;
-                        if (superType == stringType)
-                        {
-                            if (member.Value is StringLiteralExpression sle)
-                                memberValue = sle.Value;
-                            else if (member.Value is null)
-                                memberValue = memberName;
-                            else
-                            {
-                                messages.Add(Message.TypeMismatch, member.Value, superType, member.Value.Token);
-                                memberValue = "";
-                            }
-                        }
-                        else
-                        {
-                            if (member.Value is NumberLiteralExpression nle)
-                            {
-                                value = nle.LongValue;
-                                mode = nle.Token.Value.StartsWith("0b") || nle.Token.Value.StartsWith("0x") ? 1 : 0;
-                            }
-                            else if (member.Value is PrefixOperatorExpression poe && poe.Operator == TokenType.Dot
-                                 &&  poe.Right is IdentifierExpression poeIe)
-                            {
-                                var eMember = enumRefinement.FindMember(poeIe.Value);
-                                if (eMember == null)
-                                    messages.Add(Message.UndeclaredIdentifier, member.Token, poeIe.Value);
-                                else
-                                    value = eMember.Value.Value;
-                            }
-                            else if (member.Value is not null)
-                                messages.Add(Message.TypeMismatch, member.Value, superType, member.Value.Token);
-
-                            if (!CobType.IsIntegerTypeCapableOfStoringValueWithoutTruncation(superType, CobType.Int, value))
-                                messages.Add(Message.ValueOverflow, member.Token);
-
-                            memberValue = value;
-
-                            if (mode == 0)
-                                ++value;
-                            else if (mode == 1)
-                                value = value == 0 ? 1 : value << 1;
-                            else
-                                throw new InvalidOperationException();
-                        }
-
-                        if (memberName != "_")
-                            enumRefinement.AllocateMember(memberName, memberValue);
-                    }
+                //contextStack.Push(subType);
+                if (tag is RecordType recordType
+                &&  expression.SuperTypeName.Record2 != null)
+                {
+                    HACK_ContextAlreadyDived = true;
+                    contextStack.Push(recordType);
+                    expression.SuperTypeName.Record2.Accept(this);
+                    contextStack.Pop();
+                    HACK_ContextAlreadyDived = false;
                 }
             }
-
+            else if (phase > DeclPhase.Types)
+            {
+                //expression.SuperTypeName.Record2?.Accept(this);
+                var superType = CurrentModule.FindSymbol(expression.SubTypeName);
+                if (superType?.Type.Parent?.Tag is IScopeContext ctx)
+                {
+                    HACK_ContextAlreadyDived = true;
+                    contextStack.Push(ctx);
+                    expression.SuperTypeName.Record2?.Accept(this);
+                    contextStack.Pop();
+                    HACK_ContextAlreadyDived = false;
+                }
+            }
 
             return Unit.Value;
         }
@@ -316,6 +275,78 @@ namespace Compiler.CodeGeneration
         {
             if (phase != DeclPhase.Types)
                 return Unit.Value;
+
+            var enumRefinement = (EnumRefinement)CurrentContext;
+            var subType = enumRefinement.ThisType;
+            var superType = enumRefinement.ThisType.Parent!;
+
+            var stringType = compiler.RootModule.FindDistinctType("string"); // HACK 1st Pass Intrinsics not yet evaluated
+            if (!CobType.IsImplicitCastable(CobType.Int, superType)
+            &&  !CobType.IsImplicitCastable(stringType, superType))
+            {
+                messages.Add(Message.IllegalEnumRefinementSuperType, expression, superType);
+                return Unit.Value;
+            }
+
+            long value = 0;
+            int mode = 0; // 0 integer, 1 bitflag
+            foreach (var member in expression.Members)
+            {
+                if (member.Name != "_" && enumRefinement.FindMember(member.Name) != null)
+                {
+                    messages.Add(Message.SymbolConflictsWithOther, member.Token, member.Name);
+                    continue;
+                }
+
+                string memberName = member.Name;
+                object memberValue;
+                if (superType == stringType)
+                {
+                    if (member.Value is StringLiteralExpression sle)
+                        memberValue = sle.Value;
+                    else if (member.Value is null)
+                        memberValue = memberName;
+                    else
+                    {
+                        messages.Add(Message.TypeMismatch, member.Value, superType, member.Value.Token);
+                        memberValue = "";
+                    }
+                }
+                else
+                {
+                    if (member.Value is NumberLiteralExpression nle)
+                    {
+                        value = nle.LongValue;
+                        mode = nle.Token.Value.StartsWith("0b") || nle.Token.Value.StartsWith("0x") ? 1 : 0;
+                    }
+                    else if (member.Value is PrefixOperatorExpression poe && poe.Operator == TokenType.Dot
+                         &&  poe.Right is IdentifierExpression poeIe)
+                    {
+                        var eMember = enumRefinement.FindMember(poeIe.Value);
+                        if (eMember == null)
+                            messages.Add(Message.UndeclaredIdentifier, member.Token, poeIe.Value);
+                        else
+                            value = eMember.Value.Value;
+                    }
+                    else if (member.Value is not null)
+                        messages.Add(Message.TypeMismatch, member.Value, superType, member.Value.Token);
+
+                    if (!CobType.IsIntegerTypeCapableOfStoringValueWithoutTruncation(superType, CobType.Int, value))
+                        messages.Add(Message.ValueOverflow, member.Token);
+
+                    memberValue = value;
+
+                    if (mode == 0)
+                        ++value;
+                    else if (mode == 1)
+                        value = value == 0 ? 1 : value << 1;
+                    else
+                        throw new InvalidOperationException();
+                }
+
+                if (memberName != "_")
+                    enumRefinement.AllocateMember(memberName, memberValue);
+            }
 
             return Unit.Value;
         }
@@ -406,26 +437,43 @@ namespace Compiler.CodeGeneration
             return Unit.Value;
         }
 
+        private bool HACK_ContextAlreadyDived;
         public Unit Visit(StructDeclStatement expression)
         {
             if (phase == DeclPhase.Types)
             {
-                if (CurrentModule.FindRecordType(expression.Name) != null)
+                RecordType structType;
+                if (!HACK_ContextAlreadyDived)
                 {
-                    messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
-                    return Unit.Value;
-                }
+                    if (CurrentModule.FindRecordType(expression.Name) != null)
+                    {
+                        messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
+                        return Unit.Value;
+                    }
 
-                var structType = CurrentModule.AllocateRecordType(expression.Name, eRecordType.Struct);
+                    structType = CurrentModule.AllocateRecordType(expression.Name, eRecordType.Struct);
+                    contextStack.Push(structType);
+                }
+                else
+                    structType = (RecordType)CurrentContext;
 
                 foreach (var generic in expression.Generics)
                     structType.AttachGeneric(generic);
 
-                foreach (var traitTypeName in expression.TraitTypeNames)
+                foreach (var traitTypeName in expression.Mixins)
                 {
                     var traitType = CobType.FromTypeName(traitTypeName, CurrentContext);
                     structType.AttachTrait((TraitType)traitType.Tag);
                 }
+
+                for (var i = 0; i < expression.Types.Count; ++i)
+                    expression.Types[i].Accept(this);
+
+                for (var i = 0; i < expression.Constants.Count; ++i)
+                    expression.Constants[i].Accept(this);
+
+                if (!HACK_ContextAlreadyDived)
+                    contextStack.Pop();
 
                 if (expression.Name == "Array")
                     Intrinsics.Array = structType;

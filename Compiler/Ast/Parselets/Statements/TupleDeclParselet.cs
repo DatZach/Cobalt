@@ -68,7 +68,7 @@ namespace Compiler.Ast.Parselets.Statements
 
                     StructDeclParselet.ParseGetterSetters(parser, out var getterExpression, out var setterExpression);
 
-                    fields.Add(new FieldDefinition(fieldName.Value, fieldTypeName, getterExpression, setterExpression));
+                    fields.Add(new FieldDefinition(fieldName.Value, fieldTypeName, false, getterExpression, setterExpression));
                 }
 
                 parser.MatchAndTakeToken(TokenType.Semicolon);

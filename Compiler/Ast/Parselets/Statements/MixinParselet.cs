@@ -30,7 +30,7 @@ namespace Compiler.Ast.Parselets.Statements
                 StructDeclParselet.ParseGetterSetters(parser, out var getterExpression, out var setterExpression);
 
                 function = null;
-                field = new FieldDefinition(fieldName.Value, fieldTypeName, getterExpression, setterExpression);
+                field = new FieldDefinition(fieldName.Value, fieldTypeName, false, getterExpression, setterExpression);
             }
 
             return new MixinDeclStatement(token, targetTypeName.Value, function, field);

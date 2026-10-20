@@ -401,18 +401,26 @@ namespace Compiler.CodeGeneration.Artifacts
                 while (ctx != null && ctx.Parent != null)
                     ctx = ctx.Parent;
 
+                // TODO Might actually need to allocate on the CurrentContext instead for namespacing purposes
                 var rootModule = (Module)ctx!; // NOTE Root is always $root module
-                var recordTypeIdentifier = $"AnonymousRecord'{typeName.Record2.UniqueId}";
+                //var recordTypeIdentifier = $"AnonymousRecord'{typeName.Record2.UniqueId}";
+                var recordTypeIdentifier = typeName.Record2.Name;
                 var recordType = rootModule.FindRecordType(recordTypeIdentifier);
                 if (recordType == null)
                 {
                     recordType = rootModule.AllocateRecordType(recordTypeIdentifier, typeName.Record2.Type);
 
-                    foreach (var x in typeName.Record2.Fields)
-                    {
-                        // TODO Null names not allowed for structs
-                        recordType.AllocateField(x.Name ?? "", FromTypeName(x.TypeName, recordType), false, false);
-                    }
+                    //foreach (var x in typeName.Record2.Fields)
+                    //{
+                    //    // TODO Null names not allowed for structs
+                    //    recordType.AllocateField(x.Name ?? "", FromTypeName(x.TypeName, recordType), false, false);
+                    //}
+
+                    //foreach (var x in typeName.Record2.Functions)
+                    //{
+                    //    // TODO Null names not allowed for structs
+                    //    recordType.AllocateFunction(x.Name, );
+                    //}
                 }
 
                 type = new CobType(

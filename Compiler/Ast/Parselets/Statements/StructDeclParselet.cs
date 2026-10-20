@@ -1,5 +1,6 @@
 ﻿using Compiler.Ast.Expressions;
 using Compiler.Ast.Expressions.Statements;
+using Compiler.CodeGeneration.Artifacts;
 using Compiler.Lexer;
 
 namespace Compiler.Ast.Parselets.Statements
@@ -10,7 +11,7 @@ namespace Compiler.Ast.Parselets.Statements
         {
             var name = parser.Take(TokenType.Identifier);
             var generics = new List<GenericDefinition>();
-            var traits = new List<TypeName>();
+            var mixins = new List<TypeName>();
             var fields = new List<FieldDefinition>();
             var functions = new List<FunctionDeclStatement>();
             var factories = new List<FactoryDeclStatement>();
@@ -31,7 +32,7 @@ namespace Compiler.Ast.Parselets.Statements
                 do
                 {
                     var traitTypeName = parser.ParseTypeName();
-                    traits.Add(traitTypeName);
+                    mixins.Add(traitTypeName);
                 } while (parser.MatchAndTakeToken(TokenType.Comma) != null);
             }
 
@@ -68,13 +69,17 @@ namespace Compiler.Ast.Parselets.Statements
 
                     ParseGetterSetters(parser, out var getterExpression, out var setterExpression);
 
-                    fields.Add(new FieldDefinition(fieldName.Value, fieldType, getterExpression, setterExpression));
+                    fields.Add(new FieldDefinition(fieldName.Value, fieldType, false, getterExpression, setterExpression));
                 }
 
                 parser.MatchAndTakeToken(TokenType.Semicolon);
             }
 
-            return new StructDeclStatement(token, name.Value, generics, traits, fields, functions, factories, indexerDefinition);
+            var types = new List<TypeDeclStatement>();
+            var constants = new List<VariableDeclStatement>();
+            var destructors = new List<FunctionDeclStatement>();
+
+            return new StructDeclStatement(token, eRecordType.Struct, name.Value, generics, mixins, types, constants, fields, functions, factories, destructors, indexerDefinition);
         }
 
         public static void ParseGetterSetters(

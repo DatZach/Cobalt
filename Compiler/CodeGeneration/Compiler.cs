@@ -129,6 +129,8 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(TypeDeclStatement expression)
         {
+            expression.SuperTypeName.Record2?.Accept(this);
+
             return null;
         }
 
@@ -237,6 +239,9 @@ namespace Compiler.CodeGeneration
             else
             {
                 contextStack.Push(structType);
+
+                foreach (var constant in expression.Constants)
+                    constant.Accept(this);
 
                 foreach (var factoryExpression in expression.Factories)
                     factoryExpression.Accept(this);
@@ -436,7 +441,7 @@ namespace Compiler.CodeGeneration
                     }
 
                     Operand dstOperand;
-                    if (CurrentFunction == CurrentModule.InitializerFunction) // Global Decl
+                    if (CurrentContext == CurrentModule.InitializerFunction) // Global Decl
                     {
                         var global = CurrentModule.FindGlobal(stdDecl.Name)!;
                         var idx = Globals.IndexOf(global);
@@ -2089,7 +2094,7 @@ namespace Compiler.CodeGeneration
             //var cobType = new CobType(eCobType.Struct, tag: structType);
 
             var structTypeStorage = expression.StructTypeExpression.Accept(this);
-            var structType = structTypeStorage?.Type.FirstAncestorWhere(x => x.Type == eCobType.Struct && x.Tag is RecordType);
+            var structType = structTypeStorage?.Type.FirstAncestorWhere(x => /*x.Type == eCobType.Struct && */x.Tag is RecordType);
             if (structType == null)
             {
                 messages.Add(Message.CannotInstantiateType, expression.StructTypeExpression, structTypeStorage?.Type);
@@ -2116,7 +2121,7 @@ namespace Compiler.CodeGeneration
             {
                 var storage2 = CurrentFunction.AllocateRegisterStorage(cobType);
                 CurrentFunction.Body.Emit(Opcode.Move, storage2.Operand, storage.Operand);
-                EnforceRefinment(storage, cobType, expression);
+                EnforceRefinment(storage2, cobType, expression);
                 storage2.Free();
             }
 
