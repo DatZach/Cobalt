@@ -111,7 +111,7 @@ namespace Compiler.Ast
             eTypeName type;
             string? identifier = null;
             TypeName.FunctionSignature? function = null;
-            StructDeclStatement? record = null;
+            RecordStatement? record = null;
             TypeName? union = null;
             List<TypeName>? generic = null;
             bool isArray = false;
@@ -197,13 +197,13 @@ namespace Compiler.Ast
             {
                 var token = Take();
                 type = eTypeName.RecordSignature;
-                record = (StructDeclStatement)RecordParselet.Instance.Parse(this, token);
+                record = (RecordStatement)RecordParselet.Instance.Parse(this, token);
             }
             else if (Match(TokenType.LeftBrace))
             {
                 var token = Take();
                 type = eTypeName.RecordSignature;
-                record = (StructDeclStatement)RecordParselet.Instance.Parse(this, token);
+                record = (RecordStatement)RecordParselet.Instance.Parse(this, token);
             }
             else if (Match(TokenType.Error)) // Unary !
                 type = eTypeName.None;

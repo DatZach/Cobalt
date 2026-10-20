@@ -19,8 +19,6 @@ namespace Compiler.CodeGeneration
 
         public List<Module> Modules => artifact.Modules;
 
-        //public List<TraitType> TraitTypes => artifact.TraitTypes;
-
         public List<RecordType> RecordTypes => artifact.RecordTypes;
 
         public List<CobType> Types => artifact.Types;
@@ -144,83 +142,7 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
-        public Storage? Visit(TupleDeclStatement expression)
-        {
-            var tupleType = CurrentModule.FindRecordType(expression.Name)!;
-            if (tupleType.IsGeneric)
-            {
-                genericTypeAstReferences.Add(new GenericTypeAstReference(
-                    tupleType,
-                    expression,
-                    new Stack<IScopeContext>(contextStack)
-                ));
-            }
-            else
-            {
-                contextStack.Push(tupleType);
-
-                foreach (var functionExpression in expression.Functions)
-                    functionExpression.Accept(this);
-
-                foreach (var fieldExpression in expression.Fields)
-                {
-                    var field = tupleType.FindField(fieldExpression.Name);
-
-                    if (field?.Getter != null && fieldExpression.GetterExpression != null)
-                    {
-                        contextStack.Push(field.Getter);
-
-                        var retStorage = fieldExpression.GetterExpression?.Accept(this);
-                        if (retStorage != null)
-                        {
-                            CurrentFunction.Body.Emit(Opcode.Return, retStorage.Operand);
-                            retStorage.Free();
-                        }
-
-                        contextStack.Pop();
-                    }
-                    
-                    if (field?.Setter != null && fieldExpression.SetterExpression != null)
-                    {
-                        contextStack.Push(field.Setter);
-                        fieldExpression.SetterExpression?.Accept(this)?.Free();
-                        CurrentFunction.Body.Emit(Opcode.Return, Operand.ImmediateUnsigned(0));
-                        contextStack.Pop();
-                    }
-                }
-
-                if (tupleType.Indexer != null)
-                {
-                    if (tupleType.Indexer.Getter != null)
-                    {
-                        contextStack.Push(tupleType.Indexer.Getter);
-                        
-                        var retStorage = expression.Indexer?.GetterExpression?.Accept(this);
-                        if (retStorage != null)
-                        {
-                            CurrentFunction.Body.Emit(Opcode.Return, retStorage.Operand);
-                            retStorage.Free();
-                        }
-
-                        contextStack.Pop();
-                    }
-
-                    if (tupleType.Indexer.Setter != null)
-                    {
-                        contextStack.Push(tupleType.Indexer.Setter);
-                        expression.Indexer?.SetterExpression?.Accept(this)?.Free();
-                        CurrentFunction.Body.Emit(Opcode.Return, Operand.ImmediateUnsigned(0));
-                        contextStack.Pop();
-                    }
-                }
-
-                contextStack.Pop();
-            }
-
-            return null;
-        }
-
-        public Storage? Visit(StructDeclStatement expression)
+        public Storage? Visit(RecordStatement expression)
         {
             var structType = CurrentModule.FindRecordType(expression.Name)!;
             if (structType.IsGeneric)
@@ -2527,8 +2449,7 @@ namespace Compiler.CodeGeneration
                         var genericType = compiler.genericTypeAstReferences.First(x => x.Generic == concreteType.Generic);
                         Expression concreteExpression = genericType.Expression switch
                         {
-                            TupleDeclStatement x => new TupleDeclStatement(x, concreteType.Concrete.Name),
-                            StructDeclStatement x => new StructDeclStatement(x, concreteType.Concrete.Name),
+                            RecordStatement x => new RecordStatement(x, concreteType.Concrete.Name),
                             _ => throw new ArgumentOutOfRangeException($"Unknown generic type expression '{genericType.Expression.Token}'")
                         };
 
@@ -2542,12 +2463,6 @@ namespace Compiler.CodeGeneration
                     seen.AddRange(hack);
                     hack = seen.Except(hack).ToList();
                 }
-
-                // PASS 3 - Traits
-                //foreach (var recordType in artifact.RecordTypes)
-                //{
-                //    foreach (var traitType in recordType.Traits)
-                //}
                 
                 return artifact;
             }

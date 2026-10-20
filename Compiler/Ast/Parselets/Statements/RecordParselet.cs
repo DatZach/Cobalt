@@ -97,7 +97,7 @@ namespace Compiler.Ast.Parselets.Statements
 
             var name = $"AnonymousRecord'{uniqueId++}";
 
-            return new StructDeclStatement(
+            return new RecordStatement(
                 token, type, name,
                 generics, mixins, types, constants, fields,
                 functions, factories, destructors, indexerDefinition

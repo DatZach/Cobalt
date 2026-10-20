@@ -257,6 +257,7 @@ namespace Compiler.CodeGeneration.Artifacts
             if (Type == eCobType.Distinct) // Distinct types must equal by reference
                 return false;
 
+            // TODO Primitives should not be equal on reference but on identity, will simplify a lot of code
             return Equals(Parent, other.Parent)
                 && Type == other.Type
                 && Size == other.Size
@@ -332,12 +333,8 @@ namespace Compiler.CodeGeneration.Artifacts
                     {
                         if (ctx is Module module)
                         {
-                            //TraitType? traitType;
                             RecordType? recordType;
                             CobType? distinctType;
-                            //if ((traitType = module.FindTraitType(ident)) != null)
-                            //    type = new CobType(eCobType.Trait, tag: traitType);
-                            //else
                             if ((recordType = module.FindRecordType(ident)) != null)
                                 type = recordType.ThisType;
                             else if ((distinctType = module.FindDistinctType(ident)) != null)
@@ -582,10 +579,6 @@ namespace Compiler.CodeGeneration.Artifacts
                         result |= value << i; i += 3;
                         break;
                     }
-                    //case eCobType.Trait:
-                    //    // ArtifactIndex = SSSS SSSS SSSS
-                    //    result |= ((uint)artifact.TraitTypes.IndexOf((TraitType)type.Tag!) & 0xFFFFFF) << i; i += 12;
-                    //    break;
                     case eCobType.Struct:
                         // ArtifactIndex = SSSS SSSS SSSS
                         result |= ((uint)artifact.RecordTypes.IndexOf((RecordType)type.Tag!) & 0xFFFFFF) << i; i += 12;
@@ -687,13 +680,6 @@ namespace Compiler.CodeGeneration.Artifacts
                         }
                         return new CobType(type, size: size);
                     }
-                    //case eCobType.Trait:
-                    //{
-                    //    // ArtifactIndex = SSSS SSSS SSSS
-                    //    var idx = (int)((ulong)(value >> i) & 0xFFFFFF); i += 12;
-                    //    var tag = artifact.TraitTypes[idx];
-                    //    return new CobType(type, tag: tag);
-                    //}
                     case eCobType.Struct:
                     {
                         // ArtifactIndex = SSSS SSSS SSSS
@@ -808,7 +794,6 @@ namespace Compiler.CodeGeneration.Artifacts
                 case eCobType.Generic:
                     return "`T"; // TODO??
 
-                case eCobType.Trait:
                 case eCobType.Struct:
                 case eCobType.Tuple:
                 case eCobType.Function:
@@ -926,11 +911,6 @@ namespace Compiler.CodeGeneration.Artifacts
                 //return dstType.Size >= srcType.Size; // u64 >= u32
             }
 
-            //if (dstType.Type == eCobType.Trait && srcType.Type is eCobType.Tuple or eCobType.Struct)
-            //{
-            //    var recordType = srcType.Tag as RecordType;
-            //    return recordType?.HasTrait(dstType.Tag as TraitType) ?? false;
-            //}
 
             if (dstType.TagRecord != null && dstType.TagRecord.IsTrait
             &&  srcType.Type is eCobType.Tuple or eCobType.Struct or eCobType.Distinct)
@@ -1116,7 +1096,6 @@ namespace Compiler.CodeGeneration.Artifacts
         None,
         Any,
         Union,
-        Trait,  // TODO Remove
         Struct, // TODO Merge Struct+Tuple -> Record?
         Tuple,
         Signed,

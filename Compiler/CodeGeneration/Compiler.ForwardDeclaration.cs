@@ -369,54 +369,8 @@ namespace Compiler.CodeGeneration
             return Unit.Value;
         }
 
-        public Unit Visit(TupleDeclStatement expression)
-        {
-            if (phase == DeclPhase.Types)
-            {
-                if (CurrentModule.FindRecordType(expression.Name) != null)
-                {
-                    messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
-                    return Unit.Value;
-                }
-
-                var tupleType = CurrentModule.AllocateRecordType(expression.Name, eRecordType.Tuple);
-
-                foreach (var generic in expression.Generics)
-                    tupleType.AttachGeneric(generic);
-            }
-            else if (phase > DeclPhase.Types)
-            {
-                var tupleType = CurrentModule.FindRecordType(expression.Name)!;
-                contextStack.Push(tupleType);
-                
-                for (var i = 0; i < expression.Functions.Count; ++i)
-                    expression.Functions[i].Accept(this);
-
-                if (phase == DeclPhase.Fields)
-                {
-                    foreach (var field in expression.Fields)
-                    {
-                        var fieldType = CobType.FromTypeName(field.TypeName, CurrentContext);
-                        tupleType.AllocateField(field.Name, fieldType, field.GetterExpression != null, field.SetterExpression != null);
-                    }
-
-                    if (expression.Indexer != null)
-                    {
-                        var keyType = CobType.FromTypeName(expression.Indexer.KeyTypeName, CurrentContext);
-                        var returnType = CobType.FromTypeName(expression.Indexer.ReturnTypeName, CurrentContext);
-
-                        tupleType.AllocateIndexer(keyType, returnType);
-                    }
-                }
-
-                contextStack.Pop();
-            }
-            
-            return Unit.Value;
-        }
-
         private bool HACK_ContextAlreadyDived;
-        public Unit Visit(StructDeclStatement expression)
+        public Unit Visit(RecordStatement expression)
         {
             if (phase == DeclPhase.Types)
             {
@@ -537,15 +491,7 @@ namespace Compiler.CodeGeneration
 
             var returnType = CobType.FromTypeName(returnTypeName, CurrentContext);
 
-            //if (CurrentContext is TraitType traitType)
-            //{
-            //    if (expression.CallingConvention != CallingConvention.Default
-            //    &&  expression.CallingConvention != CallingConvention.ThisCall)
-            //        messages.Add(Message.IllegalCallingConvention, expression, expression.CallingConvention);
-
-            //    traitType.AllocateFunction(expression.Name, parameters, returnType);
-            //}
-            //else
+            
             if (CurrentContext is RecordType recordType)
             {
                 if (expression.CallingConvention != CallingConvention.Default

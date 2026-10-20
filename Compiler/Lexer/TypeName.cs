@@ -21,7 +21,7 @@ namespace Compiler.Lexer
 
         public FunctionSignature? Function { get; init; }
 
-        public StructDeclStatement? Record { get; init; } // TODO Rename type to RecordSignature
+        public RecordStatement? Record { get; init; } // TODO Rename type to RecordSignature
 
         public IReadOnlyList<TypeName>? Generic { get; init; } // [Name]`T1`T2
 

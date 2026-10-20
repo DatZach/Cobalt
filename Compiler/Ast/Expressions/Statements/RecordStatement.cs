@@ -6,7 +6,7 @@ using Compiler.CodeGeneration.Artifacts;
 namespace Compiler.Ast.Expressions.Statements
 {
     // TODO Rename to RecordDeclStatement
-    internal sealed class StructDeclStatement : Expression
+    internal sealed class RecordStatement : Expression
     {
         public eRecordType Type { get; }
 
@@ -32,7 +32,7 @@ namespace Compiler.Ast.Expressions.Statements
 
         public IndexerDefinition? Indexer { get; }
 
-        public StructDeclStatement(
+        public RecordStatement(
             Token token,
             eRecordType type,
             string name,
@@ -61,8 +61,8 @@ namespace Compiler.Ast.Expressions.Statements
             Indexer = indexer;
         }
 
-        public StructDeclStatement(
-            StructDeclStatement other,
+        public RecordStatement(
+            RecordStatement other,
             string name
         )
             : this(other.Token, other.Type, name, other.Generics, other.Mixins, other.Types, other.Constants,
@@ -77,6 +77,19 @@ namespace Compiler.Ast.Expressions.Statements
             return visitor.Visit(this);
         }
     }
+
+    internal sealed record GenericDefinition(
+        string Name,
+        TypeName? ConstraintTypeName
+    );
+
+    internal sealed record FieldDefinition(
+        string? Name,
+        TypeName TypeName,
+        bool IsFinal,
+        Expression? GetterExpression,
+        Expression? SetterExpression
+    );
 
     internal sealed record IndexerDefinition(
         TypeName KeyTypeName,

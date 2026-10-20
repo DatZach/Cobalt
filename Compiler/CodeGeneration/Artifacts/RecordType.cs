@@ -1,6 +1,5 @@
 ﻿using Compiler.Ast.Expressions.Statements;
 using System.Diagnostics;
-using System.Linq;
 
 namespace Compiler.CodeGeneration.Artifacts
 {
@@ -30,7 +29,6 @@ namespace Compiler.CodeGeneration.Artifacts
 
         private readonly List<GenericDefinition> generics;
         private readonly List<RecordType> traits;
-        //private readonly List<TraitType> traits;
         private readonly List<Function> factories;
         private readonly List<Function> functions;
         private readonly List<Field> fields;
@@ -61,21 +59,6 @@ namespace Compiler.CodeGeneration.Artifacts
 
             return variable;
         }
-
-        //public void AttachTrait(TraitType traitType)
-        //{
-        //    traits.Add(traitType);
-        //}
-
-        //public TraitType? FindTrait(string name)
-        //{
-        //    return traits.FirstOrDefault(x => x.Name == name);
-        //}
-
-        //public bool HasTrait(TraitType? traitType)
-        //{
-        //    return traitType != null && traits.Contains(traitType);
-        //}
 
         public void AttachTrait(RecordType traitType)
         {
