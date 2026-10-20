@@ -5,13 +5,11 @@ namespace Compiler.CodeGeneration
 {
     internal static class Intrinsics
     {
-        public static RecordType Range { get; private set; } = null!;
+        public static CobType Range { get; private set; } = null!;
 
-        public static RecordType Lens { get; private set; } = null!;
+        public static CobType Lens { get; private set; } = null!;
 
-        //public static StructType Array { get; private set; } = null!;
-
-        public static RecordType Array { get; set; } = null!;
+        public static CobType Array { get; set; } = null!;
 
         public static CobType StringType { get; set; } = null!;
 
@@ -24,8 +22,8 @@ namespace Compiler.CodeGeneration
         {
             //var stdMod = compiler.RootModule.FindModule("Standard") ?? throw new Exception("The module 'Standard' is not defined by the Standard Library");
             var stdMod = compiler.RootModule;
-            Range = stdMod.FindRecordType("Range") ?? throw new Exception("The symbol 'Range' is not defined by the Standard Library");
-            Lens = stdMod.FindRecordType("Lens") ?? throw new Exception("The symbol 'Lens' is not defined by the Standard Library");
+            Range = stdMod.FindDistinctType("Range") ?? throw new Exception("The symbol 'Range' is not defined by the Standard Library");
+            Lens = stdMod.FindDistinctType("Lens") ?? throw new Exception("The symbol 'Lens' is not defined by the Standard Library");
             //Array = compiler.RootModule.FindStructType("Array") ?? throw new Exception("The symbol 'Array' is not defined by the Standard Library");
             StringType = stdMod.FindDistinctType("string") ?? throw new Exception("The symbol 'string' is not defined by the Standard Library");
         }

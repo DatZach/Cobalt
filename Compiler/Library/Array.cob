@@ -2,14 +2,16 @@
 
 // TODO Fluent API for manip functions
 
-struct Array `T {
-    Length: uint; // , const
-    data: Lens`T;
+type Array = {
+    type `T;
 
-    Capacity: uint => data.Length;
+    uint Length; // , const
+    Lens`T data;
+
+    uint Capacity => data.Length;
     //Capacity: uint { get { return data.Length; } }
 
-    [uint]: T! {
+    index [uint] T! {
         get { return data[key]; }
         set { data[key] = value; }
     }
@@ -92,10 +94,13 @@ struct Array `T {
     function GetEnumerator() ArrayEnumerator`T => ArrayEnumerator`T ( this[0], this, 0 );
 }
 
-tuple ArrayEnumerator `T (
-    Current: T;
-    parent: Array`T;
-    current: u64;
+type ArrayEnumerator = (
+    type `T;
+
+    T Current;
+
+    Array`T parent;
+    u64 current;
 
     function MoveNext() bool {
         if (current < parent.Length) {

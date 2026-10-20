@@ -325,6 +325,10 @@ namespace Compiler.Ast
 
         public static Def ValueOverflow { get; } = new(MessageType.Error, "Value would overflow type");
 
+        public static Def CannotMixinNonTraitType { get; } = new(MessageType.Error, "Cannot 'mixin' non-trait record type '{0}'");
+
+        public static Def TraitNotFullyImplemented { get; } = new(MessageType.Error, "Trait '{0}' is not fully implemented");
+
         public sealed record Def(
             MessageType Type,
             string Content,

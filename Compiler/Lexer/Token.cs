@@ -51,17 +51,12 @@ namespace Compiler.Lexer
 
         [Description("module")] Module,
         [Description("using")] Using,
-        [Description("struct")] Struct, // TODO Remove
         [Description("trait")] Trait, // TODO Remove
         [Description("type")] Type,
-        [Description("tuple")] Tuple, // TODO Remove
         [Description("func")] Function,
         [Description("mixin")] Mixin,
         [Description("factory")] Factory, // TODO Rename 'Constructor' -> 'construct'
         [Description("index")] Indexer,
-        [Description("packed")] Packed, // TODO Remove
-        [Description("enum")] Enum, // TODO Remove
-        [Description("bitflags")] BitFlags, // TODO Remove
         [Description("error")] Error,
 
         [Description("final")] Final,

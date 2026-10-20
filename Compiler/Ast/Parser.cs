@@ -5,8 +5,6 @@ using Compiler.CodeGeneration.Artifacts;
 using Compiler.Lexer;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using System.Xml.Linq;
-using static Compiler.Lexer.TypeName.RecordSignature;
 
 namespace Compiler.Ast
 {
@@ -113,8 +111,7 @@ namespace Compiler.Ast
             eTypeName type;
             string? identifier = null;
             TypeName.FunctionSignature? function = null;
-            TypeName.RecordSignature? record = null;
-            StructDeclStatement? record2 = null;
+            StructDeclStatement? record = null;
             TypeName? union = null;
             List<TypeName>? generic = null;
             bool isArray = false;
@@ -198,132 +195,15 @@ namespace Compiler.Ast
             }
             else if (Match(TokenType.LeftParen))
             {
-                Take(TokenType.LeftParen);
-                var fields = new List<TypeName.RecordSignature.Field>();
-
-                while (!Match(TokenType.RightParen))
-                {
-                    string? fieldName;
-                    TypeName fieldTypeName;
-                    if (Peek(1).Type == TokenType.Colon)
-                    {
-                        fieldName = Take(TokenType.Identifier).Value;
-                        Take(TokenType.Colon);
-                        fieldTypeName = ParseTypeName() ?? throw new Exception("Illegal field type");
-                    }
-                    else
-                    {
-                        fieldName = null;
-                        fieldTypeName = ParseTypeName() ?? throw new Exception("Illegal field type");
-                    }
-
-                    Take(TokenType.Semicolon);
-
-                    fields.Add(new TypeName.RecordSignature.Field
-                    {
-                        Name = fieldName,
-                        TypeName = fieldTypeName
-                    });
-                }
-                Take(TokenType.RightParen);
-
+                var token = Take();
                 type = eTypeName.RecordSignature;
-                record = new TypeName.RecordSignature
-                {
-                    Type = eRecordType.Tuple,
-                    Fields = fields
-                };
+                record = (StructDeclStatement)RecordParselet.Instance.Parse(this, token);
             }
             else if (Match(TokenType.LeftBrace))
             {
-                // TODO Invoke StructDeclParselet
-
-                var generics = new List<GenericDefinition>();
-                var mixins = new List<TypeName>();
-                var types = new List<TypeDeclStatement>();
-                var constants = new List<VariableDeclStatement>();
-                var fields = new List<FieldDefinition>();
-                var functions = new List<FunctionDeclStatement>();
-                var factories = new List<FactoryDeclStatement>();
-                var destructors = new List<FunctionDeclStatement>();
-                IndexerDefinition? indexerDefinition = null;
-
-                var token = Take(TokenType.LeftBrace);
-                while (MatchAndTakeToken(TokenType.RightBrace) == null)
-                {
-                    if (Match(TokenType.Type))
-                    {
-                        var typeToken = Take(TokenType.Type);
-                        var isGeneric = MatchAndTakeToken(TokenType.Generic) != null;
-                        var typeName = Take(TokenType.Identifier);
-                        var constraint = MatchAndTakeToken(TokenType.Assign) != null
-                                       ? ParseTypeName()
-                                       : null;
-                        var refinement = MatchAndTakeToken(TokenType.Colon) != null
-                                       ? ParseExpression()
-                                       : null;
-                        if (isGeneric)
-                            generics.Add(new GenericDefinition(typeName.Value, constraint));
-                        else
-                            types.Add(new TypeDeclStatement(typeToken, typeName.Value, constraint, refinement));
-                    }
-                    else if (Match(TokenType.Mixin))
-                    {
-                        Take(TokenType.Mixin);
-                        var typeName = ParseTypeName();
-                        mixins.Add(typeName);
-                    }
-                    else if (Match(TokenType.Const))
-                    {
-                        var expr = (VariableDeclStatement)ParseStatement();
-                        constants.Add(expr);
-                    }
-                    else if (Match(TokenType.Factory)) // Factory
-                    {
-                        var expr = (FactoryDeclStatement)ParseStatement();
-                        factories.Add(expr);
-                    }
-                    else if (Match(TokenType.Function)) // Function
-                    {
-                        var expr = (FunctionDeclStatement)ParseStatement();
-                        functions.Add(expr);
-                    }
-                    else if (Match(TokenType.Indexer)) // Indexer
-                    {
-                        Take(TokenType.Indexer);
-                        Take(TokenType.LeftSquare);
-                        var keyTypeName = ParseTypeName();
-                        Take(TokenType.RightSquare);
-                        var returnTypeName = ParseTypeName();
-
-                        StructDeclParselet.ParseGetterSetters(this, out var getterExpression, out var setterExpression);
-
-                        indexerDefinition = new IndexerDefinition(keyTypeName, returnTypeName, getterExpression, setterExpression);
-                    }
-                    else // Field
-                    {
-                        var isFinal = MatchAndTakeToken(TokenType.Final) != null;
-                        var fieldType = ParseTypeName();
-                        var fieldName = Take(TokenType.Identifier);
-
-                        StructDeclParselet.ParseGetterSetters(this, out var getterExpression, out var setterExpression);
-
-                        fields.Add(new FieldDefinition(fieldName.Value, fieldType, isFinal, getterExpression, setterExpression));
-                    }
-
-                    MatchAndTakeToken(TokenType.Semicolon);
-                }
-
-                var name = $"AnonymousRecord'{uniqueId++}";
-
-                type = eTypeName.Record2Signature;
-                record2 = new StructDeclStatement(token, eRecordType.Struct, name, generics, mixins, types, constants, fields, functions, factories, destructors, indexerDefinition);
-                //record2 = new TypeName.RecordSignature2
-                //{
-                //    Type = eRecordType.Struct,
-                //    Fields = fields,
-                //    Functions = functions
-                //};
+                var token = Take();
+                type = eTypeName.RecordSignature;
+                record = (StructDeclStatement)RecordParselet.Instance.Parse(this, token);
             }
             else if (Match(TokenType.Error)) // Unary !
                 type = eTypeName.None;
@@ -369,7 +249,6 @@ namespace Compiler.Ast
                 Identifier = identifier,
                 Function = function,
                 Record = record,
-                Record2 = record2,
                 Union = union,
                 Generic = generic,
                 IsArray = isArray,

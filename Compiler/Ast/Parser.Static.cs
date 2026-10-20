@@ -110,9 +110,6 @@ namespace Compiler.Ast
             Register(TokenType.Type, new TypeDeclParselet());
             Register(TokenType.Error, new ErrorParselet());
             Register(TokenType.Error, new IdentifierParselet());
-            Register(TokenType.Trait, new TraitParselet());
-            Register(TokenType.Tuple, new TupleDeclParselet());
-            Register(TokenType.Struct, new StructDeclParselet());
             Register(TokenType.Factory, new FactoryDeclParselet());
             Register(TokenType.Mixin, new MixinParselet());
             Register(TokenType.Const, new VariableDeclParselet());

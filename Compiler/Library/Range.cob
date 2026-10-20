@@ -1,17 +1,17 @@
 //module Standard;
 
-tuple Range (
-    Start: u64;
-    End: u64;
+type Range = (
+    u64 Start;
+    u64 End;
 
-    Length: u64 => End - Start;
+    u64 Length => End - Start;
 
     function GetEnumerator() RangeEnumerator => RangeEnumerator ( Start - 1, End );
 )
 
-tuple RangeEnumerator (
-    Current: u64;
-    End: u64;
+type RangeEnumerator = (
+    u64 Current;
+    u64 End;
 
     function MoveNext() bool {
         if (Current < End) {

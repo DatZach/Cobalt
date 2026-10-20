@@ -21,9 +21,7 @@ namespace Compiler.Lexer
 
         public FunctionSignature? Function { get; init; }
 
-        public RecordSignature? Record { get; init; }
-
-        public StructDeclStatement? Record2 { get; init; } // TODO Rename type to RecordSignature
+        public StructDeclStatement? Record { get; init; } // TODO Rename type to RecordSignature
 
         public IReadOnlyList<TypeName>? Generic { get; init; } // [Name]`T1`T2
 
@@ -77,7 +75,7 @@ namespace Compiler.Lexer
                         break;
 
                     case eTypeName.RecordSignature:
-                        sb.Append("record (TODO)");
+                        sb.Append(Record.Name);
                         break;
 
                     default:
@@ -116,37 +114,6 @@ namespace Compiler.Lexer
                 public bool IsSpread { get; init; }
             }
         }
-
-        public class RecordSignature
-        {
-            private static int uniqueId;
-            public int UniqueId { get; } = uniqueId++;
-
-            public eRecordType Type { get; init; }
-
-            public IReadOnlyList<Field>? Fields { get; init; }
-
-            // TODO The rest...
-
-            public class Field
-            {
-                public string? Name { get; init; }
-
-                public TypeName TypeName { get; init; }
-            }
-        }
-
-        //public sealed class RecordSignature2
-        //{
-        //    private static int uniqueId;
-        //    public int UniqueId { get; } = uniqueId++;
-
-        //    public eRecordType Type { get; init; }
-
-        //    public IReadOnlyList<FieldDefinition> Fields { get; init; }
-
-        //    public IReadOnlyList<FunctionDeclStatement> Functions { get; init; }
-        //}
     }
 
     internal enum eTypeName
@@ -154,7 +121,6 @@ namespace Compiler.Lexer
         None,
         Identifier,
         FunctionSignature,
-        RecordSignature,
-        Record2Signature
+        RecordSignature
     }
 }

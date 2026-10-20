@@ -212,6 +212,8 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public FunctionCandidates? TagFunctionCandidates => Tag as FunctionCandidates;
 
+        public RecordType? TagRecord => Tag as RecordType;
+
         public Expression? Refinement { get; }
 
         CobType ISymbol.Type => this;
@@ -330,12 +332,13 @@ namespace Compiler.CodeGeneration.Artifacts
                     {
                         if (ctx is Module module)
                         {
-                            TraitType? traitType;
+                            //TraitType? traitType;
                             RecordType? recordType;
                             CobType? distinctType;
-                            if ((traitType = module.FindTraitType(ident)) != null)
-                                type = new CobType(eCobType.Trait, tag: traitType);
-                            else if ((recordType = module.FindRecordType(ident)) != null)
+                            //if ((traitType = module.FindTraitType(ident)) != null)
+                            //    type = new CobType(eCobType.Trait, tag: traitType);
+                            //else
+                            if ((recordType = module.FindRecordType(ident)) != null)
                                 type = recordType.ThisType;
                             else if ((distinctType = module.FindDistinctType(ident)) != null)
                                 type = distinctType;
@@ -369,62 +372,18 @@ namespace Compiler.CodeGeneration.Artifacts
             }
             else if (typeName.Type == eTypeName.RecordSignature)
             {
-                // TODO This might be wrong, can allocate records in records
-                Module? module = null;
-                var ctx = context;
-                while (ctx != null && module == null)
-                {
-                    module = ctx as Module;
-                    ctx = ctx.Parent;
-                }
-
-                if (module == null)
-                    throw new Exception("Tuple Signature declaration is not valid here");
-
-                var recordTypeIdentifier = $"InlineTuple'{typeName.Record.UniqueId}";
-                var tupleType = module.FindRecordType(recordTypeIdentifier);
-                if (tupleType == null)
-                {
-                    tupleType = module.AllocateRecordType(recordTypeIdentifier, eRecordType.Tuple);
-
-                    foreach (var x in typeName.Record.Fields)
-                    {
-                        tupleType.AllocateField(x.Name ?? "", FromTypeName(x.TypeName, tupleType), false, false);
-                    }
-                }
-
-                type = new CobType(eCobType.Tuple, tag: tupleType);
-            }
-            else if (typeName.Type == eTypeName.Record2Signature)
-            {
                 var ctx = context;
                 while (ctx != null && ctx.Parent != null)
                     ctx = ctx.Parent;
 
                 // TODO Might actually need to allocate on the CurrentContext instead for namespacing purposes
                 var rootModule = (Module)ctx!; // NOTE Root is always $root module
-                //var recordTypeIdentifier = $"AnonymousRecord'{typeName.Record2.UniqueId}";
-                var recordTypeIdentifier = typeName.Record2.Name;
-                var recordType = rootModule.FindRecordType(recordTypeIdentifier);
-                if (recordType == null)
-                {
-                    recordType = rootModule.AllocateRecordType(recordTypeIdentifier, typeName.Record2.Type);
-
-                    //foreach (var x in typeName.Record2.Fields)
-                    //{
-                    //    // TODO Null names not allowed for structs
-                    //    recordType.AllocateField(x.Name ?? "", FromTypeName(x.TypeName, recordType), false, false);
-                    //}
-
-                    //foreach (var x in typeName.Record2.Functions)
-                    //{
-                    //    // TODO Null names not allowed for structs
-                    //    recordType.AllocateFunction(x.Name, );
-                    //}
-                }
+                var recordTypeIdentifier = typeName.Record!.Name;
+                var recordType = rootModule.FindRecordType(recordTypeIdentifier)
+                              ?? rootModule.AllocateRecordType(recordTypeIdentifier, typeName.Record.Type);
 
                 type = new CobType(
-                    typeName.Record2.Type == eRecordType.Struct ? eCobType.Struct : eCobType.Tuple,
+                    typeName.Record.Type == eRecordType.Struct ? eCobType.Struct : eCobType.Tuple,
                     tag: recordType
                 );
             }
@@ -450,7 +409,7 @@ namespace Compiler.CodeGeneration.Artifacts
             // Suffixes
             if (typeName.IsArray)
             {
-                var tag = Intrinsics.Array.FindConcretizedRecord(type) ?? Intrinsics.Array.AllocateConcretizedRecord(type);
+                var tag = Intrinsics.Array.TagRecord.FindConcretizedRecord(type) ?? Intrinsics.Array.TagRecord.AllocateConcretizedRecord(type);
                 type = new CobType(eCobType.Struct, tag: tag);
             }
 
@@ -623,10 +582,10 @@ namespace Compiler.CodeGeneration.Artifacts
                         result |= value << i; i += 3;
                         break;
                     }
-                    case eCobType.Trait:
-                        // ArtifactIndex = SSSS SSSS SSSS
-                        result |= ((uint)artifact.TraitTypes.IndexOf((TraitType)type.Tag!) & 0xFFFFFF) << i; i += 12;
-                        break;
+                    //case eCobType.Trait:
+                    //    // ArtifactIndex = SSSS SSSS SSSS
+                    //    result |= ((uint)artifact.TraitTypes.IndexOf((TraitType)type.Tag!) & 0xFFFFFF) << i; i += 12;
+                    //    break;
                     case eCobType.Struct:
                         // ArtifactIndex = SSSS SSSS SSSS
                         result |= ((uint)artifact.RecordTypes.IndexOf((RecordType)type.Tag!) & 0xFFFFFF) << i; i += 12;
@@ -728,13 +687,13 @@ namespace Compiler.CodeGeneration.Artifacts
                         }
                         return new CobType(type, size: size);
                     }
-                    case eCobType.Trait:
-                    {
-                        // ArtifactIndex = SSSS SSSS SSSS
-                        var idx = (int)((ulong)(value >> i) & 0xFFFFFF); i += 12;
-                        var tag = artifact.TraitTypes[idx];
-                        return new CobType(type, tag: tag);
-                    }
+                    //case eCobType.Trait:
+                    //{
+                    //    // ArtifactIndex = SSSS SSSS SSSS
+                    //    var idx = (int)((ulong)(value >> i) & 0xFFFFFF); i += 12;
+                    //    var tag = artifact.TraitTypes[idx];
+                    //    return new CobType(type, tag: tag);
+                    //}
                     case eCobType.Struct:
                     {
                         // ArtifactIndex = SSSS SSSS SSSS
@@ -870,6 +829,8 @@ namespace Compiler.CodeGeneration.Artifacts
         // TODO Passing an optional long srcValue for integer types specifically is very awkward, should find
         //      some way to universalize or specialize the function signatures below...
 
+        // TODO IsExplicitCastable needs to also validate refinements
+
         // dst = src
         public static bool IsExplicitCastable(CobType dstType, CobType srcType, long? srcValue = null)
         {
@@ -965,10 +926,17 @@ namespace Compiler.CodeGeneration.Artifacts
                 //return dstType.Size >= srcType.Size; // u64 >= u32
             }
 
-            if (dstType.Type == eCobType.Trait && srcType.Type is eCobType.Tuple or eCobType.Struct)
+            //if (dstType.Type == eCobType.Trait && srcType.Type is eCobType.Tuple or eCobType.Struct)
+            //{
+            //    var recordType = srcType.Tag as RecordType;
+            //    return recordType?.HasTrait(dstType.Tag as TraitType) ?? false;
+            //}
+
+            if (dstType.TagRecord != null && dstType.TagRecord.IsTrait
+            &&  srcType.Type is eCobType.Tuple or eCobType.Struct or eCobType.Distinct)
             {
                 var recordType = srcType.Tag as RecordType;
-                return recordType?.HasTrait(dstType.Tag as TraitType) ?? false;
+                return recordType?.HasTrait(dstType.Tag as RecordType) ?? false;
             }
 
             if (dstType.Type == eCobType.Tuple && srcType.Type == eCobType.Tuple)
@@ -1057,7 +1025,7 @@ namespace Compiler.CodeGeneration.Artifacts
                         return None;
                     if (rhsType != eCobType.Signed && rhsType != eCobType.Unsigned && rhsType != eCobType.Real)
                         return None;
-                    return new CobType(eCobType.Tuple, tag: Intrinsics.Range);
+                    return Intrinsics.Range;
 
                 case TokenType.ConditionalAnd:
                 case TokenType.ConditionalOr:

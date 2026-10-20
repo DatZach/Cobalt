@@ -45,8 +45,8 @@ namespace Compiler.CodeGeneration.Architectures
                 Serialize(writer, export);
             else if (source is Module module)
                 Serialize(writer, module);
-            else if (source is TraitType traitType)
-                Serialize(writer, traitType);
+            //else if (source is TraitType traitType)
+            //    Serialize(writer, traitType);
             else if (source is RecordType recordType)
                 Serialize(writer, recordType);
             else if (source is Function function)
@@ -76,7 +76,7 @@ namespace Compiler.CodeGeneration.Architectures
             writer.WriteSection(AsMagic('I', 'P', 'R', 'T'), writer => { writer.WriteList(this, artifact.Imports); });
             writer.WriteSection(AsMagic('E', 'P', 'R', 'T'), writer => { writer.WriteList(this, artifact.Exports); });
             writer.WriteSection(AsMagic('M', 'O', 'D', 'U'), writer => { writer.WriteList(this, artifact.Modules); });
-            writer.WriteSection(AsMagic('T', 'R', 'A', 'I'), writer => { writer.WriteList(this, artifact.TraitTypes); });
+            //writer.WriteSection(AsMagic('T', 'R', 'A', 'I'), writer => { writer.WriteList(this, artifact.TraitTypes); });
             writer.WriteSection(AsMagic('R', 'E', 'C', 'D'), writer => { writer.WriteList(this, artifact.RecordTypes); });
             writer.WriteSection(AsMagic('F', 'U', 'N', 'C'), writer => { writer.WriteList(this, artifact.Functions); });
             writer.WriteSection(AsMagic('G', 'L', 'O', 'B'), writer => { writer.WriteList(this, artifact.Globals); });
@@ -117,28 +117,28 @@ namespace Compiler.CodeGeneration.Architectures
             writer.Write(module.Name);
             writer.Write7BitEncodedInt(artifact.Functions.IndexOf(module.InitializerFunction));
             writer.WriteLookupList(modules, artifact.Modules);
-            writer.WriteLookupList(traitTypes, artifact.TraitTypes);
+            //writer.WriteLookupList(traitTypes, artifact.TraitTypes);
             writer.WriteLookupList(recordTypes, artifact.RecordTypes);
             writer.WriteLookupList(functions, artifact.Functions);
             writer.WriteLookupList(globals, artifact.Globals);
         }
 
-        private void Serialize(BinaryWriter writer, TraitType traitType)
-        {
-            writer.Write(AsFlags(traitType.Parent != null)); // TODO Flag lists
-            writer.Write(traitType.Name);
-            writer.WriteLookupList(traitType.Functions, artifact.Functions);
-        }
+        //private void Serialize(BinaryWriter writer, TraitType traitType)
+        //{
+        //    writer.Write(AsFlags(traitType.Parent != null)); // TODO Flag lists
+        //    writer.Write(traitType.Name);
+        //    writer.WriteLookupList(traitType.Functions, artifact.Functions);
+        //}
 
         private void Serialize(BinaryWriter writer, RecordType recordType)
         {
             var generics = FieldOf<IReadOnlyList<GenericDefinition>>(recordType, "generics");
-            var traits = FieldOf<IReadOnlyList<TraitType>>(recordType, "traits");
+            //var traits = FieldOf<IReadOnlyList<TraitType>>(recordType, "traits");
             var factories = FieldOf<IReadOnlyList<Function>>(recordType, "factories");
             var functions = FieldOf<IReadOnlyList<Function>>(recordType, "functions");
             var fields = FieldOf<IReadOnlyList<Field>>(recordType, "fields");
 
-            writer.Write(AsFlags(recordType.Indexer != null, generics.Count > 0, traits.Count > 0, factories.Count > 0, functions.Count > 0, fields.Count > 0, recordType.Type == eRecordType.Struct));
+            writer.Write(AsFlags(recordType.Indexer != null, generics.Count > 0, false, factories.Count > 0, functions.Count > 0, fields.Count > 0, recordType.Type == eRecordType.Struct));
             writer.Write(recordType.Name);
             WriteScopeParentIndex(writer, recordType.Parent);
 
@@ -159,7 +159,7 @@ namespace Compiler.CodeGeneration.Architectures
                 if (x.ConstraintTypeName != null)
                     writer.Write(x.ConstraintTypeName);
             });
-            writer.WriteLookupList(traits, artifact.TraitTypes);
+            //writer.WriteLookupList(traits, artifact.TraitTypes);
             writer.WriteLookupList(factories, artifact.Functions);
             writer.WriteLookupList(functions, artifact.Functions);
             writer.WriteList(this, fields);
@@ -283,11 +283,11 @@ namespace Compiler.CodeGeneration.Architectures
                 writer.Write((byte)3);
                 writer.Write7BitEncodedInt(artifact.RecordTypes.IndexOf((RecordType)value));
             }
-            else if (value is TraitType)
-            {
-                writer.Write((byte)4);
-                writer.Write7BitEncodedInt(artifact.TraitTypes.IndexOf((TraitType)value));
-            }
+            //else if (value is TraitType)
+            //{
+            //    writer.Write((byte)4);
+            //    writer.Write7BitEncodedInt(artifact.TraitTypes.IndexOf((TraitType)value));
+            //}
             else
                 writer.Write((byte)0);
         }
@@ -392,7 +392,7 @@ namespace Compiler.CodeGeneration.Architectures
                         writer.Write(typeName.Function.ReturnTypeName);
                         break;
                     case eTypeName.RecordSignature:
-                        writer.Write7BitEncodedInt(typeName.Record.UniqueId);
+                        //writer.Write7BitEncodedInt(typeName.Record.UniqueId);
                         writer.Write((byte)typeName.Record.Type);
                         writer.Write7BitEncodedInt((byte)typeName.Record.Fields.Count);
                         foreach (var field in typeName.Record.Fields)

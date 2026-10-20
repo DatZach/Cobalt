@@ -1,5 +1,6 @@
 ﻿using Compiler.Ast.Expressions.Statements;
 using System.Diagnostics;
+using System.Linq;
 
 namespace Compiler.CodeGeneration.Artifacts
 {
@@ -18,6 +19,8 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public bool IsAnonymous => fields.Count > 0 && fields[0].Name.StartsWith('\'');
 
+        public bool IsTrait => functions.All(x => x.IsSignature);
+
         public CobType ThisType => new (Type == eRecordType.Struct ? eCobType.Struct : eCobType.Tuple, tag: this);
 
         // TODO  HACK Fix this nonsense
@@ -26,7 +29,8 @@ namespace Compiler.CodeGeneration.Artifacts
         public RecordType? HACK_PendingSuperType => pendingSuperType;
 
         private readonly List<GenericDefinition> generics;
-        private readonly List<TraitType> traits;
+        private readonly List<RecordType> traits;
+        //private readonly List<TraitType> traits;
         private readonly List<Function> factories;
         private readonly List<Function> functions;
         private readonly List<Field> fields;
@@ -41,7 +45,8 @@ namespace Compiler.CodeGeneration.Artifacts
             this.compiler = compiler;
 
             generics = new List<GenericDefinition>();
-            traits = new List<TraitType>();
+            //traits = new List<TraitType>();
+            traits = new List<RecordType>();
             fields = new List<Field>(4);
             factories = new List<Function>(4);
             functions = new List<Function>(4);
@@ -57,28 +62,63 @@ namespace Compiler.CodeGeneration.Artifacts
             return variable;
         }
 
-        public void AttachTrait(TraitType traitType)
+        //public void AttachTrait(TraitType traitType)
+        //{
+        //    traits.Add(traitType);
+        //}
+
+        //public TraitType? FindTrait(string name)
+        //{
+        //    return traits.FirstOrDefault(x => x.Name == name);
+        //}
+
+        //public bool HasTrait(TraitType? traitType)
+        //{
+        //    return traitType != null && traits.Contains(traitType);
+        //}
+
+        public void AttachTrait(RecordType traitType)
         {
+            if (!traitType.IsTrait)
+                throw new ArgumentException();
+
             traits.Add(traitType);
         }
 
-        public TraitType? FindTrait(string name)
+        public RecordType? FindTrait(string name)
         {
-            return traits.FirstOrDefault(x => x.Name == name);
+            return traits.FirstOrDefault(x => x.IsTrait && x.Name == name);
         }
 
-        public bool HasTrait(TraitType? traitType)
+        public bool HasTrait(RecordType? traitType)
         {
-            return traitType != null && traits.Contains(traitType);
+            return traitType != null && traitType.IsTrait && traits.Contains(traitType);
         }
 
-        public Function AllocateFactory(string name, IReadOnlyList<Function.Parameter> parameters)
+        public bool IsTraitSignatureMatch(RecordType? traitType)
+        {
+            if (traitType == null || !traitType.IsTrait)
+                return false;
+
+            foreach (var function in traitType.functions)
+            {
+                // TODO Need to actually validate signature, names are not enough
+                if (!functions.Any(x => x.Name == function.Name))
+                    return false;
+            }
+
+            // TODO Fields
+
+            return true;
+        }
+
+        public Function AllocateFactory(string name, IReadOnlyList<Function.Parameter> parameters, bool isSignature)
         {
             // TODO Not sure that this should be enforced
             if (Type != eRecordType.Struct)
                 throw new InvalidOperationException("Only structs may allocate factories");
 
-            var function = new Function(name, this, compiler, CallingConvention.Default, parameters, ThisType);
+            var function = new Function(name, this, compiler, CallingConvention.Default, parameters, ThisType, isSignature);
             factories.Add(function);
             compiler.Functions.Add(function);
 
@@ -93,13 +133,14 @@ namespace Compiler.CodeGeneration.Artifacts
         public Function AllocateFunction(
             string name,
             IReadOnlyList<Function.Parameter> parameters,
-            CobType returnType
+            CobType returnType,
+            bool isSignature
         ) {
             var lParameters = new List<Function.Parameter>();
             lParameters.Add(new Function.Parameter("this", ThisType, false));
             lParameters.AddRange(parameters);
 
-            var function = new Function(name, this, compiler, CallingConvention.ThisCall, lParameters, returnType);
+            var function = new Function(name, this, compiler, CallingConvention.ThisCall, lParameters, returnType, isSignature);
             functions.Add(function);
             compiler.Functions.Add(function);
 
@@ -128,8 +169,8 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public Field AllocateField(string name, CobType type, bool hasGetter, bool hasSetter)
         {
-            var getter = hasGetter ? AllocateFunction($"{name}_$get", Array.Empty<Function.Parameter>(), type) : null;
-            var setter = hasSetter ? AllocateFunction($"{name}_$set", new [] { new Function.Parameter("value", type, false) }, type) : null;
+            var getter = hasGetter ? AllocateFunction($"{name}_$get", Array.Empty<Function.Parameter>(), type, false) : null;
+            var setter = hasSetter ? AllocateFunction($"{name}_$set", new [] { new Function.Parameter("value", type, false) }, type, false) : null;
 
             var field = new Field(this, name, type, getter, setter);
             fields.Add(field);
@@ -149,8 +190,8 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public Indexer AllocateIndexer(CobType keyType, CobType returnType)
         {
-            var getter = AllocateFunction("$Indexer_$get", new [] { new Function.Parameter("key", keyType, false) }, returnType);
-            var setter = AllocateFunction("$Indexer_$set", new [] { new Function.Parameter("key", keyType, false), new Function.Parameter("value", returnType, false) }, returnType);
+            var getter = AllocateFunction("$Indexer_$get", new [] { new Function.Parameter("key", keyType, false) }, returnType, false);
+            var setter = AllocateFunction("$Indexer_$set", new [] { new Function.Parameter("key", keyType, false), new Function.Parameter("value", returnType, false) }, returnType, false);
 
             var indexer = new Indexer
             {
@@ -226,7 +267,7 @@ namespace Compiler.CodeGeneration.Artifacts
                     y => new Function.Parameter(y.Name, y.Type.ToConcreteType(pendingBType), y.IsSpread)
                 ).ToList();
 
-                AllocateFactory(x.Name, parameters);
+                AllocateFactory(x.Name, parameters, x.IsSignature);
             }
 
             foreach (var x in pendingSuperType.functions)
@@ -236,7 +277,7 @@ namespace Compiler.CodeGeneration.Artifacts
                 ).ToList();
                 var returnType = x.ReturnType.ToConcreteType(pendingBType);
 
-                AllocateFunction(x.Name, parameters, returnType);
+                AllocateFunction(x.Name, parameters, returnType, x.IsSignature);
             }
 
             foreach (var x in pendingSuperType.fields)

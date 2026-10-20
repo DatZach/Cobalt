@@ -10,13 +10,13 @@ namespace Compiler.Ast.Expressions.Statements
 
         public IReadOnlyList<FunctionDeclStatement.Parameter> Parameters { get; }
 
-        public Expression Body { get; }
+        public Expression? Body { get; }
 
         public FactoryDeclStatement(
             Token token,
             string name,
             IReadOnlyList<FunctionDeclStatement.Parameter> parameters,
-            Expression body
+            Expression? body
         )
             : base(token)
         {

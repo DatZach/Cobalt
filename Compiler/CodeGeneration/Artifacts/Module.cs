@@ -16,7 +16,7 @@ namespace Compiler.CodeGeneration.Artifacts
         public bool IsRoot => Parent == null;
 
         private readonly List<Module> modules;
-        private readonly List<TraitType> traitTypes;
+        //private readonly List<TraitType> traitTypes;
         private readonly List<RecordType> recordTypes;
         private readonly List<CobType> distinctTypes;
         private readonly List<Function> functions;
@@ -30,7 +30,7 @@ namespace Compiler.CodeGeneration.Artifacts
             this.compiler = compiler;
 
             modules = new List<Module>();
-            traitTypes = new List<TraitType>();
+            //traitTypes = new List<TraitType>();
             recordTypes = new List<RecordType>();
             distinctTypes = new List<CobType>();
             functions = new List<Function>();
@@ -62,19 +62,19 @@ namespace Compiler.CodeGeneration.Artifacts
             return module;
         }
 
-        public TraitType? AllocateTraitType(string name)
-        {
-            var traitType = new TraitType(name, this, compiler);
-            traitTypes.Add(traitType);
-            compiler.TraitTypes.Add(traitType);
+        //public TraitType? AllocateTraitType(string name)
+        //{
+        //    var traitType = new TraitType(name, this, compiler);
+        //    traitTypes.Add(traitType);
+        //    compiler.TraitTypes.Add(traitType);
 
-            return traitType;
-        }
+        //    return traitType;
+        //}
 
-        public TraitType? FindTraitType(string name)
-        {
-            return traitTypes.FirstOrDefault(x => x.Name == name);
-        }
+        //public TraitType? FindTraitType(string name)
+        //{
+        //    return traitTypes.FirstOrDefault(x => x.Name == name);
+        //}
 
         public RecordType AllocateRecordType(string name, eRecordType type)
         {
@@ -118,7 +118,7 @@ namespace Compiler.CodeGeneration.Artifacts
             IReadOnlyList<Function.Parameter> parameters,
             CobType returnType
         ) {
-            var function = new Function(name, this, compiler, callingConvention, parameters, returnType);
+            var function = new Function(name, this, compiler, callingConvention, parameters, returnType, false);
             functions.Add(function);
             compiler.Functions.Add(function);
 

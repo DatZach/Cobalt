@@ -32,6 +32,8 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public bool IsCasting => ReturnType.Name == Name;
 
+        public bool IsSignature { get; }
+
         private int freeRegisterIndex;
         private int registers;
 
@@ -45,7 +47,8 @@ namespace Compiler.CodeGeneration.Artifacts
             Compiler compiler,
             CallingConvention callingConvention,
             IReadOnlyList<Parameter> parameters,
-            CobType returnType
+            CobType returnType,
+            bool isSignature
         ) {
             Name = name ?? throw new ArgumentNullException(nameof(name));
             Parent = parent ?? throw new ArgumentNullException(nameof(parent));
@@ -53,6 +56,7 @@ namespace Compiler.CodeGeneration.Artifacts
             CallingConvention = callingConvention;
             Parameters = parameters;
             ReturnType = returnType;
+            IsSignature = isSignature;
             Body = new InstructionBuffer();
             ReturnLabel = Body.AllocateLabel();
 

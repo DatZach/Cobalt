@@ -245,14 +245,18 @@ namespace Compiler.CodeGeneration
 
                 //contextStack.Push(subType);
                 if (tag is RecordType recordType
-                &&  expression.SuperTypeName.Record2 != null)
+                &&  expression.SuperTypeName.Record != null)
                 {
                     HACK_ContextAlreadyDived = true;
                     contextStack.Push(recordType);
-                    expression.SuperTypeName.Record2.Accept(this);
+                    expression.SuperTypeName.Record.Accept(this);
                     contextStack.Pop();
                     HACK_ContextAlreadyDived = false;
                 }
+
+                // TODO Can this be moved back into Intrinsics.Pass1?
+                if (expression.SubTypeName == "Array")
+                    Intrinsics.Array = subType;
             }
             else if (phase > DeclPhase.Types)
             {
@@ -262,7 +266,7 @@ namespace Compiler.CodeGeneration
                 {
                     HACK_ContextAlreadyDived = true;
                     contextStack.Push(ctx);
-                    expression.SuperTypeName.Record2?.Accept(this);
+                    expression.SuperTypeName.Record?.Accept(this);
                     contextStack.Pop();
                     HACK_ContextAlreadyDived = false;
                 }
@@ -346,32 +350,6 @@ namespace Compiler.CodeGeneration
 
                 if (memberName != "_")
                     enumRefinement.AllocateMember(memberName, memberValue);
-            }
-
-            return Unit.Value;
-        }
-
-        public Unit Visit(TraitStatement expression)
-        {
-            if (phase == DeclPhase.Types)
-            {
-                if (CurrentModule.FindTraitType(expression.Name) != null)
-                {
-                    messages.Add(Message.SymbolConflictsWithOther, expression.Token, expression.Name);
-                    return Unit.Value;
-                }
-
-                CurrentModule.AllocateTraitType(expression.Name);
-            }
-            else if (phase > DeclPhase.Types)
-            {
-                var traitType = CurrentModule.FindTraitType(expression.Name)!;
-                contextStack.Push(traitType);
-
-                for (var i = 0; i < expression.Functions.Count; ++i)
-                    expression.Functions[i].Accept(this);
-
-                contextStack.Pop();
             }
 
             return Unit.Value;
@@ -463,7 +441,13 @@ namespace Compiler.CodeGeneration
                 foreach (var traitTypeName in expression.Mixins)
                 {
                     var traitType = CobType.FromTypeName(traitTypeName, CurrentContext);
-                    structType.AttachTrait((TraitType)traitType.Tag);
+                    if (traitType.TagRecord == null || !traitType.TagRecord.IsTrait)
+                    {
+                        messages.Add(Message.CannotMixinNonTraitType, expression, traitTypeName);
+                        continue;
+                    }
+
+                    structType.AttachTrait(traitType.TagRecord);
                 }
 
                 for (var i = 0; i < expression.Types.Count; ++i)
@@ -474,9 +458,6 @@ namespace Compiler.CodeGeneration
 
                 if (!HACK_ContextAlreadyDived)
                     contextStack.Pop();
-
-                if (expression.Name == "Array")
-                    Intrinsics.Array = structType;
             }
             else if (phase > DeclPhase.Types)
             {
@@ -523,7 +504,7 @@ namespace Compiler.CodeGeneration
 
             if (CurrentContext is RecordType recordType)
             {
-                recordType.AllocateFactory(expression.Name, parameters);
+                recordType.AllocateFactory(expression.Name, parameters, expression.Body != null);
             }
             else
                 messages.Add(Message.CannotDeclareSymbolHere, expression);
@@ -535,6 +516,13 @@ namespace Compiler.CodeGeneration
         {
             if (phase != DeclPhase.Functions)
                 return Unit.Value;
+
+            if (expression.Body == null
+            &&  (CurrentContext is not RecordType tRecordType || !tRecordType.IsTrait))
+            {
+                messages.Add(Message.MissingFunctionBody, expression);
+                return Unit.Value;
+            }
 
             var parameters = expression.Parameters.Select(
                 x => new Function.Parameter(x.Name, CobType.FromTypeName(x.TypeName, CurrentContext), x.IsSpread, x.DefaultValue)
@@ -549,21 +537,22 @@ namespace Compiler.CodeGeneration
 
             var returnType = CobType.FromTypeName(returnTypeName, CurrentContext);
 
-            if (CurrentContext is TraitType traitType)
+            //if (CurrentContext is TraitType traitType)
+            //{
+            //    if (expression.CallingConvention != CallingConvention.Default
+            //    &&  expression.CallingConvention != CallingConvention.ThisCall)
+            //        messages.Add(Message.IllegalCallingConvention, expression, expression.CallingConvention);
+
+            //    traitType.AllocateFunction(expression.Name, parameters, returnType);
+            //}
+            //else
+            if (CurrentContext is RecordType recordType)
             {
                 if (expression.CallingConvention != CallingConvention.Default
                 &&  expression.CallingConvention != CallingConvention.ThisCall)
                     messages.Add(Message.IllegalCallingConvention, expression, expression.CallingConvention);
 
-                traitType.AllocateFunction(expression.Name, parameters, returnType);
-            }
-            else if (CurrentContext is RecordType recordType)
-            {
-                if (expression.CallingConvention != CallingConvention.Default
-                &&  expression.CallingConvention != CallingConvention.ThisCall)
-                    messages.Add(Message.IllegalCallingConvention, expression, expression.CallingConvention);
-
-                recordType.AllocateFunction(expression.Name, parameters, returnType);
+                recordType.AllocateFunction(expression.Name, parameters, returnType, expression.Body == null);
             }
             else if (CurrentContext is Module module)
             {

@@ -55,10 +55,7 @@ namespace Compiler.Ast.Parselets.Statements
                 );
             }
             else
-            {
-                parser.Messages.Add(Message.MissingFunctionBody, token);
-                body = new EmptyExpression(token);
-            }
+                body = null;
 
             return new FactoryDeclStatement(token, name.Value, parameters, body);
         }

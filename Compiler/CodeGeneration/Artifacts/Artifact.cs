@@ -10,7 +10,7 @@
 
         public List<Module> Modules { get; }
 
-        public List<TraitType> TraitTypes { get; }
+        //public List<TraitType> TraitTypes { get; }
 
         public List<RecordType> RecordTypes { get; }
 
@@ -30,7 +30,7 @@
             Imports = new List<Import>();
             Exports = new List<Export>();
             Modules = new List<Module>();
-            TraitTypes = new List<TraitType>();
+            //TraitTypes = new List<TraitType>();
             RecordTypes = new List<RecordType>();
             Functions = new List<Function>();
             Globals = new List<Variable>();

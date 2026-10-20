@@ -5,41 +5,61 @@ using Compiler.Lexer;
 
 namespace Compiler.Ast.Parselets.Statements
 {
-    internal sealed class StructDeclParselet : IPrefixStatementParselet
+    internal sealed class RecordParselet : IPrefixStatementParselet
     {
+        // TODO Remove hard instance, should be possible for this to exist with the rest of the parselets...
+        private static RecordParselet? instance;
+        public static RecordParselet Instance => instance ??= new RecordParselet();
+
+        private static int uniqueId;
+
         public Expression Parse(Parser parser, Token token)
         {
-            var name = parser.Take(TokenType.Identifier);
+            // TODO Handle Tuple-specific errors
+
+            var type = token.Type == TokenType.LeftBrace ? eRecordType.Struct : eRecordType.Tuple;
+
             var generics = new List<GenericDefinition>();
             var mixins = new List<TypeName>();
+            var types = new List<TypeDeclStatement>();
+            var constants = new List<VariableDeclStatement>();
             var fields = new List<FieldDefinition>();
             var functions = new List<FunctionDeclStatement>();
             var factories = new List<FactoryDeclStatement>();
+            var destructors = new List<FunctionDeclStatement>();
             IndexerDefinition? indexerDefinition = null;
 
-            while (parser.MatchAndTakeToken(TokenType.Generic) != null)
+            var terminalToken = token.Type == TokenType.LeftBrace ? TokenType.RightBrace : TokenType.RightParen;
+            while (!parser.IsEndOfStream && parser.MatchAndTakeToken(terminalToken) == null)
             {
-                var genericName = parser.Take(TokenType.Identifier);
-                var constraintTypeName = parser.MatchAndTakeToken(TokenType.Colon) != null
-                    ? parser.ParseTypeName()
-                    : null;
-
-                generics.Add(new GenericDefinition(genericName.Value, constraintTypeName));
-            }
-
-            if (parser.MatchAndTakeToken(TokenType.Mixin) != null)
-            {
-                do
+                if (parser.Match(TokenType.Type))
                 {
-                    var traitTypeName = parser.ParseTypeName();
-                    mixins.Add(traitTypeName);
-                } while (parser.MatchAndTakeToken(TokenType.Comma) != null);
-            }
-
-            parser.Take(TokenType.LeftBrace);
-            while (parser.MatchAndTakeToken(TokenType.RightBrace) == null)
-            {
-                if (parser.Match(TokenType.Factory)) // Factory
+                    var typeToken = parser.Take(TokenType.Type);
+                    var isGeneric = parser.MatchAndTakeToken(TokenType.Generic) != null;
+                    var typeName = parser.Take(TokenType.Identifier);
+                    var constraint = parser.MatchAndTakeToken(TokenType.Assign) != null
+                                   ? parser.ParseTypeName()
+                                   : null;
+                    var refinement = parser.MatchAndTakeToken(TokenType.Colon) != null
+                                   ? parser.ParseExpression()
+                                   : null;
+                    if (isGeneric)
+                        generics.Add(new GenericDefinition(typeName.Value, constraint));
+                    else
+                        types.Add(new TypeDeclStatement(typeToken, typeName.Value, constraint, refinement));
+                }
+                else if (parser.Match(TokenType.Mixin))
+                {
+                    parser.Take(TokenType.Mixin);
+                    var typeName = parser.ParseTypeName();
+                    mixins.Add(typeName);
+                }
+                else if (parser.Match(TokenType.Const))
+                {
+                    var expr = (VariableDeclStatement)parser.ParseStatement();
+                    constants.Add(expr);
+                }
+                else if (parser.Match(TokenType.Factory)) // Factory
                 {
                     var expr = (FactoryDeclStatement)parser.ParseStatement();
                     factories.Add(expr);
@@ -49,12 +69,12 @@ namespace Compiler.Ast.Parselets.Statements
                     var expr = (FunctionDeclStatement)parser.ParseStatement();
                     functions.Add(expr);
                 }
-                else if (parser.Match(TokenType.LeftSquare)) // Indexer
+                else if (parser.Match(TokenType.Indexer)) // Indexer
                 {
+                    parser.Take(TokenType.Indexer);
                     parser.Take(TokenType.LeftSquare);
                     var keyTypeName = parser.ParseTypeName();
                     parser.Take(TokenType.RightSquare);
-                    parser.Take(TokenType.Colon);
                     var returnTypeName = parser.ParseTypeName();
 
                     ParseGetterSetters(parser, out var getterExpression, out var setterExpression);
@@ -63,25 +83,28 @@ namespace Compiler.Ast.Parselets.Statements
                 }
                 else // Field
                 {
-                    var fieldName = parser.Take(TokenType.Identifier);
-                    parser.Take(TokenType.Colon);
+                    var isFinal = parser.MatchAndTakeToken(TokenType.Final) != null;
                     var fieldType = parser.ParseTypeName();
+                    var fieldName = parser.Take(TokenType.Identifier);
 
                     ParseGetterSetters(parser, out var getterExpression, out var setterExpression);
 
-                    fields.Add(new FieldDefinition(fieldName.Value, fieldType, false, getterExpression, setterExpression));
+                    fields.Add(new FieldDefinition(fieldName.Value, fieldType, isFinal, getterExpression, setterExpression));
                 }
 
                 parser.MatchAndTakeToken(TokenType.Semicolon);
             }
 
-            var types = new List<TypeDeclStatement>();
-            var constants = new List<VariableDeclStatement>();
-            var destructors = new List<FunctionDeclStatement>();
+            var name = $"AnonymousRecord'{uniqueId++}";
 
-            return new StructDeclStatement(token, eRecordType.Struct, name.Value, generics, mixins, types, constants, fields, functions, factories, destructors, indexerDefinition);
+            return new StructDeclStatement(
+                token, type, name,
+                generics, mixins, types, constants, fields,
+                functions, factories, destructors, indexerDefinition
+            );
         }
 
+        // TODO Move into VariableDeclParselet
         public static void ParseGetterSetters(
             Parser parser,
             out Expression? getterExpression,

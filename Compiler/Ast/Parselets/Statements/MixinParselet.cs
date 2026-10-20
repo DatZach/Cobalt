@@ -27,7 +27,7 @@ namespace Compiler.Ast.Parselets.Statements
                 parser.Take(TokenType.Colon);
                 var fieldTypeName = parser.ParseTypeName();
 
-                StructDeclParselet.ParseGetterSetters(parser, out var getterExpression, out var setterExpression);
+                RecordParselet.ParseGetterSetters(parser, out var getterExpression, out var setterExpression);
 
                 function = null;
                 field = new FieldDefinition(fieldName.Value, fieldTypeName, false, getterExpression, setterExpression);

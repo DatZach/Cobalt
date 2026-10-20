@@ -19,7 +19,7 @@ namespace Compiler.CodeGeneration
 
         public List<Module> Modules => artifact.Modules;
 
-        public List<TraitType> TraitTypes => artifact.TraitTypes;
+        //public List<TraitType> TraitTypes => artifact.TraitTypes;
 
         public List<RecordType> RecordTypes => artifact.RecordTypes;
 
@@ -129,17 +129,12 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(TypeDeclStatement expression)
         {
-            expression.SuperTypeName.Record2?.Accept(this);
+            expression.SuperTypeName.Record?.Accept(this);
 
             return null;
         }
 
         public Storage? Visit(EnumRefinementDeclStatement expression)
-        {
-            return null;
-        }
-
-        public Storage? Visit(TraitStatement expression)
         {
             return null;
         }
@@ -304,6 +299,13 @@ namespace Compiler.CodeGeneration
                 contextStack.Pop();
             }
 
+            foreach (var mixin in expression.Mixins)
+            {
+                var traitType = CobType.FromTypeName(mixin, CurrentContext);
+                if (!structType.IsTraitSignatureMatch(traitType.TagRecord))
+                    messages.Add(Message.TraitNotFullyImplemented, expression, mixin);
+            }
+
             return null;
         }
 
@@ -329,11 +331,9 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(FunctionDeclStatement expression)
         {
+            // NOTE Null body errors are handled in forward declaration
             if (expression.Body == null)
-            {
-                messages.Add(Message.MissingFunctionBody, expression);
                 return null;
-            }
 
             // TODO Make a clean API for this
             // TODO Also, record types have function candidates
@@ -779,7 +779,10 @@ namespace Compiler.CodeGeneration
                     CurrentFunction.ReturnType = rhs.Type;
                 else if (!CobType.IsExplicitCastable(CurrentFunction.ReturnType, rhs.Type, rhs.Operand.Value))
                     messages.Add(Message.ReturnTypeMismatch, expression, CurrentFunction.ReturnType, rhs.Type);
-                
+
+                // TODO Might clobber rhs storage...
+                EnforceRefinment(rhs, CurrentFunction.ReturnType, expression); // TODO Should be implemented in IsExplicitCastable?
+
                 CurrentFunction.Body.Emit(Opcode.Return, rhs.Operand);
                 rhs.Free();
             }
@@ -1585,7 +1588,7 @@ namespace Compiler.CodeGeneration
             };
 
             // NOTE The outer call expression handles function calls and tuple ctors
-            if (function != null || dstStorage.Type == eCobType.Tuple)// && !function.IsCasting)
+            if (function != null || dstStorage.Type.TagRecord != null)// && !function.IsCasting)
             {
                 arguments.ForEach(x => x.Free());
                 dstStorage.Free();
@@ -1602,7 +1605,7 @@ namespace Compiler.CodeGeneration
             var dstType = dstStorage.Type; // dstType :: int | string | function() This | ...
             var srcType = source.Type;
 
-            // HACK Resolve int() when no user-defined cast function is found...
+            // TODO HACK Resolve int() when no user-defined cast function is found...
             if ((dstType.TagFunction != null || dstType.TagFunctionCandidates != null) && function == null)
                 dstType = CobType.FromTypeName(new TypeName { Type = eTypeName.Identifier, Identifier = "int" }, CurrentContext);
             
@@ -1641,14 +1644,14 @@ namespace Compiler.CodeGeneration
 
         private Storage? VisitTupleLiteralExpression(CallExpression expression, Storage? functionStorage)
         {
-            if (functionStorage == null || functionStorage.Type != eCobType.Tuple
+            if (functionStorage == null
             ||  functionStorage.Type.Tag is not RecordType tupleType
             ||  tupleType.Type != eRecordType.Tuple)
                 return null;
 
             functionStorage.Free();
 
-            var cobType = new CobType(eCobType.Tuple, tag: tupleType);
+            var cobType = functionStorage.Type;//new CobType(eCobType.Tuple, tag: tupleType);
 
             var storage = CurrentFunction.AllocateRegisterStorage(cobType);
             CurrentFunction.Body.Emit(Opcode.New, storage.Operand, cobType.ToOperand(artifact));
@@ -1698,7 +1701,8 @@ namespace Compiler.CodeGeneration
                 function = new Function(
                     "$anonymous", CurrentModule, this, CallingConvention.Default,
                     tagSignature.Parameters,
-                    tagSignature.ReturnType
+                    tagSignature.ReturnType,
+                    false
                 );
                 functionStorage = candidatesStorage;
             }
@@ -1756,12 +1760,12 @@ namespace Compiler.CodeGeneration
 
                     // RESOLVE TYPE
                     var bType = CobType.U8; // TODO Implement correctly
-                    var tag = Intrinsics.Array;
+                    var tag = Intrinsics.Array.TagRecord;
                     tag = tag.FindConcretizedRecord(bType) ?? tag.AllocateConcretizedRecord(bType);
                     var cobType = new CobType(eCobType.Struct, tag: tag);
 
                     if (tag.PopulateConcretizedRecordIfRequired())
-                        concreteTypeAstReferences.Add(new ConcreteTypeAstReference(Intrinsics.Array, tag));
+                        concreteTypeAstReferences.Add(new ConcreteTypeAstReference(Intrinsics.Array.TagRecord, tag));
 
                     // ALLOCATE
                     var arrReturnStorage = CurrentFunction.AllocateRegisterStorage(CobType.Nil);
@@ -1825,7 +1829,7 @@ namespace Compiler.CodeGeneration
                 : null;
 
             CurrentFunction.Body.Emit(
-                function.Parent is TraitType ? Opcode.CallVirt : Opcode.Call,
+                function.Parent is RecordType x && x.IsTrait ? Opcode.CallVirt : Opcode.Call,
                 functionStorage.Operand,
                 retStorage?.Operand ?? Operand.None,
                 arguments.Select(x => x.Operand).ToList()
@@ -1902,7 +1906,8 @@ namespace Compiler.CodeGeneration
                 this,
                 CallingConvention.CCall,
                 Array.Empty<Function.Parameter>(),
-                CobType.None
+                CobType.None,
+                false
             );
 
             contextStack.Push(function);
@@ -1979,7 +1984,7 @@ namespace Compiler.CodeGeneration
 
                 if (recordType != null)
                 {
-                    function = index.Type.Tag == Intrinsics.Range
+                    function = index.Type == Intrinsics.Range
                              ? recordType.FindFunction("Slice")
                              : recordType.Indexer.Getter;
                     context = recordType;
@@ -2094,7 +2099,7 @@ namespace Compiler.CodeGeneration
             //var cobType = new CobType(eCobType.Struct, tag: structType);
 
             var structTypeStorage = expression.StructTypeExpression.Accept(this);
-            var structType = structTypeStorage?.Type.FirstAncestorWhere(x => /*x.Type == eCobType.Struct && */x.Tag is RecordType);
+            var structType = structTypeStorage?.Type.FirstAncestorWhere(x => /* TODO x.Type == eCobType.Struct && */x.Tag is RecordType);
             if (structType == null)
             {
                 messages.Add(Message.CannotInstantiateType, expression.StructTypeExpression, structTypeStorage?.Type);
@@ -2146,12 +2151,12 @@ namespace Compiler.CodeGeneration
             var bType = expression.ElementTypeName == null
                       ? CobType.U8 // TODO This needs to infer the type from the elements, implement in the future
                       : CobType.FromTypeName(expression.ElementTypeName, CurrentContext);
-            var tag = Intrinsics.Array;
+            var tag = Intrinsics.Array.TagRecord;
             tag = tag.FindConcretizedRecord(bType) ?? tag.AllocateConcretizedRecord(bType);
             var cobType = new CobType(eCobType.Struct, tag: tag);
 
             if (tag.PopulateConcretizedRecordIfRequired())
-                concreteTypeAstReferences.Add(new ConcreteTypeAstReference(Intrinsics.Array, tag));
+                concreteTypeAstReferences.Add(new ConcreteTypeAstReference(Intrinsics.Array.TagRecord, tag));
 
             var storage = CurrentFunction.AllocateRegisterStorage(cobType);
 
@@ -2396,7 +2401,8 @@ namespace Compiler.CodeGeneration
                     this,
                     CallingConvention.CCall,
                     Array.Empty<Function.Parameter>(),
-                    CobType.None
+                    CobType.None,
+                    false
                 );
 
                 contextStack.Push(function);
@@ -2536,6 +2542,12 @@ namespace Compiler.CodeGeneration
                     seen.AddRange(hack);
                     hack = seen.Except(hack).ToList();
                 }
+
+                // PASS 3 - Traits
+                //foreach (var recordType in artifact.RecordTypes)
+                //{
+                //    foreach (var traitType in recordType.Traits)
+                //}
                 
                 return artifact;
             }

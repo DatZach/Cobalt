@@ -1,11 +1,13 @@
 //module Standard;
 
-tuple Lens `T (
-    Address: uint;
-    Length: uint;
+type Lens = (
+    type `T;
+
+    uint Address;
+    uint Length;
 
     // NOTE Implemented in Compiler as an intrinsic
-    [uint]: T! {
+    index [uint] T! {
         get {
             if (key < 0 || key >= Length) return error.OutOfBounds;
             
@@ -40,10 +42,13 @@ tuple Lens `T (
     function GetEnumerator() LensEnumerator`T => LensEnumerator`T ( this[0], this, 0 );
 )
 
-tuple LensEnumerator `T (
-    Current: T;
-    parent: Lens`T;
-    current: u64;
+type LensEnumerator = (
+    type `T;
+
+    T Current;
+
+    Lens`T parent;
+    u64 current;
 
     function MoveNext() bool {
         if (current < parent.Length) {

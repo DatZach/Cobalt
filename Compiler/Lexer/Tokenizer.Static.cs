@@ -99,22 +99,19 @@ namespace Compiler.Lexer
 
                 ["module"] = TokenType.Module,
                 ["using"] = TokenType.Using,
-                ["struct"] = TokenType.Struct,
                 ["trait"] = TokenType.Trait,
                 ["type"] = TokenType.Type,
-                ["tuple"] = TokenType.Tuple,
                 ["function"] = TokenType.Function,
                 ["mixin"] = TokenType.Mixin,
                 ["factory"] = TokenType.Factory,
-                ["packed"] = TokenType.Packed,
-                ["enum"] = TokenType.Enum,
-                ["bitflags"] = TokenType.BitFlags,
+                ["index"] = TokenType.Indexer,
                 ["error"] = TokenType.Error,
 
                 ["true"] = TokenType.True,
                 ["false"] = TokenType.False,
                 ["nil"] = TokenType.Nil,
 
+                ["final"] = TokenType.Final,
                 ["const"] = TokenType.Const,
                 ["var"] = TokenType.Var,
 
