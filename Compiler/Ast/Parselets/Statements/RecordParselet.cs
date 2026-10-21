@@ -25,7 +25,7 @@ namespace Compiler.Ast.Parselets.Statements
             var constants = new List<VariableDeclStatement>();
             var fields = new List<FieldDefinition>();
             var functions = new List<FunctionDeclStatement>();
-            var factories = new List<FactoryDeclStatement>();
+            var factories = new List<ConstructStatement>();
             var destructors = new List<FunctionDeclStatement>();
             IndexerDefinition? indexerDefinition = null;
 
@@ -59,9 +59,9 @@ namespace Compiler.Ast.Parselets.Statements
                     var expr = (VariableDeclStatement)parser.ParseStatement();
                     constants.Add(expr);
                 }
-                else if (parser.Match(TokenType.Factory)) // Factory
+                else if (parser.Match(TokenType.Construct)) // Factory
                 {
-                    var expr = (FactoryDeclStatement)parser.ParseStatement();
+                    var expr = (ConstructStatement)parser.ParseStatement();
                     factories.Add(expr);
                 }
                 else if (parser.Match(TokenType.Function)) // Function

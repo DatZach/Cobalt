@@ -329,6 +329,8 @@ namespace Compiler.Ast
 
         public static Def TraitNotFullyImplemented { get; } = new(MessageType.Error, "Trait '{0}' is not fully implemented");
 
+        public static Def NotAllFieldsInitialized { get; } = new(MessageType.Error, "Not all fields assigned to by constructor and initializer");
+
         public sealed record Def(
             MessageType Type,
             string Content,

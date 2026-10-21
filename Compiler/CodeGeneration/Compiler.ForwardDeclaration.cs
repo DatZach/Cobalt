@@ -418,8 +418,8 @@ namespace Compiler.CodeGeneration
                 for (var i = 0; i < expression.Constants.Count; ++i)
                     expression.Constants[i].Accept(this);
 
-                for (var i = 0; i < expression.Factories.Count; ++i)
-                    expression.Factories[i].Accept(this);
+                for (var i = 0; i < expression.Constructors.Count; ++i)
+                    expression.Constructors[i].Accept(this);
 
                 for (var i = 0; i < expression.Functions.Count; ++i)
                     expression.Functions[i].Accept(this);
@@ -447,7 +447,7 @@ namespace Compiler.CodeGeneration
             return Unit.Value;
         }
 
-        public Unit Visit(FactoryDeclStatement expression)
+        public Unit Visit(ConstructStatement expression)
         {
             if (phase != DeclPhase.Functions)
                 return Unit.Value;
@@ -458,7 +458,7 @@ namespace Compiler.CodeGeneration
 
             if (CurrentContext is RecordType recordType)
             {
-                recordType.AllocateFactory(expression.Name, parameters, expression.Body != null);
+                recordType.AllocateConstructor(expression.Name, parameters, expression.Body == null);
             }
             else
                 messages.Add(Message.CannotDeclareSymbolHere, expression);

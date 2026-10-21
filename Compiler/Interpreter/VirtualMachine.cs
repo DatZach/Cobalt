@@ -82,7 +82,7 @@ namespace Compiler.Interpreter
                                 ? nativeLibrariesProxy.Invoke(native, calleeParameters)
                                 : ExecuteFunction(callee, calleeParameters);
 
-                            if (callee.ReturnType != eCobType.None)
+                            if (callee.ReturnType != eCobType.None && inst.B.Type != OperandType.None)
                                 WriteOperand(inst.B!, result);
                             break;
                         }

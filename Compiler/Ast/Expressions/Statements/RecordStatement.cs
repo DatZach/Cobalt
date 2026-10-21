@@ -26,7 +26,7 @@ namespace Compiler.Ast.Expressions.Statements
         public IReadOnlyList<FunctionDeclStatement> Functions { get; }
 
         // TODO Rename Constructors
-        public IReadOnlyList<FactoryDeclStatement> Factories { get; }
+        public IReadOnlyList<ConstructStatement> Constructors { get; }
 
         public IReadOnlyList<FunctionDeclStatement> Destructors { get; }
 
@@ -42,7 +42,7 @@ namespace Compiler.Ast.Expressions.Statements
             IReadOnlyList<VariableDeclStatement> constants,
             IReadOnlyList<FieldDefinition> fields,
             IReadOnlyList<FunctionDeclStatement> functions,
-            IReadOnlyList<FactoryDeclStatement> factories,
+            IReadOnlyList<ConstructStatement> constructors,
             IReadOnlyList<FunctionDeclStatement> destructors,
             IndexerDefinition? indexer
         )
@@ -56,7 +56,7 @@ namespace Compiler.Ast.Expressions.Statements
             Constants = constants;
             Fields = fields;
             Functions = functions;
-            Factories = factories;
+            Constructors = constructors;
             Destructors = destructors;
             Indexer = indexer;
         }
@@ -66,7 +66,7 @@ namespace Compiler.Ast.Expressions.Statements
             string name
         )
             : this(other.Token, other.Type, name, other.Generics, other.Mixins, other.Types, other.Constants,
-                   other.Fields, other.Functions, other.Factories, other.Destructors, other.Indexer)
+                   other.Fields, other.Functions, other.Constructors, other.Destructors, other.Indexer)
         {
 
         }

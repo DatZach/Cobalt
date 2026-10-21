@@ -16,15 +16,13 @@ type Array = {
         set { data[key] = value; }
     }
 
-    factory New(uint capacity) {
+    construct New(uint capacity) {
         var _capacity = capacity; // TODO capacity
         if (_capacity == 0)
             _capacity = 16;
         
-        return This {
-            Length = 0,
-            data = Heap.Alloc(_capacity) // TODO * T.Size)
-        };
+        Length = 0;
+        data = Heap.Alloc(_capacity); // TODO * T.Size)
     }
 
     function Add(T value) { // intrinsic

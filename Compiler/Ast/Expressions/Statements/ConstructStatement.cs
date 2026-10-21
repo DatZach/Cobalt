@@ -4,17 +4,17 @@ using System.Diagnostics;
 
 namespace Compiler.Ast.Expressions.Statements
 {
-    internal sealed class FactoryDeclStatement : Expression
+    internal sealed class ConstructStatement : Expression
     {
-        public string Name { get; }
+        public string? Name { get; }
 
         public IReadOnlyList<FunctionDeclStatement.Parameter> Parameters { get; }
 
         public Expression? Body { get; }
 
-        public FactoryDeclStatement(
+        public ConstructStatement(
             Token token,
-            string name,
+            string? name,
             IReadOnlyList<FunctionDeclStatement.Parameter> parameters,
             Expression? body
         )

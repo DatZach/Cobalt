@@ -15,7 +15,7 @@ namespace Compiler.Ast.Visitors
         T Visit(EnumRefinementDeclStatement expression);
         T Visit(ErrorStatement expression);
         T Visit(RecordStatement expression);
-        T Visit(FactoryDeclStatement expression);
+        T Visit(ConstructStatement expression);
         T Visit(FunctionDeclStatement expression);
         T Visit(MixinDeclStatement expression);
         T Visit(VariableDeclStatement expression);

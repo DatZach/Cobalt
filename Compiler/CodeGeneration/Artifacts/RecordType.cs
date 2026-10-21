@@ -19,7 +19,7 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public bool IsAnonymous => fields.Count > 0 && fields[0].Name.StartsWith('\'');
 
-        public bool IsTrait => functions.All(x => x.IsSignature);
+        public bool IsTrait => functions.All(x => x.IsSignature) && constructors.All(x => x.IsSignature);
 
         public CobType ThisType => new (eCobType.Record, tag: this);
 
@@ -30,7 +30,7 @@ namespace Compiler.CodeGeneration.Artifacts
 
         private readonly List<GenericDefinition> generics;
         private readonly List<RecordType> traits;
-        private readonly List<Function> factories;
+        private readonly List<Function> constructors;
         private readonly List<Function> functions;
         private readonly List<Global> globals;
         private readonly List<Field> fields;
@@ -48,7 +48,7 @@ namespace Compiler.CodeGeneration.Artifacts
             traits = new List<RecordType>();
             globals = new List<Global>();
             fields = new List<Field>(4);
-            factories = new List<Function>(4);
+            constructors = new List<Function>(4);
             functions = new List<Function>(4);
         }
 
@@ -97,22 +97,29 @@ namespace Compiler.CodeGeneration.Artifacts
             return true;
         }
 
-        public Function AllocateFactory(string name, IReadOnlyList<Function.Parameter> parameters, bool isSignature)
+        public Function AllocateConstructor(string? name, IReadOnlyList<Function.Parameter> parameters, bool isSignature)
         {
             // TODO Not sure that this should be enforced
             if (Type != eRecordType.Struct)
-                throw new InvalidOperationException("Only structs may allocate factories");
+                throw new InvalidOperationException("Only structs may allocate constructors");
 
-            var function = new Function(name, this, compiler, CallingConvention.Default, parameters, ThisType, isSignature);
-            factories.Add(function);
+            name ??= "$ctor";
+            
+            var lParameters = new List<Function.Parameter>();
+            lParameters.Add(new Function.Parameter("this", ThisType, false));
+            lParameters.AddRange(parameters);
+
+            var function = new Function(name, this, compiler, CallingConvention.ThisCall, lParameters, ThisType, isSignature) { IsConstructor = true };
+            constructors.Add(function);
             compiler.Functions.Add(function);
 
             return function;
         }
 
-        public Function? FindFactory(string name)
+        public Function? FindConstructor(string? name)
         {
-            return factories.FirstOrDefault(x => x.Name == name);
+            name ??= "$ctor";
+            return constructors.FirstOrDefault(x => x.Name == name);
         }
 
         public Function AllocateFunction(
@@ -185,6 +192,20 @@ namespace Compiler.CodeGeneration.Artifacts
         public Field? FindField(int index)
         {
             return fields.ElementAtOrDefault(index);
+        }
+
+        public bool IsFullyInitialized(HashSet<ISymbol> symbols)
+        {
+            foreach (var field in fields)
+            {
+                if (field.Getter != null && field.Setter == null)
+                    continue;
+
+                if (!symbols.Contains(field))
+                    return false;
+            }
+
+            return true;
         }
 
         public Indexer AllocateIndexer(CobType keyType, CobType returnType)
@@ -260,13 +281,13 @@ namespace Compiler.CodeGeneration.Artifacts
                 AttachTrait(trait);
             }
 
-            foreach (var x in pendingSuperType.factories)
+            foreach (var x in pendingSuperType.constructors)
             {
-                var parameters = x.Parameters.Select(
+                var parameters = x.Parameters.Skip(1).Select(
                     y => new Function.Parameter(y.Name, y.Type.ToConcreteType(pendingBType), y.IsSpread)
                 ).ToList();
 
-                AllocateFactory(x.Name, parameters, x.IsSignature);
+                AllocateConstructor(x.Name, parameters, x.IsSignature);
             }
 
             foreach (var x in pendingSuperType.functions)
@@ -315,9 +336,9 @@ namespace Compiler.CodeGeneration.Artifacts
             if (name.StartsWith('\'') && (field = FindField(int.Parse(name[1..]))) != null)
                 return field;
 
-            Function? factory;
-            if ((factory = FindFactory(name)) != null)
-                return factory;
+            Function? constructor;
+            if ((constructor = FindConstructor(name)) != null)
+                return constructor;
 
             FunctionCandidates? candidates;
             if ((candidates = FindFunctionCandidates(name)) != null)
@@ -398,7 +419,9 @@ namespace Compiler.CodeGeneration.Artifacts
         {
             if (symbol is Field field)
             {
-                if (field.IsFinal && field.HasValue)
+                if (field.IsFinal
+                &&  !(compiler.CurrentContext is Function fn && fn.IsConstructor) // Allow ctors
+                &&  !compiler.IsDivingInitializer)                                // Allow initializer lists
                     return false;
                 
                 // TODO Setter
@@ -412,7 +435,7 @@ namespace Compiler.CodeGeneration.Artifacts
                     compiler.AssignmentRHS.Operand
                 );
 
-                field.HasValue = true;
+                //field.HasValue = true;
                 return true;
             }
 
@@ -467,7 +490,7 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public bool IsFinal { get; }
 
-        public bool HasValue { get; set; }
+        //public bool HasValue { get; set; }
 
         private readonly IScopeContext parent;
 

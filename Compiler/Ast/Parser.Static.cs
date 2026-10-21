@@ -110,7 +110,7 @@ namespace Compiler.Ast
             Register(TokenType.Type, new TypeDeclParselet());
             Register(TokenType.Error, new ErrorParselet());
             Register(TokenType.Error, new IdentifierParselet());
-            Register(TokenType.Factory, new FactoryDeclParselet());
+            Register(TokenType.Construct, new ConstructParselet());
             Register(TokenType.Mixin, new MixinParselet());
             Register(TokenType.Const, new VariableDeclParselet());
             Register(TokenType.Var, new VariableDeclParselet());

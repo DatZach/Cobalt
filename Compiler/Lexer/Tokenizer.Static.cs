@@ -102,7 +102,8 @@ namespace Compiler.Lexer
                 ["type"] = TokenType.Type,
                 ["function"] = TokenType.Function,
                 ["mixin"] = TokenType.Mixin,
-                ["factory"] = TokenType.Factory,
+                ["construct"] = TokenType.Construct,
+                ["destruct"] = TokenType.Destruct,
                 ["index"] = TokenType.Indexer,
                 ["error"] = TokenType.Error,
 

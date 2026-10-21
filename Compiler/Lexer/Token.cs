@@ -54,7 +54,8 @@ namespace Compiler.Lexer
         [Description("type")] Type,
         [Description("func")] Function,
         [Description("mixin")] Mixin,
-        [Description("factory")] Factory, // TODO Rename 'Constructor' -> 'construct'
+        [Description("construct")] Construct,
+        [Description("destruct")] Destruct,
         [Description("index")] Indexer,
         [Description("error")] Error,
 

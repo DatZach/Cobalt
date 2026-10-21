@@ -35,6 +35,8 @@ namespace Compiler.CodeGeneration
 
         public Function FunctionStringError { get; set; } // HACK TODO Cleanup implementation
 
+        public bool IsDivingInitializer { get; private set; }
+
         public IScopeContext CurrentContext => contextStack.Peek();
 
         public Module CurrentModule => contextStack.OfType<Module>().First();
@@ -46,6 +48,7 @@ namespace Compiler.CodeGeneration
 
         private readonly List<GenericTypeAstReference> genericTypeAstReferences;
         private readonly List<ConcreteTypeAstReference> concreteTypeAstReferences;
+        private readonly Stack<HashSet<ISymbol>> mutationStack;
         private readonly Stack<IScopeContext> contextStack;
         private readonly Stack<LoopContext> loopStack;
         private readonly Artifact artifact;
@@ -63,6 +66,7 @@ namespace Compiler.CodeGeneration
 
             genericTypeAstReferences = new List<GenericTypeAstReference>();
             concreteTypeAstReferences = new List<ConcreteTypeAstReference>();
+            mutationStack = new Stack<HashSet<ISymbol>>();
             contextStack = new Stack<IScopeContext>();
             loopStack = new Stack<LoopContext>();
 
@@ -160,8 +164,8 @@ namespace Compiler.CodeGeneration
                 foreach (var constant in expression.Constants)
                     constant.Accept(this);
 
-                foreach (var factoryExpression in expression.Factories)
-                    factoryExpression.Accept(this);
+                foreach (var constructExpression in expression.Constructors)
+                    constructExpression.Accept(this);
 
                 foreach (var functionExpression in expression.Functions)
                     functionExpression.Accept(this);
@@ -231,19 +235,31 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
-        public Storage? Visit(FactoryDeclStatement expression)
+        // TODO This is a function, should be merged with FunctionDeclStatement perhaps?
+        public Storage? Visit(ConstructStatement expression)
         {
             Function function;
             if (CurrentContext is RecordType recordType)
-                function = recordType.FindFactory(expression.Name)!;
+                function = recordType.FindConstructor(expression.Name)!;
             else
                 throw new InvalidOperationException(); // TODO ??
 
+            var mutations = new HashSet<ISymbol>();
+            mutationStack.Push(mutations);
             contextStack.Push(function);
 
-            expression.Body.Accept(this);
+            expression.Body?.Accept(this)?.Free();
+
+            function.ReturnLabel.Mark();
+            function.Body.Emit(Opcode.Return, Operand.This); // TODO Error if not all paths return
 
             contextStack.Pop();
+            mutationStack.Pop();
+
+            foreach (var x in mutations) function.MutatedSymbols.Add(x);
+
+            if (expression.Name != null && !recordType.IsFullyInitialized(mutations))
+                messages.Add(Message.NotAllFieldsInitialized, expression);
 
             return new Storage(
                 new CobType(eCobType.Function, tag: function),
@@ -272,6 +288,8 @@ namespace Compiler.CodeGeneration
 
             if (function == null) throw new InvalidOperationException("Unable to resolve declared function");
 
+            var mutations = new HashSet<ISymbol>();
+            mutationStack.Push(mutations);
             contextStack.Push(function);
             forTempBlockScope = null;
 
@@ -295,6 +313,9 @@ namespace Compiler.CodeGeneration
             function.Body.Emit(Opcode.Return); // TODO Error if not all paths return
 
             contextStack.Pop();
+            mutationStack.Pop();
+
+            foreach (var x in mutations) function.MutatedSymbols.Add(x);
 
             return new Storage(
                 new CobType(eCobType.Function, tag: function),
@@ -1664,7 +1685,12 @@ namespace Compiler.CodeGeneration
             if (function.CallingConvention == CallingConvention.ThisCall)
             {
                 Storage? thisStorage;
-                if (expression.FunctionExpression is BinaryOperatorExpression { Operator: TokenType.Dot } boe)
+                if (function.IsConstructor)
+                {
+                    thisStorage = CurrentFunction.AllocateRegisterStorage(function.ReturnType);
+                    CurrentFunction.Body.Emit(Opcode.New, thisStorage.Operand, function.ReturnType.ToOperand(artifact));
+                }
+                else if (expression.FunctionExpression is BinaryOperatorExpression { Operator: TokenType.Dot } boe)
                     thisStorage = boe.Left.Accept(this);
                 else
                 {
@@ -1707,36 +1733,37 @@ namespace Compiler.CodeGeneration
                         concreteTypeAstReferences.Add(new ConcreteTypeAstReference(Intrinsics.Array.TagRecord, tag));
 
                     // ALLOCATE
-                    var arrReturnStorage = CurrentFunction.AllocateRegisterStorage(CobType.Nil);
                     argument = CurrentFunction.AllocateRegisterStorage(cobType);
+                    CurrentFunction.Body.Emit(Opcode.New, argument.Operand, cobType.ToOperand(artifact));
             
                     // CALL CTOR
-                    var arrNewFunction = tag.FindFactory("New");
-                    var arrFunctionStorage = tag.EmitGetForSymbol(arrNewFunction);
+                    var fnSymbol = tag.FindConstructor("New");
+                    var fnStorage = tag.EmitGetForSymbol(fnSymbol);
 
                     CurrentFunction.Body.Emit(
                         Opcode.Call,
-                        arrFunctionStorage.Operand,
-                        argument.Operand,
-                        new []{ Operand.ImmediateUnsigned(0) } // TODO Prealloc element count
+                        fnStorage.Operand,
+                        Operand.None,
+                        new []{ argument.Operand, Operand.ImmediateUnsigned(0) } // TODO Prealloc element count
                     );
 
+                    fnStorage.Free();
+
                     // ADD ELEMENTS
-                    arrNewFunction = tag.FindFunction("Add");
-                    arrFunctionStorage = tag.EmitGetForSymbol(arrNewFunction);
+                    fnSymbol = tag.FindFunction("Add");
+                    fnStorage = tag.EmitGetForSymbol(fnSymbol);
 
                     for (; i < arguments.Count; ++i)
                     {
                         CurrentFunction.Body.Emit(
                             Opcode.Call,
-                            arrFunctionStorage.Operand,
-                            arrReturnStorage.Operand,
+                            fnStorage.Operand,
+                            Operand.None,
                             new []{ argument.Operand, arguments[i].Operand }
                         );
                     }
 
-                    arrReturnStorage.Free();
-                    arrFunctionStorage.Free();
+                    fnStorage.Free();
 
                     while (j < arguments.Count)
                         arguments.RemoveAt(j);
@@ -1767,8 +1794,9 @@ namespace Compiler.CodeGeneration
                 ? CurrentFunction.AllocateRegisterStorage(function.ReturnType)
                 : null;
 
+            var opcode = function.Parent is RecordType x && x.IsTrait ? Opcode.CallVirt : Opcode.Call;
             CurrentFunction.Body.Emit(
-                function.Parent is RecordType x && x.IsTrait ? Opcode.CallVirt : Opcode.Call,
+                opcode,
                 functionStorage.Operand,
                 retStorage?.Operand ?? Operand.None,
                 arguments.Select(x => x.Operand).ToList()
@@ -1820,6 +1848,9 @@ namespace Compiler.CodeGeneration
                     var result = scope.EmitSetForSymbol(symbol);
                     if (!result)
                         messages.Add(Message.IllegalAssignment, expression);
+
+                    if (mutationStack.Count > 0)
+                        mutationStack.Peek().Add(symbol);
 
                     return null;
                 }
@@ -2045,22 +2076,49 @@ namespace Compiler.CodeGeneration
                 return null;
             }
 
+            var mutations = new HashSet<ISymbol>();
+            mutationStack.Push(mutations);
+
             var cobType = structTypeStorage.Type;
 
+            // ALLOCATE
             var storage = CurrentFunction.AllocateRegisterStorage(cobType);
             CurrentFunction.Body.Emit(Opcode.New, storage.Operand, cobType.ToOperand(artifact));
-
-            if (expression.Assignments != null)
+            
+            // INVOKE DEFAULT CONSTRUCTOR
+            var recordType = (RecordType)structType.Tag!;
+            var ctorSymbol = recordType.FindConstructor(null);
+            if (ctorSymbol != null)
             {
-                var prevBinOpLHS = BinOpLHS;
-                BinOpLHS = storage;
-                contextStack.Push((RecordType)structType.Tag);
-                for (var i = 0; i < expression.Assignments.Count; ++i)
-                    expression.Assignments[i].Accept(this);
-                contextStack.Pop();
-                BinOpLHS = prevBinOpLHS;
+                var ctorStorage = recordType.EmitGetForSymbol(ctorSymbol);
+                CurrentFunction.Body.Emit(Opcode.Call, ctorStorage.Operand, Operand.None, new[] { storage.Operand });
+                ctorStorage.Free();
+
+                foreach (var x in ctorSymbol.MutatedSymbols) mutations.Add(x);
             }
 
+            // INITIALIZER ASSIGNMENTS
+            if (expression.Assignments != null)
+            {
+                var prevIsDivingInitializer = IsDivingInitializer;
+                IsDivingInitializer = true;
+                var prevBinOpLHS = BinOpLHS;
+                BinOpLHS = storage;
+                contextStack.Push(recordType);
+                for (var i = 0; i < expression.Assignments.Count; ++i)
+                    expression.Assignments[i].Accept(this)?.Free();
+                contextStack.Pop();
+                BinOpLHS = prevBinOpLHS;
+                IsDivingInitializer = prevIsDivingInitializer;
+            }
+
+            // VALIDATE ALL FIELDS INITIALIZED
+            if (!recordType.IsFullyInitialized(mutations))
+                messages.Add(Message.NotAllFieldsInitialized, expression);
+
+            mutationStack.Pop();
+
+            // ENFORCE REFINEMENT
             if (cobType.Refinement != null)
             {
                 var storage2 = CurrentFunction.AllocateRegisterStorage(cobType);
@@ -2097,9 +2155,11 @@ namespace Compiler.CodeGeneration
             if (tag.PopulateConcretizedRecordIfRequired())
                 concreteTypeAstReferences.Add(new ConcreteTypeAstReference(Intrinsics.Array.TagRecord, tag));
 
-            var storage = CurrentFunction.AllocateRegisterStorage(cobType);
-
             // ALLOCATE
+            var storage = CurrentFunction.AllocateRegisterStorage(cobType);
+            CurrentFunction.Body.Emit(Opcode.New, storage.Operand, cobType.ToOperand(artifact));
+
+            // CALL CTOR
             Storage? countStorage;
             if (expression.CountExpression != null)
             {
@@ -2114,14 +2174,15 @@ namespace Compiler.CodeGeneration
                     return null;
                 }
 
-                function = tag.FindFactory("New");
+                // ALLOCATE
+                function = tag.FindConstructor("New");
                 functionStorage = tag.EmitGetForSymbol(function);
 
                 CurrentFunction.Body.Emit(
                     Opcode.Call,
                     functionStorage.Operand,
-                    storage.Operand,
-                    new []{ countStorage.Operand }
+                    Operand.None,
+                    new []{ storage.Operand, countStorage.Operand }
                 );
                 functionStorage.Free();
             }
@@ -2130,14 +2191,14 @@ namespace Compiler.CodeGeneration
                 // Explicit Elements
                 // TODO Validate types match
 
-                function = tag.FindFactory("New");
+                function = tag.FindConstructor("New");
                 functionStorage = tag.EmitGetForSymbol(function);
 
                 CurrentFunction.Body.Emit(
                     Opcode.Call,
                     functionStorage.Operand,
-                    storage.Operand,
-                    new []{ Operand.ImmediateUnsigned(elements.Count) }
+                    Operand.None,
+                    new []{ storage.Operand, Operand.ImmediateUnsigned(elements.Count) }
                 );
                 functionStorage.Free();
 

@@ -26,6 +26,8 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public InstructionBuffer Body { get; }
 
+        public HashSet<ISymbol> MutatedSymbols { get; }
+
         public Label ReturnLabel { get; }
 
         public string FullyQualifiedName => Parent.Name + '_' + Name;
@@ -33,6 +35,8 @@ namespace Compiler.CodeGeneration.Artifacts
         public bool IsCasting => ReturnType.Name == Name;
 
         public bool IsSignature { get; }
+
+        public bool IsConstructor { get; init; } // TODO Maybe this should be implemented as OOP, not sure
 
         private int freeRegisterIndex;
         private int registers;
@@ -58,6 +62,7 @@ namespace Compiler.CodeGeneration.Artifacts
             ReturnType = returnType;
             IsSignature = isSignature;
             Body = new InstructionBuffer();
+            MutatedSymbols = new HashSet<ISymbol>();
             ReturnLabel = Body.AllocateLabel();
 
             blockScopeStack = new Stack<BlockScope>();

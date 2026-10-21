@@ -4,13 +4,13 @@ using Compiler.Lexer;
 
 namespace Compiler.Ast.Parselets.Statements
 {
-    internal sealed class FactoryDeclParselet : IPrefixStatementParselet
+    internal sealed class ConstructParselet : IPrefixStatementParselet
     {
         public Expression Parse(Parser parser, Token token)
         {
             IReadOnlyList<FunctionDeclStatement.Parameter> parameters;
 
-            var name = parser.Take(TokenType.Identifier);
+            var name = parser.MatchAndTakeToken(TokenType.Identifier);
             
             parser.Take(TokenType.LeftParen);
             if (!parser.Match(TokenType.RightParen))
@@ -57,7 +57,7 @@ namespace Compiler.Ast.Parselets.Statements
             else
                 body = null;
 
-            return new FactoryDeclStatement(token, name.Value, parameters, body);
+            return new ConstructStatement(token, name?.Value, parameters, body);
         }
     }
 }
