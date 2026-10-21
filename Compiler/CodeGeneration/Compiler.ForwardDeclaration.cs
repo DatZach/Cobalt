@@ -429,7 +429,7 @@ namespace Compiler.CodeGeneration
                     foreach (var field in expression.Fields)
                     {
                         var fieldType = CobType.FromTypeName(field.TypeName, CurrentContext);
-                        structType.AllocateField(field.Name, fieldType, field.GetterExpression != null, field.SetterExpression != null);
+                        structType.AllocateField(field.Name, fieldType, field.IsFinal, field.GetterExpression != null, field.SetterExpression != null);
                     }
 
                     if (expression.Indexer != null)
@@ -525,7 +525,7 @@ namespace Compiler.CodeGeneration
                 {
                     var fieldType = CobType.FromTypeName(expression.Field.TypeName, CurrentContext);
                     if (context is RecordType recordType)
-                        recordType.AllocateField(expression.Field.Name, fieldType, expression.Field.GetterExpression != null, expression.Field.SetterExpression != null);
+                        recordType.AllocateField(expression.Field.Name, fieldType, expression.Field.IsFinal, expression.Field.GetterExpression != null, expression.Field.SetterExpression != null);
                     else
                         messages.Add(Message.CannotDeclareSymbolHere, expression);
                 }

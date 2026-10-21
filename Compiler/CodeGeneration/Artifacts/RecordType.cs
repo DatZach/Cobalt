@@ -166,12 +166,12 @@ namespace Compiler.CodeGeneration.Artifacts
             return globals.FirstOrDefault(x => x.Name == name);
         }
 
-        public Field AllocateField(string name, CobType type, bool hasGetter, bool hasSetter)
+        public Field AllocateField(string name, CobType type, bool isFinal, bool hasGetter, bool hasSetter)
         {
             var getter = hasGetter ? AllocateFunction($"{name}_$get", Array.Empty<Function.Parameter>(), type, false) : null;
             var setter = hasSetter ? AllocateFunction($"{name}_$set", new [] { new Function.Parameter("value", type, false) }, type, false) : null;
 
-            var field = new Field(this, name, type, getter, setter);
+            var field = new Field(this, name, type, isFinal, getter, setter);
             fields.Add(field);
 
             return field;
@@ -282,7 +282,7 @@ namespace Compiler.CodeGeneration.Artifacts
             foreach (var x in pendingSuperType.fields)
             {
                 var fieldType = x.Type.ToConcreteType(pendingBType);
-                AllocateField(x.Name, fieldType, x.Getter != null, x.Setter != null);
+                AllocateField(x.Name, fieldType, x.IsFinal, x.Getter != null, x.Setter != null);
             }
 
             if (pendingSuperType.Indexer != null)
@@ -398,6 +398,9 @@ namespace Compiler.CodeGeneration.Artifacts
         {
             if (symbol is Field field)
             {
+                if (field.IsFinal && field.HasValue)
+                    return false;
+                
                 // TODO Setter
                 var idx = fields.IndexOf(field);
                 var @this = compiler.BinOpLHS == null ? Operand.This : compiler.BinOpLHS.Operand;
@@ -408,6 +411,8 @@ namespace Compiler.CodeGeneration.Artifacts
                     Operand.ImmediateUnsigned(idx),
                     compiler.AssignmentRHS.Operand
                 );
+
+                field.HasValue = true;
                 return true;
             }
 
@@ -460,19 +465,20 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public Function? Setter { get; }
 
-        //public Expression? GetterExpression { get; }
+        public bool IsFinal { get; }
 
-        //public Expression? SetterExpression { get; }
+        public bool HasValue { get; set; }
 
         private readonly IScopeContext parent;
 
-        public Field(IScopeContext parent, string name, CobType type, Function? getter, Function? setter)
+        public Field(IScopeContext parent, string name, CobType type, bool isFinal, Function? getter, Function? setter)
             : base(name, type)
         {
             this.parent = parent;
 
             Getter = getter;
             Setter = setter;
+            IsFinal = isFinal;
         }
 
         public override bool IsVisibleTo(IScopeContext? context) => Compiler.IsSymbolVisible(context, parent, Name);
