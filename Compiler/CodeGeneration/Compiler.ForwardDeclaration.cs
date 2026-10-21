@@ -407,9 +407,6 @@ namespace Compiler.CodeGeneration
                 for (var i = 0; i < expression.Types.Count; ++i)
                     expression.Types[i].Accept(this);
 
-                for (var i = 0; i < expression.Constants.Count; ++i)
-                    expression.Constants[i].Accept(this);
-
                 if (!HACK_ContextAlreadyDived)
                     contextStack.Pop();
             }
@@ -417,6 +414,9 @@ namespace Compiler.CodeGeneration
             {
                 var structType = CurrentModule.FindRecordType(expression.Name)!;
                 contextStack.Push(structType);
+
+                for (var i = 0; i < expression.Constants.Count; ++i)
+                    expression.Constants[i].Accept(this);
 
                 for (var i = 0; i < expression.Factories.Count; ++i)
                     expression.Factories[i].Accept(this);
@@ -551,7 +551,12 @@ namespace Compiler.CodeGeneration
             {
                 if (decl is VariableDeclStatement.StandardDeclaration stdDecl)
                 {
-                    CurrentModule.AllocateGlobal(stdDecl.Name, CobType.None, mutable);
+                    if (CurrentContext is Module module)
+                        module.AllocateGlobal(stdDecl.Name, CobType.None, mutable);
+                    else if (CurrentContext is RecordType recordType)
+                        recordType.AllocateGlobal(stdDecl.Name, CobType.None, mutable);
+                    else
+                        messages.Add(Message.CannotDeclareSymbolHere, expression); // idk maybe support some day
                 }
                 else
                     messages.Add(Message.CannotDeclareSymbolHere, expression); // idk maybe support some day

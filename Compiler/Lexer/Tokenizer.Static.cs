@@ -99,7 +99,6 @@ namespace Compiler.Lexer
 
                 ["module"] = TokenType.Module,
                 ["using"] = TokenType.Using,
-                ["trait"] = TokenType.Trait,
                 ["type"] = TokenType.Type,
                 ["function"] = TokenType.Function,
                 ["mixin"] = TokenType.Mixin,

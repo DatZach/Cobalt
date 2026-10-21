@@ -12,11 +12,7 @@ namespace Compiler.Ast.Parselets.Statements
 
             FunctionDeclStatement? function;
             FieldDefinition? field;
-            if (parser.Match(TokenType.Trait))
-            {
-                throw new NotImplementedException();
-            }
-            else if (parser.Match(TokenType.Function))
+            if (parser.Match(TokenType.Function))
             {
                 function = (FunctionDeclStatement)parser.ParseStatement();
                 field = null;

@@ -1,5 +1,6 @@
 ﻿using Compiler.Ast.Expressions.Statements;
 using System.Diagnostics;
+using System.Diagnostics.Metrics;
 
 namespace Compiler.CodeGeneration.Artifacts
 {
@@ -31,6 +32,7 @@ namespace Compiler.CodeGeneration.Artifacts
         private readonly List<RecordType> traits;
         private readonly List<Function> factories;
         private readonly List<Function> functions;
+        private readonly List<Global> globals;
         private readonly List<Field> fields;
 
         private readonly Compiler compiler;
@@ -43,8 +45,8 @@ namespace Compiler.CodeGeneration.Artifacts
             this.compiler = compiler;
 
             generics = new List<GenericDefinition>();
-            //traits = new List<TraitType>();
             traits = new List<RecordType>();
+            globals = new List<Global>();
             fields = new List<Field>(4);
             factories = new List<Function>(4);
             functions = new List<Function>(4);
@@ -148,6 +150,20 @@ namespace Compiler.CodeGeneration.Artifacts
             return candidates.Count > 0
                 ? new FunctionCandidates(candidates)
                 : null;
+        }
+
+        public Global AllocateGlobal(string name, CobType type, bool mutable)
+        {
+            var global = new Global(this, name, type);
+            globals.Add(global);
+            compiler.Globals.Add(global);
+
+            return global;
+        }
+
+        public Global? FindGlobal(string name)
+        {
+            return globals.FirstOrDefault(x => x.Name == name);
         }
 
         public Field AllocateField(string name, CobType type, bool hasGetter, bool hasSetter)
@@ -288,6 +304,10 @@ namespace Compiler.CodeGeneration.Artifacts
             if (name == "This")
                 return this;
 
+            Global? global;
+            if ((global = FindGlobal(name)) != null)
+                return global;
+
             Field? field;
             if ((field = FindField(name)) != null)
                 return field;
@@ -310,6 +330,16 @@ namespace Compiler.CodeGeneration.Artifacts
         {
             if (symbol == this)
                 return new Storage(ThisType, Operand.None);
+            
+            if (symbol is Global global)
+            {
+                var idx = compiler.Globals.IndexOf(global);
+                var type = compiler.Globals[idx];
+                return new Storage(
+                    type.Type,
+                    Operand.Global(idx)
+                );
+            }
 
             if (symbol is Field field)
             {
@@ -443,6 +473,24 @@ namespace Compiler.CodeGeneration.Artifacts
 
             Getter = getter;
             Setter = setter;
+        }
+
+        public override bool IsVisibleTo(IScopeContext? context) => Compiler.IsSymbolVisible(context, parent, Name);
+
+        public override string ToString()
+        {
+            return base.ToString();
+        }
+    }
+
+    internal sealed record Global : Variable
+    {
+        private readonly IScopeContext parent;
+
+        public Global(IScopeContext parent, string name, CobType type)
+            : base(name, type)
+        {
+            this.parent = parent;
         }
 
         public override bool IsVisibleTo(IScopeContext? context) => Compiler.IsSymbolVisible(context, parent, Name);

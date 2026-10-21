@@ -362,22 +362,39 @@ namespace Compiler.CodeGeneration
                         continue;
                     }
 
-                    Operand dstOperand;
-                    if (CurrentContext == CurrentModule.InitializerFunction) // Global Decl
-                    {
-                        var global = CurrentModule.FindGlobal(stdDecl.Name)!;
-                        var idx = Globals.IndexOf(global);
-                        dstOperand = Operand.Global(idx);
+                    // TODO global const should not be runtime initialized but rather should be initialized in
+                    //      the .rdata section; VM should have an equivalent to this
 
-                        if (global.Type == eCobType.None && global is ILateTypeBinding lateBinding)
-                            lateBinding.RebindType(rhs.Type);
-                    }
-                    else // Local Decl
+                    Operand dstOperand;
+                    if (CurrentContext == CurrentFunction && CurrentContext is Function
+                    &&  !CurrentFunction.Name.StartsWith('$')) // Local Decl
                     {
                         var varType = rhs.Type.ToImpliedType(this);
                         var local = CurrentFunction.AllocateLocal(stdDecl.Name, varType, mutable);
                         var idx = CurrentFunction.FindLocalIndex(local);
                         dstOperand = Operand.Local(idx);
+                    }
+                    else // Global Decl
+                    {
+                        dstOperand = null;
+                        foreach (var context in contextStack)
+                        {
+                            var global = context.FindSymbol(stdDecl.Name)!;
+                            if (global == null)
+                                continue;
+
+                            var globalStorage = context.EmitGetForSymbol(global);
+                            dstOperand = globalStorage.Operand;
+                            globalStorage.Free();
+
+                            if (global.Type == eCobType.None && global is ILateTypeBinding lateBinding)
+                                lateBinding.RebindType(rhs.Type);
+
+                            break;
+                        }
+
+                        if (dstOperand == null)
+                            throw new InvalidOperationException();
                     }
 
                     CurrentFunction.Body.Emit(
@@ -2497,6 +2514,7 @@ namespace Compiler.CodeGeneration
 
             public ISymbol? FindSymbol(string name)
             {
+                // TODO Move '.' implicit context here
                 return name switch
                 {
                     "for" => ForSymbol,

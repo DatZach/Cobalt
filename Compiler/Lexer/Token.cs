@@ -51,7 +51,6 @@ namespace Compiler.Lexer
 
         [Description("module")] Module,
         [Description("using")] Using,
-        [Description("trait")] Trait, // TODO Remove
         [Description("type")] Type,
         [Description("func")] Function,
         [Description("mixin")] Mixin,

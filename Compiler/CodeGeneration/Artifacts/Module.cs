@@ -16,11 +16,10 @@ namespace Compiler.CodeGeneration.Artifacts
         public bool IsRoot => Parent == null;
 
         private readonly List<Module> modules;
-        //private readonly List<TraitType> traitTypes;
         private readonly List<RecordType> recordTypes;
         private readonly List<CobType> distinctTypes;
         private readonly List<Function> functions;
-        private readonly List<Variable> globals;
+        private readonly List<Global> globals;
         private readonly Compiler compiler;
 
         public Module(string? name, IScopeContext? parent, Compiler compiler)
@@ -34,7 +33,7 @@ namespace Compiler.CodeGeneration.Artifacts
             recordTypes = new List<RecordType>();
             distinctTypes = new List<CobType>();
             functions = new List<Function>();
-            globals = new List<Variable>();
+            globals = new List<Global>();
 
             InitializerFunction = AllocateFunction(
                 "$Initializer",
@@ -138,18 +137,16 @@ namespace Compiler.CodeGeneration.Artifacts
                 : null;
         }
 
-        public Variable AllocateGlobal(string name, CobType type, bool mutable)
+        public Global AllocateGlobal(string name, CobType type, bool mutable)
         {
-            // TODO Bit of a hack this isn't really a field but we need the visiblity rules and maybe we actually
-            //      want to allow for global module variables to be fields??
-            var global = new Field(this, name, type, null, null);
+            var global = new Global(this, name, type);
             globals.Add(global);
             compiler.Globals.Add(global);
 
             return global;
         }
 
-        public Variable? FindGlobal(string name)
+        public Global? FindGlobal(string name)
         {
             return globals.FirstOrDefault(x => x.Name == name);
         }
@@ -158,7 +155,7 @@ namespace Compiler.CodeGeneration.Artifacts
         public ISymbol? FindSymbol(string name)
         {
             // GLOBAL
-            Variable? global;
+            Global? global;
             if ((global = FindGlobal(name)) != null)
                 return global;
 
@@ -210,7 +207,7 @@ namespace Compiler.CodeGeneration.Artifacts
         public Storage? EmitGetForSymbol(ISymbol symbol)
         {
             // GLOBAL
-            if (symbol is Variable global)
+            if (symbol is Global global)
             {
                 var idx = compiler.Globals.IndexOf(global);
                 var type = compiler.Globals[idx];
@@ -271,7 +268,7 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public bool EmitSetForSymbol(ISymbol symbol)
         {
-            if (symbol is Variable global)
+            if (symbol is Global global)
             {
                 var idx = compiler.Globals.IndexOf(global);
                 compiler.CurrentFunction.Body.Emit(
