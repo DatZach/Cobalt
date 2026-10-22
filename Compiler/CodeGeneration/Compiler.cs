@@ -249,6 +249,10 @@ namespace Compiler.CodeGeneration
             else
                 throw new InvalidOperationException(); // TODO ??
 
+            // HACK Reserve r0 so that we can return this | error
+            var r0 = function.AllocateRegisterStorage(CurrentFunction.ReturnType);
+            function.Body.Emit(Opcode.Move, r0.Operand, Operand.This);
+
             var mutations = new HashSet<ISymbol>();
             mutationStack.Push(mutations);
             contextStack.Push(function);
@@ -263,7 +267,8 @@ namespace Compiler.CodeGeneration
             if (expression.Name != null && !recordType.IsFullyInitialized(mutations))
                 messages.Add(Message.NotAllFieldsInitialized, expression);
 
-            function.Body.Emit(Opcode.Return, Operand.This); // TODO Error if not all paths return
+            function.Body.Emit(Opcode.Return, r0.Operand); // TODO Error if not all paths return
+            r0.Free();
 
             return new Storage(
                 new CobType(eCobType.Function, tag: function),
@@ -1486,21 +1491,41 @@ namespace Compiler.CodeGeneration
 
                     // VALUE
                     var rhs = branch.Right?.Accept(this);
+                    if (rhs != null)
+                    {
+                        CurrentFunction.Body.Emit(Opcode.Move, c.Operand, rhs.Operand);
+                        CurrentFunction.Body.Emit(Opcode.Jmp, labelEnd);
 
-                    CurrentFunction.Body.Emit(Opcode.Move, c.Operand, rhs.Operand);
-                    CurrentFunction.Body.Emit(Opcode.Jmp, labelEnd);
-                    labelCaseEnd.Mark();
+                        if (resultType == null || CobType.IsImplicitCastable(resultType, rhs.Type))
+                            resultType = rhs.Type;
+                        else
+                            messages.Add(Message.TypeMismatch, branch.Right, resultType, rhs.Type);
 
-                    if (resultType == null || CobType.IsImplicitCastable(resultType, rhs.Type))
-                        resultType = rhs.Type;
+                        rhs.Free();
+                    }
                     else
-                        messages.Add(Message.TypeMismatch, branch.Right, resultType, rhs.Type);
+                    {
+                        if (branch.Right is not BlockExpression be || !be.Expressions.Any(x => x is ReturnStatement))
+                            messages.Add(Message.IllegalPattern, branch.Token);
+                    }
 
-                    rhs?.Free();
+                    labelCaseEnd.Mark();
                 }
 
                 if (defaultBranch != null)
                 {
+                    if (defaultBranch.ValueExpression is IdentifierExpression ie)
+                    {
+                        var type = seenTypes.Aggregate(lhs.Type, (current, x) => current.Bust(x));
+
+                        var local = CurrentFunction.AllocateLocal(ie.Value, type, false);
+                        CurrentFunction.Body.Emit(
+                            Opcode.Move,
+                            Operand.Local(CurrentFunction.FindLocalIndex(local)),
+                            lhs.Operand
+                        );
+                    }
+
                     var rhs = defaultBranch.Right.Accept(this);
                     
                     CurrentFunction.Body.Emit(Opcode.Move, c.Operand, rhs.Operand);
@@ -1588,7 +1613,8 @@ namespace Compiler.CodeGeneration
             };
 
             // NOTE The outer call expression handles function calls and tuple ctors
-            if (function != null || dstStorage.Type.TagRecord != null)// && !function.IsCasting)
+            if (dstStorage.Type.TagFunction != null || dstStorage.Type.TagFunctionCandidates != null ||
+                function != null || dstStorage.Type.TagRecord != null)// && !function.IsCasting)
             {
                 arguments.ForEach(x => x.Free());
                 dstStorage.Free();
@@ -1727,8 +1753,9 @@ namespace Compiler.CodeGeneration
                 Storage? thisStorage;
                 if (function.IsConstructor)
                 {
-                    thisStorage = CurrentFunction.AllocateRegisterStorage(function.ReturnType);
-                    CurrentFunction.Body.Emit(Opcode.New, thisStorage.Operand, function.ReturnType.ToOperand(artifact));
+                    var thisType = function.ReturnType.Bust(CobType.Error);
+                    thisStorage = CurrentFunction.AllocateRegisterStorage(thisType);
+                    CurrentFunction.Body.Emit(Opcode.New, thisStorage.Operand, thisType.ToOperand(artifact));
                 }
                 else if (expression.FunctionExpression is BinaryOperatorExpression { Operator: TokenType.Dot } boe)
                     thisStorage = boe.Left.Accept(this);
@@ -1843,7 +1870,10 @@ namespace Compiler.CodeGeneration
             );
 
             if (function.ReturnType.HasErrorFlag && conditionalStack <= 0 && retStorage != null)
+            {
                 CurrentFunction.Body.Emit(Opcode.PanicOnErr, retStorage.Operand);
+                retStorage = new Storage(retStorage, retStorage.Type.Bust(CobType.Error)); // TODO HACK? Not sure if this is right
+            }
 
             if (function.IsDestructor)
             {

@@ -114,7 +114,8 @@ namespace Compiler.CodeGeneration.Artifacts
             lParameters.Add(new Function.Parameter("this", ThisType, false));
             lParameters.AddRange(parameters);
 
-            var function = new Function(name, this, compiler, CallingConvention.ThisCall, lParameters, ThisType, isSignature) { IsConstructor = true };
+            var returnType = new CobType(eCobType.Union, unionedTypes: new[] { ThisType, CobType.Error });
+            var function = new Function(name, this, compiler, CallingConvention.ThisCall, lParameters, returnType, isSignature) { IsConstructor = true };
             constructors.Add(function);
             compiler.Functions.Add(function);
 

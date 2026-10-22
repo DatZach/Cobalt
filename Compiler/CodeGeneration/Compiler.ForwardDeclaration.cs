@@ -285,8 +285,9 @@ namespace Compiler.CodeGeneration
             var superType = enumRefinement.ThisType.Parent!;
 
             var stringType = compiler.RootModule.FindDistinctType("string"); // HACK 1st Pass Intrinsics not yet evaluated
-            if (!CobType.IsImplicitCastable(CobType.Int, superType)
-            &&  !CobType.IsImplicitCastable(stringType, superType))
+            if (!CobType.IsImplicitCastable(superType, CobType.Int)
+            &&  !CobType.IsImplicitCastable(superType, CobType.UInt)
+            &&  !CobType.IsImplicitCastable(superType, stringType))
             {
                 messages.Add(Message.IllegalEnumRefinementSuperType, expression, superType);
                 return Unit.Value;

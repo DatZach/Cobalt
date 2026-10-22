@@ -43,7 +43,8 @@ namespace Compiler.Ast.Parselets.Statements
 
             parser.Take(TokenType.RightParen);
 
-            var returnTypeName = parser.ParseTypeName();
+            // TODO Technically should permit tuples and struct types too
+            var returnTypeName = parser.Match(TokenType.Identifier) ? parser.ParseTypeName() : null;
 
             Token? fatArrowToken;
             Expression? body;

@@ -71,6 +71,7 @@ namespace Compiler.CodeGeneration
                 eCobType.Unsigned => ImmediateUnsigned((ulong)value, dstType.Size),
                 eCobType.Signed   => ImmediateSigned(value, dstType.Size),
                 eCobType.Real     => ImmediateReal(value, dstType.Size),
+                eCobType.Distinct => Immediate(value, dstType.Parent!),
                 _ => throw new ArgumentOutOfRangeException()
             };
         }

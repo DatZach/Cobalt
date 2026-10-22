@@ -9,14 +9,17 @@
 //}
 
 error {
+    // Intrinsics
     NaN,
     Infinity,
-
     Panic,
     RefinementViolation,
     DivideByZero,
     Overflow,
-    OutOfBounds
+    OutOfBounds,
+
+    // Standard Library
+    FileNotFound
 }
 
 import Range;

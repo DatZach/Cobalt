@@ -448,6 +448,7 @@ namespace Compiler.CodeGeneration.Artifacts
 
             public bool EnsureLinearOwnership()
             {
+                return false;
                 foreach (var x in locals.Values)
                 {
                     if (x.Owner == this && x.Type.TagRecord != null && x.Type.TagRecord.IsLinear)
