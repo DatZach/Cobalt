@@ -613,6 +613,11 @@ namespace Compiler.CodeGeneration
             return Unit.Value;
         }
 
+        public Unit Visit(DeferStatement expression)
+        {
+            return Unit.Value;
+        }
+
         public Unit Visit(ReturnStatement expression)
         {
             return Unit.Value;

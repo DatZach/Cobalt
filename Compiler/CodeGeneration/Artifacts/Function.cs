@@ -136,11 +136,37 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public BlockScope PopBlockScope()
         {
-            var scope = blockScopeStack.Pop();
+            var scope = blockScopeStack.Peek();
+
+            Storage? guardStorage = null;
+            var isRootBlock = blockScopeStack.Count == 1 && ReturnLabel.Location < 0;
+            if (isRootBlock)
+            {
+                ReturnLabel.Mark();
+                
+                if (ReturnType != CobType.None)
+                {
+                    guardStorage = AllocateRegisterStorage(ReturnType);
+                    Body.Emit(Opcode.Move, guardStorage.Operand, Operand.R0);
+                }
+            }
+
+            foreach (var expr in scope.DeferExpressions)
+                expr.Accept(compiler);
+
+            if (guardStorage != null)
+            {
+                Body.Emit(Opcode.Move, Operand.R0, guardStorage.Operand);
+                guardStorage.Free();
+            }
+
             scope.EnsureLinearOwnership();
+            blockScopeStack.Pop();
 
             return scope;
         }
+
+        // TODO Maybe refactor these functions into CurrentBlockScope?
 
         public void AddNarrowingDirective(Operand operand, CobType type)
         {
@@ -149,6 +175,15 @@ namespace Compiler.CodeGeneration.Artifacts
 
             var scope = blockScopeStack.Peek();
             scope.AddNarrowingDirective(operand, type);
+        }
+
+        public void AddDeferExpression(Expression expression)
+        {
+            if (blockScopeStack.Count == 0)
+                return;
+
+            var scope = blockScopeStack.Peek();
+            scope.AddDeferExpression(expression);
         }
 
         public Variable AllocateLocal(string name, CobType type, bool mutable)
@@ -325,7 +360,10 @@ namespace Compiler.CodeGeneration.Artifacts
 
             IScopeContext IScopeContext.Parent => parent;
 
+            public IReadOnlyList<Expression> DeferExpressions => deferExpressions;
+
             private readonly Dictionary<string, Variable> locals;
+            private readonly List<Expression> deferExpressions;
             private readonly List<NarrowingDirective> narrows;
             private readonly Function parent;
 
@@ -334,6 +372,7 @@ namespace Compiler.CodeGeneration.Artifacts
                 this.parent = parent;
 
                 locals = new Dictionary<string, Variable>();
+                deferExpressions = new List<Expression>();
                 narrows = new List<NarrowingDirective>();
             }
 
@@ -400,6 +439,11 @@ namespace Compiler.CodeGeneration.Artifacts
                     throw new NotImplementedException();//return;
 
                 narrows.Add(new NarrowingDirective(target, type));
+            }
+
+            public void AddDeferExpression(Expression expression)
+            {
+                deferExpressions.Insert(0, expression);
             }
 
             public bool EnsureLinearOwnership()

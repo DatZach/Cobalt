@@ -1,4 +1,5 @@
 ﻿using Compiler.Ast.Expressions;
+using Compiler.Ast.Expressions.Statements;
 using Compiler.Lexer;
 using Compiler.Ast.Parselets;
 using Compiler.Ast.Parselets.Statements;
@@ -128,6 +129,7 @@ namespace Compiler.Ast
             Register(TokenType.While, new WhileParselet());
             Register(TokenType.Continue, new ContinueParselet());
             Register(TokenType.Break, new BreakParselet());
+            Register(TokenType.Defer, new DeferParselet());
             Register(TokenType.Machine, new MachineParselet());
         }
 

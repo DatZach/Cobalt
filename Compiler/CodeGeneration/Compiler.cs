@@ -252,14 +252,9 @@ namespace Compiler.CodeGeneration
             var mutations = new HashSet<ISymbol>();
             mutationStack.Push(mutations);
             contextStack.Push(function);
-            function.PushBlockScope();
 
             expression.Body?.Accept(this)?.Free();
 
-            function.ReturnLabel.Mark();
-            function.Body.Emit(Opcode.Return, Operand.This); // TODO Error if not all paths return
-
-            function.PopBlockScope();
             contextStack.Pop();
             mutationStack.Pop();
 
@@ -267,6 +262,8 @@ namespace Compiler.CodeGeneration
 
             if (expression.Name != null && !recordType.IsFullyInitialized(mutations))
                 messages.Add(Message.NotAllFieldsInitialized, expression);
+
+            function.Body.Emit(Opcode.Return, Operand.This); // TODO Error if not all paths return
 
             return new Storage(
                 new CobType(eCobType.Function, tag: function),
@@ -286,18 +283,15 @@ namespace Compiler.CodeGeneration
             var mutations = new HashSet<ISymbol>();
             mutationStack.Push(mutations);
             contextStack.Push(function);
-            function.PushBlockScope();
 
             expression.Body?.Accept(this)?.Free();
 
-            function.ReturnLabel.Mark();
-            function.Body.Emit(Opcode.Return, Operand.This); // TODO Error if not all paths return
-
-            function.PopBlockScope();
             contextStack.Pop();
             mutationStack.Pop();
 
             foreach (var x in mutations) function.MutatedSymbols.Add(x);
+
+            function.Body.Emit(Opcode.Return, Operand.This); // TODO Error if not all paths return
 
             return new Storage(
                 new CobType(eCobType.Function, tag: function),
@@ -329,7 +323,6 @@ namespace Compiler.CodeGeneration
             var mutations = new HashSet<ISymbol>();
             mutationStack.Push(mutations);
             contextStack.Push(function);
-            function.PushBlockScope();
             forTempBlockScope = null;
 
             // TODO Temporary hack to call our initializer functions in the entry point
@@ -346,16 +339,17 @@ namespace Compiler.CodeGeneration
                 }
             }
 
-            expression.Body.Accept(this);
-            
-            function.ReturnLabel.Mark();
-            function.Body.Emit(Opcode.Return); // TODO Error if not all paths return
+            expression.Body.Accept(this)?.Free();
 
-            function.PopBlockScope();
             contextStack.Pop();
             mutationStack.Pop();
 
             foreach (var x in mutations) function.MutatedSymbols.Add(x);
+
+            if (function.ReturnType == CobType.None)
+                function.Body.Emit(Opcode.Return); // TODO Error if not all paths return
+            else
+                function.Body.Emit(Opcode.Return, Operand.R0);
 
             return new Storage(
                 new CobType(eCobType.Function, tag: function),
@@ -767,13 +761,17 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
+        public Storage? Visit(DeferStatement expression)
+        {
+            CurrentFunction.AddDeferExpression(expression.Body);
+            return null;
+        }
+
         public Storage? Visit(ReturnStatement expression)
         {
             var rhs = expression.Expression?.Accept(this);
 
-            if (rhs == null)
-                CurrentFunction.Body.Emit(Opcode.Return);
-            else
+            if (rhs != null)
             {
                 if (CurrentFunction.ReturnType == eCobType.None)
                     CurrentFunction.ReturnType = rhs.Type;
@@ -783,9 +781,11 @@ namespace Compiler.CodeGeneration
                 // TODO Might clobber rhs storage...
                 EnforceRefinment(rhs, CurrentFunction.ReturnType, expression); // TODO Should be implemented in IsExplicitCastable?
 
-                CurrentFunction.Body.Emit(Opcode.Return, rhs.Operand);
+                CurrentFunction.Body.Emit(Opcode.Move, Operand.R0, rhs.Operand);
                 rhs.Free();
             }
+
+            CurrentFunction.Body.Emit(Opcode.Jmp, CurrentFunction.ReturnLabel);
 
             return null;
         }

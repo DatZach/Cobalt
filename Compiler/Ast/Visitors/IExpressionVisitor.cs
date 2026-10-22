@@ -20,12 +20,13 @@ namespace Compiler.Ast.Visitors
         T Visit(FunctionDeclStatement expression);
         T Visit(MixinDeclStatement expression);
         T Visit(VariableDeclStatement expression);
-        
+
         T Visit(IfStatement expression);
         T Visit(ForStatement expression);
         T Visit(WhileStatement expression);
         T Visit(ContinueStatement expression);
         T Visit(BreakStatement expression);
+        T Visit(DeferStatement expression);
         T Visit(ReturnStatement expression);
         T Visit(MachineStatement expression);
         
