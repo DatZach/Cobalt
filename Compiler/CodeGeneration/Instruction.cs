@@ -152,6 +152,7 @@ namespace Compiler.CodeGeneration
         Peek,
         Poke,
         New,
+        Delete,
 
         Call,
         CallVirt,

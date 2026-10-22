@@ -8,6 +8,8 @@ namespace Compiler.CodeGeneration.Artifacts
     [DebuggerDisplay("Variable {Name}: {Type} = {Value}")]
     internal record Variable : ISymbol, ILateTypeBinding
     {
+        public IScopeContext? Owner { get; set; }
+
         public string Name { get; }
 
         public CobType Type { get; private set; }

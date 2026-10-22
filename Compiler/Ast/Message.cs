@@ -331,6 +331,8 @@ namespace Compiler.Ast
 
         public static Def NotAllFieldsInitialized { get; } = new(MessageType.Error, "Not all fields assigned to by constructor and initializer");
 
+        public static Def IllegalLinearTypeLifetimeExpiration { get; } = new(MessageType.Error, "Lifetime of '{0}' unexpectedly terminated, must call destructor or pass ownership");
+
         public sealed record Def(
             MessageType Type,
             string Content,

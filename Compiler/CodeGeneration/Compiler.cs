@@ -43,6 +43,8 @@ namespace Compiler.CodeGeneration
 
         public Function CurrentFunction => contextStack.OfType<Function>().First();
 
+        public MessageCollection Messages => messages; // TODO Only exposed for 1 function, could be cleaned up
+
         private Storage? implicitContext;
         private IScopeContext? forTempBlockScope;
 
@@ -250,12 +252,14 @@ namespace Compiler.CodeGeneration
             var mutations = new HashSet<ISymbol>();
             mutationStack.Push(mutations);
             contextStack.Push(function);
+            function.PushBlockScope();
 
             expression.Body?.Accept(this)?.Free();
 
             function.ReturnLabel.Mark();
             function.Body.Emit(Opcode.Return, Operand.This); // TODO Error if not all paths return
 
+            function.PopBlockScope();
             contextStack.Pop();
             mutationStack.Pop();
 
@@ -282,12 +286,14 @@ namespace Compiler.CodeGeneration
             var mutations = new HashSet<ISymbol>();
             mutationStack.Push(mutations);
             contextStack.Push(function);
+            function.PushBlockScope();
 
             expression.Body?.Accept(this)?.Free();
 
             function.ReturnLabel.Mark();
             function.Body.Emit(Opcode.Return, Operand.This); // TODO Error if not all paths return
 
+            function.PopBlockScope();
             contextStack.Pop();
             mutationStack.Pop();
 
@@ -323,6 +329,7 @@ namespace Compiler.CodeGeneration
             var mutations = new HashSet<ISymbol>();
             mutationStack.Push(mutations);
             contextStack.Push(function);
+            function.PushBlockScope();
             forTempBlockScope = null;
 
             // TODO Temporary hack to call our initializer functions in the entry point
@@ -344,6 +351,7 @@ namespace Compiler.CodeGeneration
             function.ReturnLabel.Mark();
             function.Body.Emit(Opcode.Return); // TODO Error if not all paths return
 
+            function.PopBlockScope();
             contextStack.Pop();
             mutationStack.Pop();
 
@@ -1836,6 +1844,18 @@ namespace Compiler.CodeGeneration
 
             if (function.ReturnType.HasErrorFlag && conditionalStack <= 0 && retStorage != null)
                 CurrentFunction.Body.Emit(Opcode.PanicOnErr, retStorage.Operand);
+
+            if (function.IsDestructor)
+            {
+                var thisOperand = arguments[0].Operand;
+                CurrentFunction.Body.Emit(Opcode.Delete, thisOperand);
+
+                if (thisOperand.Type == OperandType.Local)
+                    CurrentFunction.Locals[(int)thisOperand.Value].Owner = null;
+                else
+                    throw new NotImplementedException();
+                // .Owner = null
+            }
 
             // CLEANUP
             functionStorage.Free();

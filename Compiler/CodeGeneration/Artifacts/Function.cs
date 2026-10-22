@@ -1,7 +1,9 @@
 ﻿using System.Diagnostics;
 using System.Text;
+using Compiler.Ast;
 using Compiler.Ast.Expressions;
 using Compiler.Interpreter;
+using Compiler.Lexer;
 
 namespace Compiler.CodeGeneration.Artifacts
 {
@@ -38,6 +40,8 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public bool IsConstructor { get; init; } // TODO Maybe this should be implemented as OOP, not sure
 
+        public bool IsDestructor { get; init; } // TODO Yeah definitely needs to be refactored somehow...
+
         private int freeRegisterIndex;
         private int registers;
 
@@ -72,8 +76,6 @@ namespace Compiler.CodeGeneration.Artifacts
 
             freeRegisterIndex = 0;
             registers = 0;
-
-            PushBlockScope();
         }
 
         //public Storage AllocateStorage(CobType type, Operand operand)
@@ -132,9 +134,12 @@ namespace Compiler.CodeGeneration.Artifacts
             return blockScope;
         }
 
-        public void PopBlockScope()
+        public BlockScope PopBlockScope()
         {
-            blockScopeStack.Pop();
+            var scope = blockScopeStack.Pop();
+            scope.EnsureLinearOwnership();
+
+            return scope;
         }
 
         public void AddNarrowingDirective(Operand operand, CobType type)
@@ -335,6 +340,7 @@ namespace Compiler.CodeGeneration.Artifacts
             public void AddLocal(Variable local)
             {
                 locals[local.Name] = local;
+                local.Owner = this; // TODO Is this the right place for this?
             }
             
             public Variable? FindLocal(string name)
@@ -394,6 +400,19 @@ namespace Compiler.CodeGeneration.Artifacts
                     throw new NotImplementedException();//return;
 
                 narrows.Add(new NarrowingDirective(target, type));
+            }
+
+            public bool EnsureLinearOwnership()
+            {
+                foreach (var x in locals.Values)
+                {
+                    if (x.Owner == this && x.Type.TagRecord != null && x.Type.TagRecord.IsLinear)
+                    {
+                        parent.compiler.Messages.Add(Message.IllegalLinearTypeLifetimeExpiration, Token.EndOfStream, x.Name);
+                    }
+                }
+
+                return false;
             }
 
             ISymbol? IScopeContext.FindSymbol(string name)

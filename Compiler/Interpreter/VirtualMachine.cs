@@ -180,6 +180,12 @@ namespace Compiler.Interpreter
                             WriteOperand(inst.A!, obj);
                             break;
                         }
+                        case Opcode.Delete:
+                        {
+                            var a = ReadOperand(inst.A!);
+                            // NOTE Nothing to do, C# GC does the work for us
+                            break;
+                        }
                         case Opcode.BitShr:
                         {
                             var b = ReadOperand(inst.B!);

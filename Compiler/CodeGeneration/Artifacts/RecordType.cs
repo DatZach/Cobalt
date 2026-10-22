@@ -19,7 +19,10 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public bool IsAnonymous => fields.Count > 0 && fields[0].Name.StartsWith('\'');
 
-        public bool IsTrait => functions.All(x => x.IsSignature) && constructors.All(x => x.IsSignature);
+        public bool IsTrait => functions.All(x => x.IsSignature) && constructors.All(x => x.IsSignature)
+                            && destructors.All(x => x.IsSignature);
+
+        public bool IsLinear => destructors.Any(x => x.Name != "$dtor");
 
         public CobType ThisType => new (eCobType.Record, tag: this);
 
@@ -136,7 +139,7 @@ namespace Compiler.CodeGeneration.Artifacts
             lParameters.Add(new Function.Parameter("this", ThisType, false));
             lParameters.AddRange(parameters);
 
-            var function = new Function(name, this, compiler, CallingConvention.ThisCall, lParameters, returnType, isSignature);
+            var function = new Function(name, this, compiler, CallingConvention.ThisCall, lParameters, returnType, isSignature) { IsDestructor = true };
             destructors.Add(function);
             compiler.Functions.Add(function);
 
