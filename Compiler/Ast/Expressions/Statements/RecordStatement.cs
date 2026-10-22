@@ -28,7 +28,7 @@ namespace Compiler.Ast.Expressions.Statements
         // TODO Rename Constructors
         public IReadOnlyList<ConstructStatement> Constructors { get; }
 
-        public IReadOnlyList<FunctionDeclStatement> Destructors { get; }
+        public IReadOnlyList<DestructStatement> Destructors { get; }
 
         public IndexerDefinition? Indexer { get; }
 
@@ -43,7 +43,7 @@ namespace Compiler.Ast.Expressions.Statements
             IReadOnlyList<FieldDefinition> fields,
             IReadOnlyList<FunctionDeclStatement> functions,
             IReadOnlyList<ConstructStatement> constructors,
-            IReadOnlyList<FunctionDeclStatement> destructors,
+            IReadOnlyList<DestructStatement> destructors,
             IndexerDefinition? indexer
         )
             : base(token)

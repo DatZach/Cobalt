@@ -111,6 +111,7 @@ namespace Compiler.Ast
             Register(TokenType.Error, new ErrorParselet());
             Register(TokenType.Error, new IdentifierParselet());
             Register(TokenType.Construct, new ConstructParselet());
+            Register(TokenType.Destruct, new DestructParselet());
             Register(TokenType.Mixin, new MixinParselet());
             Register(TokenType.Const, new VariableDeclParselet());
             Register(TokenType.Var, new VariableDeclParselet());

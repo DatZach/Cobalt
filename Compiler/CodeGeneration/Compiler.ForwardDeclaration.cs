@@ -421,6 +421,9 @@ namespace Compiler.CodeGeneration
                 for (var i = 0; i < expression.Constructors.Count; ++i)
                     expression.Constructors[i].Accept(this);
 
+                for (var i = 0; i < expression.Destructors.Count; ++i)
+                    expression.Destructors[i].Accept(this);
+
                 for (var i = 0; i < expression.Functions.Count; ++i)
                     expression.Functions[i].Accept(this);
 
@@ -459,6 +462,26 @@ namespace Compiler.CodeGeneration
             if (CurrentContext is RecordType recordType)
             {
                 recordType.AllocateConstructor(expression.Name, parameters, expression.Body == null);
+            }
+            else
+                messages.Add(Message.CannotDeclareSymbolHere, expression);
+
+            return Unit.Value;
+        }
+
+        public Unit Visit(DestructStatement expression)
+        {
+            if (phase != DeclPhase.Functions)
+                return Unit.Value;
+
+            var parameters = expression.Parameters.Select(
+                x => new Function.Parameter(x.Name, CobType.FromTypeName(x.TypeName, CurrentContext), x.IsSpread, x.DefaultValue)
+            ).ToList();
+
+            if (CurrentContext is RecordType recordType)
+            {
+                var returnType = CobType.FromTypeName(expression.ReturnTypeName, CurrentContext);
+                recordType.AllocateDestructor(expression.Name, parameters, returnType, expression.Body == null);
             }
             else
                 messages.Add(Message.CannotDeclareSymbolHere, expression);

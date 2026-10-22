@@ -25,14 +25,14 @@ namespace Compiler.Ast.Parselets.Statements
             var constants = new List<VariableDeclStatement>();
             var fields = new List<FieldDefinition>();
             var functions = new List<FunctionDeclStatement>();
-            var factories = new List<ConstructStatement>();
-            var destructors = new List<FunctionDeclStatement>();
+            var constructors = new List<ConstructStatement>();
+            var destructors = new List<DestructStatement>();
             IndexerDefinition? indexerDefinition = null;
 
             var terminalToken = token.Type == TokenType.LeftBrace ? TokenType.RightBrace : TokenType.RightParen;
             while (!parser.IsEndOfStream && parser.MatchAndTakeToken(terminalToken) == null)
             {
-                if (parser.Match(TokenType.Type))
+                if (parser.Match(TokenType.Type)) // Type
                 {
                     var typeToken = parser.Take(TokenType.Type);
                     var isGeneric = parser.MatchAndTakeToken(TokenType.Generic) != null;
@@ -48,21 +48,26 @@ namespace Compiler.Ast.Parselets.Statements
                     else
                         types.Add(new TypeDeclStatement(typeToken, typeName.Value, constraint, refinement));
                 }
-                else if (parser.Match(TokenType.Mixin))
+                else if (parser.Match(TokenType.Mixin)) // Mixin
                 {
                     parser.Take(TokenType.Mixin);
                     var typeName = parser.ParseTypeName();
                     mixins.Add(typeName);
                 }
-                else if (parser.Match(TokenType.Const))
+                else if (parser.Match(TokenType.Const)) // Const
                 {
                     var expr = (VariableDeclStatement)parser.ParseStatement();
                     constants.Add(expr);
                 }
-                else if (parser.Match(TokenType.Construct)) // Factory
+                else if (parser.Match(TokenType.Construct)) // Constructor
                 {
                     var expr = (ConstructStatement)parser.ParseStatement();
-                    factories.Add(expr);
+                    constructors.Add(expr);
+                }
+                else if (parser.Match(TokenType.Destruct)) // Destructor
+                {
+                    var expr = (DestructStatement)parser.ParseStatement();
+                    destructors.Add(expr);
                 }
                 else if (parser.Match(TokenType.Function)) // Function
                 {
@@ -100,7 +105,7 @@ namespace Compiler.Ast.Parselets.Statements
             return new RecordStatement(
                 token, type, name,
                 generics, mixins, types, constants, fields,
-                functions, factories, destructors, indexerDefinition
+                functions, constructors, destructors, indexerDefinition
             );
         }
 

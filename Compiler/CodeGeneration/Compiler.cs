@@ -167,6 +167,9 @@ namespace Compiler.CodeGeneration
                 foreach (var constructExpression in expression.Constructors)
                     constructExpression.Accept(this);
 
+                foreach (var destructExpression in expression.Destructors)
+                    destructExpression.Accept(this);
+
                 foreach (var functionExpression in expression.Functions)
                     functionExpression.Accept(this);
 
@@ -260,6 +263,35 @@ namespace Compiler.CodeGeneration
 
             if (expression.Name != null && !recordType.IsFullyInitialized(mutations))
                 messages.Add(Message.NotAllFieldsInitialized, expression);
+
+            return new Storage(
+                new CobType(eCobType.Function, tag: function),
+                Operand.None
+            );
+        }
+
+        // TODO This is a function, should be merged with FunctionDeclStatement perhaps?
+        public Storage? Visit(DestructStatement expression)
+        {
+            Function function;
+            if (CurrentContext is RecordType recordType)
+                function = recordType.FindDestructor(expression.Name)!;
+            else
+                throw new InvalidOperationException(); // TODO ??
+
+            var mutations = new HashSet<ISymbol>();
+            mutationStack.Push(mutations);
+            contextStack.Push(function);
+
+            expression.Body?.Accept(this)?.Free();
+
+            function.ReturnLabel.Mark();
+            function.Body.Emit(Opcode.Return, Operand.This); // TODO Error if not all paths return
+
+            contextStack.Pop();
+            mutationStack.Pop();
+
+            foreach (var x in mutations) function.MutatedSymbols.Add(x);
 
             return new Storage(
                 new CobType(eCobType.Function, tag: function),

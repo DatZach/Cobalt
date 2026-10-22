@@ -31,6 +31,7 @@ namespace Compiler.CodeGeneration.Artifacts
         private readonly List<GenericDefinition> generics;
         private readonly List<RecordType> traits;
         private readonly List<Function> constructors;
+        private readonly List<Function> destructors;
         private readonly List<Function> functions;
         private readonly List<Global> globals;
         private readonly List<Field> fields;
@@ -49,6 +50,7 @@ namespace Compiler.CodeGeneration.Artifacts
             globals = new List<Global>();
             fields = new List<Field>(4);
             constructors = new List<Function>(4);
+            destructors = new List<Function>();
             functions = new List<Function>(4);
         }
 
@@ -120,6 +122,31 @@ namespace Compiler.CodeGeneration.Artifacts
         {
             name ??= "$ctor";
             return constructors.FirstOrDefault(x => x.Name == name);
+        }
+
+        public Function AllocateDestructor(string? name, IReadOnlyList<Function.Parameter> parameters, CobType returnType, bool isSignature)
+        {
+            // TODO Not sure that this should be enforced
+            if (Type != eRecordType.Struct)
+                throw new InvalidOperationException("Only structs may allocate destructor");
+
+            name ??= "$dtor";
+            
+            var lParameters = new List<Function.Parameter>();
+            lParameters.Add(new Function.Parameter("this", ThisType, false));
+            lParameters.AddRange(parameters);
+
+            var function = new Function(name, this, compiler, CallingConvention.ThisCall, lParameters, returnType, isSignature);
+            destructors.Add(function);
+            compiler.Functions.Add(function);
+
+            return function;
+        }
+
+        public Function? FindDestructor(string? name)
+        {
+            name ??= "$dtor";
+            return destructors.FirstOrDefault(x => x.Name == name);
         }
 
         public Function AllocateFunction(
@@ -339,6 +366,10 @@ namespace Compiler.CodeGeneration.Artifacts
             Function? constructor;
             if ((constructor = FindConstructor(name)) != null)
                 return constructor;
+
+            Function? destructor;
+            if ((destructor = FindDestructor(name)) != null)
+                return destructor;
 
             FunctionCandidates? candidates;
             if ((candidates = FindFunctionCandidates(name)) != null)

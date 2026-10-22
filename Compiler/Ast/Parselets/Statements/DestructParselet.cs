@@ -1,0 +1,65 @@
+﻿using Compiler.Ast.Expressions;
+using Compiler.Ast.Expressions.Statements;
+using Compiler.Lexer;
+
+namespace Compiler.Ast.Parselets.Statements
+{
+    internal sealed class DestructParselet : IPrefixStatementParselet
+    {
+        public Expression Parse(Parser parser, Token token)
+        {
+            IReadOnlyList<FunctionDeclStatement.Parameter> parameters;
+
+            var name = parser.MatchAndTakeToken(TokenType.Identifier);
+                
+            parser.Take(TokenType.LeftParen);
+            if (!parser.Match(TokenType.RightParen))
+            {
+                var hasSpread = false;
+                var lParameters = new List<FunctionDeclStatement.Parameter>(4);
+                while (!parser.Match(TokenType.RightParen))
+                {
+                    var isSpread = parser.MatchAndTakeToken(TokenType.Spread) != null;
+                    var paramType = parser.ParseTypeName();
+                    var paramName = parser.Take(TokenType.Identifier);
+                    var paramDefault = parser.MatchAndTakeToken(TokenType.Assign) != null
+                        ? parser.ParseExpression()
+                        : null;
+
+                    parser.MatchAndTakeToken(TokenType.Comma);
+
+                    if (isSpread && hasSpread)
+                        parser.Messages.Add(Message.ExcessiveSpreadParameters, paramName);
+
+                    hasSpread = hasSpread || isSpread;
+
+                    lParameters.Add(new FunctionDeclStatement.Parameter(paramName.Value, paramType, isSpread, paramDefault));
+                }
+
+                parameters = lParameters;
+            }
+            else
+                parameters = Array.Empty<FunctionDeclStatement.Parameter>();
+
+            parser.Take(TokenType.RightParen);
+
+            var returnTypeName = parser.ParseTypeName();
+
+            Token? fatArrowToken;
+            Expression? body;
+            if (parser.Match(TokenType.LeftBrace))
+                body = parser.ParseBlock(true);
+            else if ((fatArrowToken = parser.MatchAndTakeToken(TokenType.FatArrow)) != null)
+            {
+                body = new ReturnStatement(
+                    fatArrowToken,
+                    parser.ParseStatement(false)
+                );
+            }
+            else
+                body = null;
+
+            return new DestructStatement(token, name?.Value, parameters, returnTypeName, body);
+        }
+    }
+}
