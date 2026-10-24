@@ -30,6 +30,7 @@ namespace Compiler.CodeGeneration.Artifacts
         private RecordType? pendingSuperType;
         private CobType? pendingBType;
         public RecordType? HACK_PendingSuperType => pendingSuperType;
+        private CobType? concreteType;
 
         private readonly List<GenericDefinition> generics;
         private readonly List<RecordType> traits;
@@ -264,6 +265,11 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public CobType? FindGenericType(string name)
         {
+            // HACK This is the concrete type for functions and such
+            // TODO Support T in function bodies to remove the hack below
+            if (concreteType != null && name == "T") // TODO Not right to compare to hardcoded generic name
+                return concreteType;
+
             var generic = generics.FirstOrDefault(x => x.Name == name);
             if (generic == null)
                 return null;
@@ -344,6 +350,8 @@ namespace Compiler.CodeGeneration.Artifacts
                     pendingSuperType.Indexer.ReturnType.ToConcreteType(pendingBType)
                 );
             }
+
+            concreteType = pendingBType;
 
             pendingSuperType = null;
             pendingBType = null;

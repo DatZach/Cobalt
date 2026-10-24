@@ -60,7 +60,7 @@ type Array = {
     }
 
     function Where(function(T element) bool predicate) T[] {
-        var result = [];
+        var result = [ u8 ];
 
         for (var i in ..Length) {
             const element = this[i];
@@ -72,7 +72,7 @@ type Array = {
     }
 
     function Select(function(T element) T predicate) T[] {
-        var result = [];
+        var result = [ u8 ];
 
         for (var i in ..Length) {
             var element = this[i];

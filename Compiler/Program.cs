@@ -149,12 +149,13 @@ namespace Compiler
                 Console.WriteLine($"\t{module.Name}");
 
             Console.WriteLine("Functions");
-            foreach (var function in artifact.Functions)
+            for (var j = 0; j < artifact.Functions.Count; j++)
             {
+                var function = artifact.Functions[j];
                 if (function == artifact.EntryFunction)
                     continue;
 
-                Console.WriteLine($"\t{function.FullyQualifiedName} -> {function.ReturnType}; .locals = {function.Locals.Count}; .cconv = {function.CallingConvention}");
+                Console.WriteLine($"f{j}\t{function.FullyQualifiedName} -> {function.ReturnType}; .locals = {function.Locals.Count}; .cconv = {function.CallingConvention}");
                 if (function.Body.Instructions.Count == 0)
                     Console.WriteLine("\t\t(EMPTY)");
                 else for (var i = 0; i < function.Body.Instructions.Count; ++i)

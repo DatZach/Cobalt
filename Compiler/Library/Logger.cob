@@ -1,23 +1,15 @@
 module Logger;
 
-const STD_INPUT_HANDLE = DWORD(0xFFFF_FFF6);
-const STD_OUTPUT_HANDLE = DWORD(0xFFFF_FFF5);
-const NULL = LPVOID(0);
-
-import kernel32 GetStdHandle function (DWORD nStdHandle) HANDLE, stdcall;
-import kernel32 WriteConsoleA function (HANDLE hConsoleOutput, LPVOID lpBuffer, DWORD nNumberOfCharsToWrite, LPDWORD lpNumberOfCharsWritten, LPVOID lpReserved) BOOL, stdcall;
-import kernel32 ReadConsoleA function (HANDLE hConsoleOutput, LPVOID lpBuffer, DWORD nNumberOfCharsToRead, LPDWORD lpNumberOfCharsRead, LPVOID pInputControl) BOOL, stdcall;
-
-var hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
-var hStdIn = GetStdHandle(STD_INPUT_HANDLE);
+var hStdOut = SysCall.GetStdHandle(SysCall.STD_OUTPUT_HANDLE);
+var hStdIn = SysCall.GetStdHandle(SysCall.STD_INPUT_HANDLE);
 
 function Write(string value) {
-    WriteConsoleA(hStdOut, value.Address, value.Length, 0, 0);
+    SysCall.WriteConsoleA(hStdOut, value.Address, value.Length, 0, 0);
 }
 
 function WriteLn(string value) {
-    WriteConsoleA(hStdOut, value.Address, value.Length, 0, 0);
-    WriteConsoleA(hStdOut, "^n".Address, 1, 0, 0);
+    SysCall.WriteConsoleA(hStdOut, value.Address, value.Length, 0, 0);
+    SysCall.WriteConsoleA(hStdOut, "^n".Address, 1, 0, 0);
 }
 
 function ReadLine() string {
@@ -25,7 +17,7 @@ function ReadLine() string {
     //var length: DWORD;
     var length = Heap.Alloc(8); // TODO Replace with lens
 
-    ReadConsoleA(hStdIn, buffer.Address, buffer.Length - 1, length.Address, NULL);
+    SysCall.ReadConsoleA(hStdIn, buffer.Address, buffer.Length - 1, length.Address, SysCall.NULL);
     
     return buffer;//[..16];
 }

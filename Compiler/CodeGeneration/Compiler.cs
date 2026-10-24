@@ -184,11 +184,14 @@ namespace Compiler.CodeGeneration
                         contextStack.Push(field.Getter);
                         
                         var retStorage = fieldExpression.GetterExpression?.Accept(this);
+                        if (field.Getter.ReturnLabel.Location == -1) field.Getter.ReturnLabel.Mark();
                         if (retStorage != null)
                         {
                             CurrentFunction.Body.Emit(Opcode.Return, retStorage.Operand);
                             retStorage.Free();
                         }
+                        else
+                            CurrentFunction.Body.Emit(Opcode.Return, Operand.R0);
 
                         contextStack.Pop();
                     }
@@ -209,11 +212,14 @@ namespace Compiler.CodeGeneration
                         contextStack.Push(structType.Indexer.Getter);
                         
                         var retStorage = expression.Indexer?.GetterExpression?.Accept(this);
+                        if (structType.Indexer.Getter.ReturnLabel.Location == -1) structType.Indexer.Getter.ReturnLabel.Mark();
                         if (retStorage != null)
                         {
                             CurrentFunction.Body.Emit(Opcode.Return, retStorage.Operand);
                             retStorage.Free();
                         }
+                        else
+                            CurrentFunction.Body.Emit(Opcode.Return, Operand.R0);
 
                         contextStack.Pop();
                     }
@@ -267,6 +273,7 @@ namespace Compiler.CodeGeneration
             if (expression.Name != null && !recordType.IsFullyInitialized(mutations))
                 messages.Add(Message.NotAllFieldsInitialized, expression);
 
+            if (function.ReturnLabel.Location == -1) function.ReturnLabel.Mark();
             function.Body.Emit(Opcode.Return, r0.Operand); // TODO Error if not all paths return
             r0.Free();
 
@@ -296,6 +303,7 @@ namespace Compiler.CodeGeneration
 
             foreach (var x in mutations) function.MutatedSymbols.Add(x);
 
+            if (function.ReturnLabel.Location == -1) function.ReturnLabel.Mark();
             function.Body.Emit(Opcode.Return, Operand.This); // TODO Error if not all paths return
 
             return new Storage(
@@ -351,6 +359,7 @@ namespace Compiler.CodeGeneration
 
             foreach (var x in mutations) function.MutatedSymbols.Add(x);
 
+            if (function.ReturnLabel.Location == -1) function.ReturnLabel.Mark();
             if (function.ReturnType == CobType.None)
                 function.Body.Emit(Opcode.Return); // TODO Error if not all paths return
             else
@@ -948,12 +957,8 @@ namespace Compiler.CodeGeneration
                     return null;
                 }
 
-                // TODO Support T in function bodies to remove the hack below
                 var aType = lhs?.Type;
-                //var bType = CobType.FromString(rhs.Value);
-                var bType = rhs.Value == "T" // HACK TODO THIS IS ENTIRELY INCORRECT
-                    ? CobType.U8
-                    : CobType.FromTypeName(new TypeName { Type = eTypeName.Identifier, Identifier = rhs.Value }, CurrentContext);
+                var bType = CobType.FromTypeName(new TypeName { Type = eTypeName.Identifier, Identifier = rhs.Value }, CurrentContext);
                 CobType cType;
 
                 if (aType?.Tag is RecordType recordType)
@@ -1488,6 +1493,8 @@ namespace Compiler.CodeGeneration
                     }
                     else if (branch.ValueExpression != null)
                         throw new NotImplementedException();
+                    else
+                        implicitContext = lhs;
 
                     // VALUE
                     var rhs = branch.Right?.Accept(this);
@@ -1510,14 +1517,14 @@ namespace Compiler.CodeGeneration
                     }
 
                     labelCaseEnd.Mark();
+                    implicitContext = null;
                 }
 
                 if (defaultBranch != null)
                 {
+                    var type = seenTypes.Aggregate(lhs.Type, (current, x) => current.Bust(x));
                     if (defaultBranch.ValueExpression is IdentifierExpression ie)
                     {
-                        var type = seenTypes.Aggregate(lhs.Type, (current, x) => current.Bust(x));
-
                         var local = CurrentFunction.AllocateLocal(ie.Value, type, false);
                         CurrentFunction.Body.Emit(
                             Opcode.Move,
@@ -1525,6 +1532,10 @@ namespace Compiler.CodeGeneration
                             lhs.Operand
                         );
                     }
+                    else if (defaultBranch.ValueExpression != null)
+                        throw new NotImplementedException();
+                    else
+                        implicitContext = new Storage(lhs, type);
 
                     var rhs = defaultBranch.Right.Accept(this);
                     
@@ -1536,6 +1547,7 @@ namespace Compiler.CodeGeneration
                         messages.Add(Message.TypeMismatch, defaultBranch.Right, resultType, rhs.Type);
                     
                     rhs?.Free();
+                    implicitContext = null;
                 }
 
                 labelEnd.Mark();
@@ -2217,19 +2229,36 @@ namespace Compiler.CodeGeneration
             Function? function;
             Storage? functionStorage;
 
+            CobType? bType = null;
             var elements = new List<(bool IsSpread, Storage? Storage)>();
             foreach (var element in expression.Elements)
             {
                 if (element is PrefixOperatorExpression { Operator: TokenType.Spread } poe)
                     elements.Add((true, poe.Right.Accept(this)));
                 else
-                    elements.Add((false, element.Accept(this)));
+                {
+                    var elementStorage = element.Accept(this);
+                    bType ??= elementStorage?.Type;
+                    elements.Add((false, elementStorage));
+                }
             }
 
             // RESOLVE TYPE
-            var bType = expression.ElementTypeName == null
-                      ? CobType.U8 // TODO This needs to infer the type from the elements, implement in the future
-                      : CobType.FromTypeName(expression.ElementTypeName, CurrentContext);
+            if (expression.ElementTypeName != null)
+            {
+                var etType = CobType.FromTypeName(expression.ElementTypeName, CurrentContext);
+                if (bType != null && !CobType.IsExplicitCastable(etType, bType))
+                    messages.Add(Message.TypeMismatch, expression, etType, bType);
+
+                bType = etType;
+            }
+
+            if (bType == null)
+            {
+                messages.Add(Message.CannotDetermineArrayElementType, expression);
+                return null;
+            }
+
             var tag = Intrinsics.Array.TagRecord;
             tag = tag.FindConcretizedRecord(bType) ?? tag.AllocateConcretizedRecord(bType);
             var cobType = new CobType(eCobType.Record, tag: tag);

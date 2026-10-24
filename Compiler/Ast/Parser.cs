@@ -134,6 +134,12 @@ namespace Compiler.Ast
                 type = eTypeName.Identifier;
                 identifier = Take().Value;
 
+                while (MatchAndTakeToken(TokenType.Dot) != null)
+                {
+                    var subIdent = Take(TokenType.Identifier).Value;
+                    identifier += '.' + subIdent;
+                }
+
                 if (Match(TokenType.Generic))
                 {
                     if (generic != null)

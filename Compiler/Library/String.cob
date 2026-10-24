@@ -5,7 +5,7 @@ function string(int value, int radix = 10) This {
     if (value == 0)
         return "0";
     
-    var result = [];
+    var result = [ u8 ];
     
     const sign = radix == 10 && value < 0;
 

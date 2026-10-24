@@ -7,8 +7,13 @@ namespace Compiler.Ast.Parselets
     {
         public Expression Parse(Parser parser, Token token)
         {
+            TypeName? elementTypeName = null;
             Expression? countExpression = null;
             var elements = new List<Expression>();
+
+            // HACK Not idealized syntax...
+            if (parser.Match(TokenType.Identifier))
+                elementTypeName = parser.ParseTypeName();
 
             if (!parser.Match(TokenType.RightSquare))
             {
@@ -38,7 +43,7 @@ namespace Compiler.Ast.Parselets
 
             parser.Take(TokenType.RightSquare);
 
-            return new ArrayLiteralExpression(token, null, countExpression, elements);
+            return new ArrayLiteralExpression(token, elementTypeName, countExpression, elements);
         }
     }
 }

@@ -16,7 +16,7 @@ namespace Compiler.Ast.Expressions
             Token token,
             TypeName? elementTypeName,
             Expression? countExpression,
-            IReadOnlyList<Expression>? elements
+            IReadOnlyList<Expression> elements
         )
             : base(token)
         {

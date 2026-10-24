@@ -179,10 +179,13 @@ namespace Compiler.Ast
 
                 for (int i = startToken.Line; i <= endToken.Line; ++i)
                 {
-                    var line = FileSystem.GetLine(startToken.Filename, startToken.Line) ?? "(missing line)";
+                    var lineIndex = i;
+                    if (startToken.Filename == Program.Config.EntrySourceFilePath)
+                        lineIndex -= preambleLineCount;
+                    var line = FileSystem.GetLine(startToken.Filename, lineIndex) ?? "(missing line)";
 
                     Console.ForegroundColor = ConsoleColor.Cyan;
-                    Console.Write($"{{0,{indentCount}}} | ", i - preambleLineCount + 1);
+                    Console.Write($"{{0,{indentCount}}} | ", lineIndex + 1);
                     Console.ForegroundColor = ConsoleColor.Gray;
                     Console.WriteLine(line);
                     Console.ForegroundColor = ConsoleColor.Cyan;
@@ -308,6 +311,8 @@ namespace Compiler.Ast
         public static Def IllegalOperationBetweenTypes { get; } = new(MessageType.Error, "Cannot perform {0} operation between types '{1}' and '{2}'");
 
         public static Def FixedArrayDimensionMismatch { get; } = new(MessageType.Error, "Fixed Array Literal expects {0} elements to be initialized but only {1} may be");
+
+        public static Def CannotDetermineArrayElementType { get; } = new(MessageType.Error, "Cannot determine implicit array element type");
 
         public static Def CannotSpreadNumberHere { get; } = new(MessageType.Error, "Cannot spread number literal here");
 

@@ -250,7 +250,7 @@ namespace Compiler.CodeGeneration.Artifacts
         public static bool operator ==(CobType? left, eCobType right) => !ReferenceEquals(left, null) && left.Type == right;
         public static bool operator !=(CobType? left, eCobType right) => ReferenceEquals(left, null) || left.Type != right;
         public static bool operator ==(CobType? left, CobType? right) => Equals(left, right);
-        public static bool operator !=(CobType left, CobType? right) => !Equals(left, right);
+        public static bool operator !=(CobType? left, CobType? right) => !Equals(left, right);
         public bool Equals(CobType? other)
         {
             if (other is null)
@@ -332,9 +332,53 @@ namespace Compiler.CodeGeneration.Artifacts
                 else // User-defined type identifier
                 {
                     type = null!;
+                    Module? topModule = null;
+
+                    // Relative Type Name
+                    // TODO This code is copy-pasted below, could be cleaned up
                     var ctx = context;
                     while (ctx != null && type == null)
                     {
+                        if (ctx is Module module)
+                        {
+                            topModule ??= module;
+
+                            RecordType? recordType;
+                            CobType? distinctType;
+                            if ((recordType = module.FindRecordType(ident)) != null)
+                                type = recordType.ThisType;
+                            else if ((distinctType = module.FindDistinctType(ident)) != null)
+                                type = distinctType;
+                        }
+                        else if (ctx is RecordType recordType)
+                        {
+                            CobType? aliasType;
+                            if ((aliasType = recordType.FindGenericType(ident)) != null)
+                                type = aliasType;
+                        }
+                        //else if (ctx is Function)
+                        //{
+                        //    if (ident == "T")
+                        //        type = U8; // TODO lol
+                        //}
+
+                        ctx = ctx.Parent;
+                    }
+
+                    // Fully Qualified Type Name
+                    var lastDotIdx = ident.LastIndexOf('.');
+                    if (lastDotIdx != -1 && type == null && topModule != null)
+                    {
+                        ctx = topModule;
+                        for (int j = 0, i = ident.IndexOf('.');
+                             ctx != null && i != -1 && i <= lastDotIdx;
+                             j = i, i = ident.IndexOf('.', i + 1))
+                        {
+                            var part = ident.Substring(j, i - j);
+                            ctx = ctx.FindSymbol(part) as IScopeContext;
+                        }
+
+                        ident = ident.Substring(lastDotIdx + 1, ident.Length - lastDotIdx - 1);
                         if (ctx is Module module)
                         {
                             RecordType? recordType;
@@ -350,8 +394,11 @@ namespace Compiler.CodeGeneration.Artifacts
                             if ((aliasType = recordType.FindGenericType(ident)) != null)
                                 type = aliasType;
                         }
-
-                        ctx = ctx.Parent;
+                        //else if (ctx is Function)
+                        //{
+                        //    if (ident == "T")
+                        //        type = U8; // TODO lol
+                        //}
                     }
 
                     if (type == null)

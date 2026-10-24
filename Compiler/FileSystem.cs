@@ -64,9 +64,6 @@ namespace Compiler
         {
             var content = ReadAllText(path);
 
-            if (path == Program.Config.EntrySourceFilePath)
-                lineIndex -= Program.PreambleSource.Count(x => x == '\n');
-
             int idx = 0;
             int i = 0;
             while (i < content.Length)
