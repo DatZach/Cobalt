@@ -147,7 +147,7 @@ namespace Compiler.CodeGeneration.Architectures
                 currentFunction = f;
                 EmitIntermediateInstructionBuffer(buffer, f.Body);
 
-                buffer.EmitLine($"{GetLabelString(currentFunction.ReturnLabel)}:");
+                //buffer.EmitLine($"{GetLabelString(currentFunction.ReturnLabel)}:");
                 if (f.CallingConvention != CallingConvention.None)
                 {
                     for (int j = 0, k = 0; j < MaxRegisters; j++) // TODO Clean this up
@@ -322,7 +322,7 @@ namespace Compiler.CodeGeneration.Architectures
                         {
                             buffer.EmitLine($"mov rax, {GetOperandString(inst.A)}");
                         }
-                        buffer.EmitLine($"jmp {GetLabelString(currentFunction.ReturnLabel)}");
+                        //buffer.EmitLine($"jmp {GetLabelString(currentFunction.ReturnLabel)}");
                         break;
                     }
                     case Opcode.Move:

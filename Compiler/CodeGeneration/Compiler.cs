@@ -184,7 +184,6 @@ namespace Compiler.CodeGeneration
                         contextStack.Push(field.Getter);
                         
                         var retStorage = fieldExpression.GetterExpression?.Accept(this);
-                        if (field.Getter.ReturnLabel.Location == -1) field.Getter.ReturnLabel.Mark();
                         if (retStorage != null)
                         {
                             CurrentFunction.Body.Emit(Opcode.Return, retStorage.Operand);
@@ -212,7 +211,6 @@ namespace Compiler.CodeGeneration
                         contextStack.Push(structType.Indexer.Getter);
                         
                         var retStorage = expression.Indexer?.GetterExpression?.Accept(this);
-                        if (structType.Indexer.Getter.ReturnLabel.Location == -1) structType.Indexer.Getter.ReturnLabel.Mark();
                         if (retStorage != null)
                         {
                             CurrentFunction.Body.Emit(Opcode.Return, retStorage.Operand);
@@ -255,16 +253,14 @@ namespace Compiler.CodeGeneration
             else
                 throw new InvalidOperationException(); // TODO ??
 
-            // HACK Reserve r0 so that we can return this | error
-            var r0 = function.AllocateRegisterStorage(CurrentFunction.ReturnType);
-            function.Body.Emit(Opcode.Move, r0.Operand, Operand.This);
-
             var mutations = new HashSet<ISymbol>();
             mutationStack.Push(mutations);
             contextStack.Push(function);
+            function.PushBlockScope();
 
             expression.Body?.Accept(this)?.Free();
 
+            function.PopBlockScope();
             contextStack.Pop();
             mutationStack.Pop();
 
@@ -273,9 +269,7 @@ namespace Compiler.CodeGeneration
             if (expression.Name != null && !recordType.IsFullyInitialized(mutations))
                 messages.Add(Message.NotAllFieldsInitialized, expression);
 
-            if (function.ReturnLabel.Location == -1) function.ReturnLabel.Mark();
-            function.Body.Emit(Opcode.Return, r0.Operand); // TODO Error if not all paths return
-            r0.Free();
+            function.Body.Emit(Opcode.Return, Operand.This); // TODO Error if not all paths return
 
             return new Storage(
                 new CobType(eCobType.Function, tag: function),
@@ -295,15 +289,16 @@ namespace Compiler.CodeGeneration
             var mutations = new HashSet<ISymbol>();
             mutationStack.Push(mutations);
             contextStack.Push(function);
+            function.PushBlockScope();
 
             expression.Body?.Accept(this)?.Free();
 
+            function.PopBlockScope();
             contextStack.Pop();
             mutationStack.Pop();
 
             foreach (var x in mutations) function.MutatedSymbols.Add(x);
 
-            if (function.ReturnLabel.Location == -1) function.ReturnLabel.Mark();
             function.Body.Emit(Opcode.Return, Operand.This); // TODO Error if not all paths return
 
             return new Storage(
@@ -336,6 +331,7 @@ namespace Compiler.CodeGeneration
             var mutations = new HashSet<ISymbol>();
             mutationStack.Push(mutations);
             contextStack.Push(function);
+            function.PushBlockScope();
             forTempBlockScope = null;
 
             // TODO Temporary hack to call our initializer functions in the entry point
@@ -354,16 +350,19 @@ namespace Compiler.CodeGeneration
 
             expression.Body.Accept(this)?.Free();
 
+            function.PopBlockScope();
             contextStack.Pop();
             mutationStack.Pop();
 
             foreach (var x in mutations) function.MutatedSymbols.Add(x);
 
-            if (function.ReturnLabel.Location == -1) function.ReturnLabel.Mark();
             if (function.ReturnType == CobType.None)
-                function.Body.Emit(Opcode.Return); // TODO Error if not all paths return
-            else
-                function.Body.Emit(Opcode.Return, Operand.R0);
+                function.Body.Emit(Opcode.Return);
+
+            //if (function.ReturnType == CobType.None)
+            //    function.Body.Emit(Opcode.Return); // TODO Error if not all paths return
+            //else
+            //    function.Body.Emit(Opcode.Return, Operand.R0);
 
             return new Storage(
                 new CobType(eCobType.Function, tag: function),
@@ -777,13 +776,16 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(DeferStatement expression)
         {
-            CurrentFunction.AddDeferExpression(expression.Body);
+            CurrentFunction.CurrentBlockScope.AddDeferExpression(expression.Body);
             return null;
         }
 
         public Storage? Visit(ReturnStatement expression)
         {
             var rhs = expression.Expression?.Accept(this);
+
+            foreach (var expr in CurrentFunction.CurrentBlockScope.DeferExpressions)
+                expr.Accept(this);
 
             if (rhs != null)
             {
@@ -795,11 +797,11 @@ namespace Compiler.CodeGeneration
                 // TODO Might clobber rhs storage...
                 EnforceRefinment(rhs, CurrentFunction.ReturnType, expression); // TODO Should be implemented in IsExplicitCastable?
 
-                CurrentFunction.Body.Emit(Opcode.Move, Operand.R0, rhs.Operand);
+                CurrentFunction.Body.Emit(Opcode.Return, rhs.Operand);
                 rhs.Free();
             }
-
-            CurrentFunction.Body.Emit(Opcode.Jmp, CurrentFunction.ReturnLabel);
+            else
+                CurrentFunction.Body.Emit(Opcode.Return);
 
             return null;
         }
@@ -1397,7 +1399,7 @@ namespace Compiler.CodeGeneration
                 // Narrowing
                 // TODO Nested narrowing scopes might not actually work as expected, keep track in Compiler instead?
                 if (conditionalStack > 0)
-                    CurrentFunction.AddNarrowingDirective(lhs.Operand, type);
+                    CurrentFunction.CurrentBlockScope.AddNarrowingDirective(lhs.Operand, type);
 
                 lhs.Free();
 
@@ -1983,8 +1985,6 @@ namespace Compiler.CodeGeneration
             CurrentFunction.Body.Emit(Opcode.Return, evalStorage.Operand);
             evalStorage.Free();
 
-            function.ReturnLabel.Mark();
-            
             contextStack.Pop();
 
             using var vm = new VirtualMachine(artifact);
@@ -2534,8 +2534,6 @@ namespace Compiler.CodeGeneration
                 CurrentFunction.Body.Emit(Opcode.Return, evalStorage.Operand);
                 evalStorage.Free();
 
-                function.ReturnLabel.Mark();
-            
                 contextStack.Pop();
 
                 using var vm = new VirtualMachine(artifact);

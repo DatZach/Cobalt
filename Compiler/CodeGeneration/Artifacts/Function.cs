@@ -30,9 +30,9 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public HashSet<ISymbol> MutatedSymbols { get; }
 
-        public Label ReturnLabel { get; }
-
         public string FullyQualifiedName => Parent.Name + '_' + Name;
+
+        public BlockScope CurrentBlockScope => blockScopeStack.Peek();
 
         public bool IsCasting => ReturnType.Name == Name;
 
@@ -67,7 +67,6 @@ namespace Compiler.CodeGeneration.Artifacts
             IsSignature = isSignature;
             Body = new InstructionBuffer();
             MutatedSymbols = new HashSet<ISymbol>();
-            ReturnLabel = Body.AllocateLabel();
 
             blockScopeStack = new Stack<BlockScope>();
             locals = new List<Variable>();
@@ -138,52 +137,13 @@ namespace Compiler.CodeGeneration.Artifacts
         {
             var scope = blockScopeStack.Peek();
 
-            Storage? guardStorage = null;
-            var isRootBlock = blockScopeStack.Count == 1 && ReturnLabel.Location < 0;
-            if (isRootBlock)
-            {
-                ReturnLabel.Mark();
-                
-                if (ReturnType != CobType.None)
-                {
-                    guardStorage = AllocateRegisterStorage(ReturnType);
-                    Body.Emit(Opcode.Move, guardStorage.Operand, Operand.R0);
-                }
-            }
-
             foreach (var expr in scope.DeferExpressions)
                 expr.Accept(compiler);
-
-            if (guardStorage != null)
-            {
-                Body.Emit(Opcode.Move, Operand.R0, guardStorage.Operand);
-                guardStorage.Free();
-            }
 
             scope.EnsureLinearOwnership();
             blockScopeStack.Pop();
 
             return scope;
-        }
-
-        // TODO Maybe refactor these functions into CurrentBlockScope?
-
-        public void AddNarrowingDirective(Operand operand, CobType type)
-        {
-            if (blockScopeStack.Count == 0)
-                return;
-
-            var scope = blockScopeStack.Peek();
-            scope.AddNarrowingDirective(operand, type);
-        }
-
-        public void AddDeferExpression(Expression expression)
-        {
-            if (blockScopeStack.Count == 0)
-                return;
-
-            var scope = blockScopeStack.Peek();
-            scope.AddDeferExpression(expression);
         }
 
         public Variable AllocateLocal(string name, CobType type, bool mutable)
