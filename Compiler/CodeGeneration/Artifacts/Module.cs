@@ -179,14 +179,8 @@ namespace Compiler.CodeGeneration.Artifacts
             if ((type = FindDistinctType(name)) != null)
                 return type;
 
-            // TODO Remove the try..catch
-            try
-            {
-                if ((type = CobType.FromTypeName(new TypeName { Identifier = name, Type = eTypeName.Identifier },
-                        this)) != null)
-                    return type;
-            }
-            catch { }
+            if ((type = CobType.FromTypeName(TypeName.FromIdentifier(name), this)) != null)
+                return type;
 
             return null;
         }
@@ -250,7 +244,7 @@ namespace Compiler.CodeGeneration.Artifacts
             {
                 return new Storage(
                     recordType.ThisType,
-                    Operand.None
+                    recordType.ThisType.ToOperand(compiler.Artifact)
                 );
             }
 
@@ -259,7 +253,7 @@ namespace Compiler.CodeGeneration.Artifacts
             {
                 return new Storage(
                     cobType,
-                    Operand.None
+                    cobType.ToOperand(compiler.Artifact)
                 );
             }
 

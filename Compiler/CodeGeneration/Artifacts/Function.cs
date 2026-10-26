@@ -527,6 +527,7 @@ namespace Compiler.CodeGeneration.Artifacts
         public override string ToString() => string.Join('\n', candidates);
     }
 
+    // TODO Might be a neat refactor to implement IDisposable for calling Free()
     internal sealed record Storage
     {
         public CobType Type { get; }

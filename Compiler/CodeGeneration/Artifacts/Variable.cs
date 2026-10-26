@@ -280,8 +280,7 @@ namespace Compiler.CodeGeneration.Artifacts
             return HashCode.Combine((int)Type, Size, ElementType, Tag);
         }
 
-        // TODO Return CobType? and have consumers check if null for proper error reporting
-        public static CobType FromTypeName(TypeName? typeName, IScopeContext? context)
+        public static CobType? FromTypeName(TypeName? typeName, IScopeContext? context)
         {
             if (typeName == null)
                 return None;
@@ -356,11 +355,6 @@ namespace Compiler.CodeGeneration.Artifacts
                             if ((aliasType = recordType.FindGenericType(ident)) != null)
                                 type = aliasType;
                         }
-                        //else if (ctx is Function)
-                        //{
-                        //    if (ident == "T")
-                        //        type = U8; // TODO lol
-                        //}
 
                         ctx = ctx.Parent;
                     }
@@ -394,23 +388,18 @@ namespace Compiler.CodeGeneration.Artifacts
                             if ((aliasType = recordType.FindGenericType(ident)) != null)
                                 type = aliasType;
                         }
-                        //else if (ctx is Function)
-                        //{
-                        //    if (ident == "T")
-                        //        type = U8; // TODO lol
-                        //}
                     }
 
                     if (type == null)
-                        throw new Exception($"The typename '{typeName}' is not valid");
+                        return null;
                 }
             }
             else if (typeName.Type == eTypeName.FunctionSignature)
             {
                 var parameters = typeName.Function.Parameters.Select(
-                    x => new Function.Parameter(x.Name, FromTypeName(x.TypeName, context), x.IsSpread)
+                    x => new Function.Parameter(x.Name, FromTypeName(x.TypeName, context) ?? None, x.IsSpread)
                 ).ToList();
-                var returnType = FromTypeName(typeName.Function.ReturnTypeName, context);
+                var returnType = FromTypeName(typeName.Function.ReturnTypeName, context) ?? None;
 
                 type = new CobType(eCobType.Function, tag: new FunctionSignature
                 {
@@ -439,7 +428,7 @@ namespace Compiler.CodeGeneration.Artifacts
 
             CobType bType;
             if (typeName.Generic != null && typeName.Generic.Count > 0
-            &&  (bType = FromTypeName(typeName.Generic[0], context)) != None)
+            &&  (bType = FromTypeName(typeName.Generic[0], context)) != null && bType != None)
             {
                 if (type.Tag is RecordType recordType)
                 {
@@ -448,7 +437,7 @@ namespace Compiler.CodeGeneration.Artifacts
                     type = tag.ThisType;
                 }
                 else
-                    throw new Exception($"The typename '{typeName}' is not valid");
+                    return null;
             }
 
             // Suffixes
@@ -482,22 +471,6 @@ namespace Compiler.CodeGeneration.Artifacts
             else
                 return type;
         }
-
-        public static bool TryParse(TypeName typeName, IScopeContext? context, out CobType result)
-        {
-            try
-            {
-                result = FromTypeName(typeName, context);
-                return true;
-            }
-            catch
-            {
-                result = null!;
-                return false;
-            }
-        }
-
-        //public CobType ToConcreteType(CobType bType) => this == eCobType.Generic ? bType : this;
 
         public CobType ToConcreteType(CobType bType)
         {

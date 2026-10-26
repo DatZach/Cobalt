@@ -122,8 +122,8 @@ namespace Compiler.CodeGeneration
                 function = CurrentModule.AllocateFunction(
                     expression.SymbolName,
                     expression.SymbolTypeName.Function.CallingConvention,
-                    expression.SymbolTypeName.Function.Parameters.Select(x => new Function.Parameter(x.Name, CobType.FromTypeName(x.TypeName, CurrentContext), x.IsSpread)).ToList(),
-                    CobType.FromTypeName(expression.SymbolTypeName.Function.ReturnTypeName, CurrentContext)
+                    expression.SymbolTypeName.Function.Parameters.Select(x => new Function.Parameter(x.Name, ResolveTypeFromTypeName(x.TypeName, expression), x.IsSpread)).ToList(),
+                    ResolveTypeFromTypeName(expression.SymbolTypeName.Function.ReturnTypeName, expression)
                 );
             }
             else
@@ -219,7 +219,7 @@ namespace Compiler.CodeGeneration
                 }
 
                 // type Sub = Super;
-                var superType = CobType.FromTypeName(expression.SuperTypeName, CurrentModule);
+                var superType = ResolveTypeFromTypeName(expression.SuperTypeName, expression);
 
                 // TODO Not strictly correct to put the tag of the super type on the sub type
                 var tag = superType.Tag;
@@ -395,7 +395,7 @@ namespace Compiler.CodeGeneration
 
                 foreach (var traitTypeName in expression.Mixins)
                 {
-                    var traitType = CobType.FromTypeName(traitTypeName, CurrentContext);
+                    var traitType = ResolveTypeFromTypeName(traitTypeName, expression);
                     if (traitType.TagRecord == null || !traitType.TagRecord.IsTrait)
                     {
                         messages.Add(Message.CannotMixinNonTraitType, expression, traitTypeName);
@@ -432,14 +432,14 @@ namespace Compiler.CodeGeneration
                 {
                     foreach (var field in expression.Fields)
                     {
-                        var fieldType = CobType.FromTypeName(field.TypeName, CurrentContext);
+                        var fieldType = ResolveTypeFromTypeName(field.TypeName, expression);
                         structType.AllocateField(field.Name, fieldType, field.IsFinal, field.GetterExpression != null, field.SetterExpression != null);
                     }
 
                     if (expression.Indexer != null)
                     {
-                        var keyType = CobType.FromTypeName(expression.Indexer.KeyTypeName, CurrentContext);
-                        var returnType = CobType.FromTypeName(expression.Indexer.ReturnTypeName, CurrentContext);
+                        var keyType = ResolveTypeFromTypeName(expression.Indexer.KeyTypeName, expression);
+                        var returnType = ResolveTypeFromTypeName(expression.Indexer.ReturnTypeName, expression);
 
                         structType.AllocateIndexer(keyType, returnType);
                     }
@@ -457,7 +457,7 @@ namespace Compiler.CodeGeneration
                 return Unit.Value;
 
             var parameters = expression.Parameters.Select(
-                x => new Function.Parameter(x.Name, CobType.FromTypeName(x.TypeName, CurrentContext), x.IsSpread, x.DefaultValue)
+                x => new Function.Parameter(x.Name, ResolveTypeFromTypeName(x.TypeName, expression), x.IsSpread, x.DefaultValue)
             ).ToList();
 
             if (CurrentContext is RecordType recordType)
@@ -476,12 +476,12 @@ namespace Compiler.CodeGeneration
                 return Unit.Value;
 
             var parameters = expression.Parameters.Select(
-                x => new Function.Parameter(x.Name, CobType.FromTypeName(x.TypeName, CurrentContext), x.IsSpread, x.DefaultValue)
+                x => new Function.Parameter(x.Name, ResolveTypeFromTypeName(x.TypeName, expression), x.IsSpread, x.DefaultValue)
             ).ToList();
 
             if (CurrentContext is RecordType recordType)
             {
-                var returnType = CobType.FromTypeName(expression.ReturnTypeName, CurrentContext);
+                var returnType = ResolveTypeFromTypeName(expression.ReturnTypeName, expression);
                 recordType.AllocateDestructor(expression.Name, parameters, returnType, expression.Body == null);
             }
             else
@@ -503,7 +503,7 @@ namespace Compiler.CodeGeneration
             }
 
             var parameters = expression.Parameters.Select(
-                x => new Function.Parameter(x.Name, CobType.FromTypeName(x.TypeName, CurrentContext), x.IsSpread, x.DefaultValue)
+                x => new Function.Parameter(x.Name, ResolveTypeFromTypeName(x.TypeName, expression), x.IsSpread, x.DefaultValue)
             ).ToList();
 
             // HACK Return Type cannot result This because the function context has not yet been allocated
@@ -513,7 +513,7 @@ namespace Compiler.CodeGeneration
             &&  returnTypeName.Type == eTypeName.Identifier && returnTypeName.Identifier == "This")
                 returnTypeName = new TypeName { Type = eTypeName.Identifier, Identifier = expression.Name };
 
-            var returnType = CobType.FromTypeName(returnTypeName, CurrentContext);
+            var returnType = ResolveTypeFromTypeName(returnTypeName, expression);
 
             
             if (CurrentContext is RecordType recordType)
@@ -547,7 +547,7 @@ namespace Compiler.CodeGeneration
 
                 if (expression.Field != null)
                 {
-                    var fieldType = CobType.FromTypeName(expression.Field.TypeName, CurrentContext);
+                    var fieldType = ResolveTypeFromTypeName(expression.Field.TypeName, expression);
                     if (context is RecordType recordType)
                         recordType.AllocateField(expression.Field.Name, fieldType, expression.Field.IsFinal, expression.Field.GetterExpression != null, expression.Field.SetterExpression != null);
                     else
@@ -731,6 +731,18 @@ namespace Compiler.CodeGeneration
         public Unit Visit(EmptyExpression expression)
         {
             return Unit.Value;
+        }
+
+        private CobType ResolveTypeFromTypeName(TypeName? typeName, Expression expression)
+        {
+            var result = CobType.FromTypeName(typeName, CurrentContext);
+            if (result == null)
+            {
+                messages.Add(Message.IllegalTypeName, expression, typeName);
+                return CobType.None;
+            }
+
+            return result;
         }
 
         internal enum DeclPhase

@@ -387,6 +387,10 @@ namespace Compiler.CodeGeneration.Artifacts
             if ((candidates = FindFunctionCandidates(name)) != null)
                 return candidates;
 
+            CobType? generic;
+            if ((generic = FindGenericType(name)) != null)
+                return generic;
+
             return null;
         }
 
@@ -452,6 +456,14 @@ namespace Compiler.CodeGeneration.Artifacts
                 return new Storage(
                     new CobType(eCobType.Function, tag: candidates),
                     Operand.None
+                );
+            }
+
+            if (symbol is CobType cobType)
+            {
+                return new Storage(
+                    cobType,
+                    cobType.ToOperand(compiler.Artifact)
                 );
             }
 

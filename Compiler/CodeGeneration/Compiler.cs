@@ -27,6 +27,8 @@ namespace Compiler.CodeGeneration
 
         public List<Variable> Globals => artifact.Globals;
 
+        public Artifact Artifact => artifact;
+
         public List<ScriptExpression> Scripts { get; }
 
         public Module RootModule { get; }
@@ -237,7 +239,9 @@ namespace Compiler.CodeGeneration
             foreach (var mixin in expression.Mixins)
             {
                 var traitType = CobType.FromTypeName(mixin, CurrentContext);
-                if (!structType.IsTraitSignatureMatch(traitType.TagRecord))
+                if (traitType == null)
+                    messages.Add(Message.IllegalTypeName, expression, mixin);
+                else if (!structType.IsTraitSignatureMatch(traitType.TagRecord))
                     messages.Add(Message.TraitNotFullyImplemented, expression, mixin);
             }
 
@@ -321,7 +325,7 @@ namespace Compiler.CodeGeneration
             else
             {
                 var candidates = CurrentModule.FindFunctionCandidates(expression.Name)!;
-                var parameterTypes = expression.Parameters.Select(x => CobType.FromTypeName(x.TypeName, CurrentContext)).ToList();
+                var parameterTypes = expression.Parameters.Select(x => CobType.FromTypeName(x.TypeName, CurrentContext)!).ToList();
                 function = candidates.ResolveSingle(parameterTypes)!;
                 //function = CurrentModule.FindFunction(expression.Name)!;
             }
@@ -356,13 +360,9 @@ namespace Compiler.CodeGeneration
 
             foreach (var x in mutations) function.MutatedSymbols.Add(x);
 
+            // TODO Error if not all paths return
             if (function.ReturnType == CobType.None)
                 function.Body.Emit(Opcode.Return);
-
-            //if (function.ReturnType == CobType.None)
-            //    function.Body.Emit(Opcode.Return); // TODO Error if not all paths return
-            //else
-            //    function.Body.Emit(Opcode.Return, Operand.R0);
 
             return new Storage(
                 new CobType(eCobType.Function, tag: function),
@@ -952,15 +952,16 @@ namespace Compiler.CodeGeneration
             if (expression.Operator == TokenType.Generic)
             {
                 var lhs = expression.Left.Accept(this);
+                var rhs = expression.Right.Accept(this);
 
-                if (expression.Right is not IdentifierExpression rhs)
+                if (rhs == null || rhs.Operand.Type != OperandType.Type)
                 {
-                    messages.Add(Message.UnexpectedToken2, expression.Right, "type name", expression.Right.Token);
+                    messages.Add(Message.IllegalTypeName, expression, expression.Right);
                     return null;
                 }
 
                 var aType = lhs?.Type;
-                var bType = CobType.FromTypeName(new TypeName { Type = eTypeName.Identifier, Identifier = rhs.Value }, CurrentContext);
+                var bType = rhs.Type;
                 CobType cType;
 
                 if (aType?.Tag is RecordType recordType)
@@ -974,7 +975,7 @@ namespace Compiler.CodeGeneration
                 }
                 else
                 {
-                    messages.Add(Message.IllegalTypeName, expression);
+                    messages.Add(Message.IllegalTypeName, expression, expression);
                     return null;
                 }
 
@@ -1386,6 +1387,11 @@ namespace Compiler.CodeGeneration
             if (expression.RightSingle != null)
             {
                 var type = CobType.FromTypeName(expression.RightSingle.TypeName, CurrentContext);
+                if (type == null)
+                {
+                    messages.Add(Message.IllegalTypeName, expression, expression.RightSingle.TypeName);
+                    return null;
+                }
 
                 var c = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
 
@@ -1446,7 +1452,14 @@ namespace Compiler.CodeGeneration
                         type = value.Type;
                     }
                     else if (branch.TypeName != null)
+                    {
                         type = CobType.FromTypeName(branch.TypeName, CurrentContext);
+                        if (type == null)
+                        {
+                            messages.Add(Message.IllegalTypeName, expression, branch.TypeName);
+                            continue;
+                        }
+                    }
                     else
                     {
                         messages.Add(Message.IllegalPattern, branch.Token);
@@ -1606,7 +1619,7 @@ namespace Compiler.CodeGeneration
         private Storage? VisitExplicitCastExpression(CallExpression expression)
         {
             var dstStorage = expression.FunctionExpression.Accept(this);
-            if (dstStorage == null || dstStorage.Operand.Type != OperandType.None) // TODO Would be better to check against Type not None Operand
+            if (dstStorage == null || dstStorage.Operand.Type != OperandType.Type)
                 return null;
             
             var arguments = new List<Storage>();
@@ -2120,7 +2133,14 @@ namespace Compiler.CodeGeneration
 
                 CobType cobType;
                 if (expression.ExplicitTypeName != null)
+                {
                     cobType = CobType.FromTypeName(expression.ExplicitTypeName, CurrentContext);
+                    if (cobType == null)
+                    {
+                        messages.Add(Message.IllegalTypeName, expression, expression.ExplicitTypeName);
+                        return null;
+                    }
+                }
                 else
                 {
                     var tupleType = Intrinsics.FindOrAllocateAnonymousTupleType(
@@ -2247,7 +2267,9 @@ namespace Compiler.CodeGeneration
             if (expression.ElementTypeName != null)
             {
                 var etType = CobType.FromTypeName(expression.ElementTypeName, CurrentContext);
-                if (bType != null && !CobType.IsExplicitCastable(etType, bType))
+                if (etType == null)
+                    messages.Add(Message.IllegalTypeName, expression, expression.ElementTypeName);
+                else if (bType != null && !CobType.IsExplicitCastable(etType, bType))
                     messages.Add(Message.TypeMismatch, expression, etType, bType);
 
                 bType = etType;
@@ -2374,6 +2396,12 @@ namespace Compiler.CodeGeneration
         public Storage? Visit(NumberLiteralExpression expression)
         {
             var type = CobType.FromTypeName(expression.TypeName, CurrentContext);
+            if (type == null)
+            {
+                messages.Add(Message.IllegalTypeName, expression, expression.TypeName);
+                return null;
+            }
+
             return new Storage(type, Operand.Immediate(expression.LongValue, type));
         }
 

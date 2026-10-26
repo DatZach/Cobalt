@@ -28,5 +28,10 @@ namespace Compiler.Ast.Expressions
         {
             return visitor.Visit(this);
         }
+
+        public override string ToString()
+        {
+            return $"{Left} {Operator.GetDescription()} {Right}";
+        }
     }
 }

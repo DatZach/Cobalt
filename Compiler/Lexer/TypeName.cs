@@ -1,5 +1,4 @@
-﻿using Compiler.Ast.Expressions;
-using Compiler.Ast.Expressions.Statements;
+﻿using Compiler.Ast.Expressions.Statements;
 using Compiler.CodeGeneration.Artifacts;
 using System.Text;
 
@@ -32,6 +31,8 @@ namespace Compiler.Lexer
         public bool IsErrorable { get; init; }
 
         public bool IsNillable { get; init; }
+
+        public static TypeName FromIdentifier(string name) => new() { Type = eTypeName.Identifier, Identifier = name };
 
         public override string ToString()
         {
