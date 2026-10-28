@@ -430,10 +430,23 @@ namespace Compiler.CodeGeneration
 
                 if (phase == DeclPhase.Fields)
                 {
-                    foreach (var field in expression.Fields)
+                    for (var i = 0; i < expression.Fields.Count; ++i)
                     {
+                        var field = expression.Fields[i];
+                        var fieldName = field.Name;
                         var fieldType = ResolveTypeFromTypeName(field.TypeName, expression);
-                        structType.AllocateField(field.Name, fieldType, field.IsFinal, field.GetterExpression != null, field.SetterExpression != null);
+
+                        if (fieldName == null || fieldName == "_")
+                        {
+                            if (i > 0 && !structType.IsBare && structType.Type == eRecordType.Tuple)
+                                messages.Add(Message.IllegalFieldForTuple, expression);
+
+                            fieldName = $"'{i}";
+                        }
+                        else if (i > 0 && structType.IsBare)
+                            messages.Add(Message.IllegalFieldForBareTuple, expression);
+
+                        structType.AllocateField(fieldName, fieldType, field.IsFinal, field.GetterExpression != null, field.SetterExpression != null);
                     }
 
                     if (expression.Indexer != null)
@@ -492,44 +505,64 @@ namespace Compiler.CodeGeneration
 
         public Unit Visit(FunctionDeclStatement expression)
         {
-            if (phase != DeclPhase.Functions)
-                return Unit.Value;
-
-            if (expression.Body == null
-            &&  (CurrentContext is not RecordType tRecordType || !tRecordType.IsTrait))
+            if (phase == DeclPhase.Types)
             {
-                messages.Add(Message.MissingFunctionBody, expression);
-                return Unit.Value;
+
             }
-
-            var parameters = expression.Parameters.Select(
-                x => new Function.Parameter(x.Name, ResolveTypeFromTypeName(x.TypeName, expression), x.IsSpread, x.DefaultValue)
-            ).ToList();
-
-            // HACK Return Type cannot result This because the function context has not yet been allocated
-            //      Need to find a way to improve this, maybe late binding return types?
-            var returnTypeName = expression.ReturnTypeName;
-            if (returnTypeName != null
-            &&  returnTypeName.Type == eTypeName.Identifier && returnTypeName.Identifier == "This")
-                returnTypeName = new TypeName { Type = eTypeName.Identifier, Identifier = expression.Name };
-
-            var returnType = ResolveTypeFromTypeName(returnTypeName, expression);
-
-            
-            if (CurrentContext is RecordType recordType)
+            else if (phase == DeclPhase.Functions)
             {
-                if (expression.CallingConvention != CallingConvention.Default
-                &&  expression.CallingConvention != CallingConvention.ThisCall)
-                    messages.Add(Message.IllegalCallingConvention, expression, expression.CallingConvention);
+                if (expression.Body == null
+                &&  (CurrentContext is not RecordType tRecordType || !tRecordType.IsTrait))
+                {
+                    messages.Add(Message.MissingFunctionBody, expression);
+                    return Unit.Value;
+                }
 
-                recordType.AllocateFunction(expression.Name, parameters, returnType, expression.Body == null);
+                var parameters = expression.Parameters.Select(
+                    x => new Function.Parameter(x.Name, ResolveTypeFromTypeName(x.TypeName, expression), x.IsSpread, x.DefaultValue)
+                ).ToList();
+
+                // HACK Return Type cannot result This because the function context has not yet been allocated
+                //      Need to find a way to improve this, maybe late binding return types?
+                var returnTypeName = expression.ReturnTypeName;
+                if (returnTypeName != null
+                &&  returnTypeName.Type == eTypeName.Identifier && returnTypeName.Identifier == "This")
+                    returnTypeName = new TypeName { Type = eTypeName.Identifier, Identifier = expression.Name };
+
+                var returnType = ResolveTypeFromTypeName(returnTypeName, expression);
+
+                
+                if (CurrentContext is RecordType recordType)
+                {
+                    if (expression.CallingConvention != CallingConvention.Default
+                    &&  expression.CallingConvention != CallingConvention.ThisCall)
+                        messages.Add(Message.IllegalCallingConvention, expression, expression.CallingConvention);
+
+                    recordType.AllocateFunction(expression.Name, parameters, returnType, expression.Body == null);
+                }
+                else if (CurrentContext is Module module)
+                {
+                    module.AllocateFunction(expression.Name, expression.CallingConvention, parameters, returnType);
+                }
+                else
+                    messages.Add(Message.CannotDeclareSymbolHere, expression);
             }
-            else if (CurrentContext is Module module)
+            else if (phase >= DeclPhase.Fields)
             {
-                module.AllocateFunction(expression.Name, expression.CallingConvention, parameters, returnType);
+                foreach (var parameter in expression.Parameters)
+                {
+                    var type = ResolveTypeFromTypeName(parameter.TypeName, expression);
+                    if (type.Type == eCobType.Record && type.Tag is IScopeContext ctx
+                    &&  parameter.TypeName.Type == eTypeName.RecordSignature)
+                    {
+                        HACK_ContextAlreadyDived = true;
+                        contextStack.Push(ctx);
+                        parameter.TypeName.Record?.Accept(this);
+                        contextStack.Pop();
+                        HACK_ContextAlreadyDived = false;
+                    }
+                }
             }
-            else
-                messages.Add(Message.CannotDeclareSymbolHere, expression);
 
             return Unit.Value;
         }

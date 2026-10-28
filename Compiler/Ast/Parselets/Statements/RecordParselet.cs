@@ -15,8 +15,6 @@ namespace Compiler.Ast.Parselets.Statements
 
         public Expression Parse(Parser parser, Token token)
         {
-            // TODO Handle Tuple-specific errors
-
             var type = token.Type == TokenType.LeftBrace ? eRecordType.Struct : eRecordType.Tuple;
 
             var generics = new List<GenericDefinition>();
@@ -52,6 +50,12 @@ namespace Compiler.Ast.Parselets.Statements
                 {
                     parser.Take(TokenType.Mixin);
                     var typeName = parser.ParseTypeName();
+                    if (typeName == null)
+                    {
+                        parser.Messages.Add(Message.ExpectedTypeName, parser.Peek());
+                        continue;
+                    }
+
                     mixins.Add(typeName);
                 }
                 else if (parser.Match(TokenType.Const)) // Const
@@ -59,12 +63,12 @@ namespace Compiler.Ast.Parselets.Statements
                     var expr = (VariableDeclStatement)parser.ParseStatement();
                     constants.Add(expr);
                 }
-                else if (parser.Match(TokenType.Construct)) // Constructor
+                else if (type == eRecordType.Struct && parser.Match(TokenType.Construct)) // Constructor
                 {
                     var expr = (ConstructStatement)parser.ParseStatement();
                     constructors.Add(expr);
                 }
-                else if (parser.Match(TokenType.Destruct)) // Destructor
+                else if (type == eRecordType.Struct && parser.Match(TokenType.Destruct)) // Destructor
                 {
                     var expr = (DestructStatement)parser.ParseStatement();
                     destructors.Add(expr);
@@ -90,11 +94,33 @@ namespace Compiler.Ast.Parselets.Statements
                 {
                     var isFinal = parser.MatchAndTakeToken(TokenType.Final) != null;
                     var fieldType = parser.ParseTypeName();
-                    var fieldName = parser.Take(TokenType.Identifier);
 
-                    ParseGetterSetters(parser, out var getterExpression, out var setterExpression);
+                    if (fieldType == null)
+                    {
+                        parser.Messages.Add(Message.ExpectedTypeName, parser.Peek());
+                        continue;
+                    }
 
-                    fields.Add(new FieldDefinition(fieldName.Value, fieldType, isFinal, getterExpression, setterExpression));
+                    Token? fieldName;
+                    Expression? getterExpression, setterExpression;
+                    if (parser.Match(TokenType.Identifier))
+                    {
+                        fieldName = parser.Take(TokenType.Identifier);
+                        ParseGetterSetters(parser, out getterExpression, out setterExpression);
+                    }
+                    else if (type == eRecordType.Struct)
+                    {
+                        parser.Take(TokenType.Identifier); // Raise 'expected identifier' error
+                        continue;
+                    }
+                    else
+                    {
+                        fieldName = null;
+                        getterExpression = null;
+                        setterExpression = null;
+                    }
+
+                    fields.Add(new FieldDefinition(fieldName?.Value, fieldType, isFinal, getterExpression, setterExpression));
                 }
 
                 parser.MatchAndTakeToken(TokenType.Semicolon);

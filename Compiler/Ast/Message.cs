@@ -340,6 +340,10 @@ namespace Compiler.Ast
 
         public static Def ConstTypeProhibitsCallsWithSideEffects { get; } = new(MessageType.Error, "Const type prohibits calls to methods which have side-effects");
 
+        public static Def IllegalFieldForTuple { get; } = new(MessageType.Error, "Anonymous field illegal for non-bare tuples");
+
+        public static Def IllegalFieldForBareTuple { get; } = new(MessageType.Error, "Named field illegal for bare tuples");
+
         public sealed record Def(
             MessageType Type,
             string Content,

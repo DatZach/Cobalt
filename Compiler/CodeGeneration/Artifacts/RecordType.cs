@@ -1,6 +1,5 @@
 ﻿using Compiler.Ast.Expressions.Statements;
 using System.Diagnostics;
-using System.Diagnostics.Metrics;
 
 namespace Compiler.CodeGeneration.Artifacts
 {
@@ -17,7 +16,7 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public bool IsGeneric => generics.Count > 0;
 
-        public bool IsAnonymous => fields.Count > 0 && fields[0].Name.StartsWith('\'');
+        public bool IsBare => fields.Count == 0 || fields[0].Name.StartsWith('\'');
 
         public bool IsTrait => functions.All(x => x.IsSignature) && constructors.All(x => x.IsSignature)
                             && destructors.All(x => x.IsSignature);

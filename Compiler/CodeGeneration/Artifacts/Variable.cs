@@ -954,11 +954,10 @@ namespace Compiler.CodeGeneration.Artifacts
 
 
             if (dstType.TagRecord != null && dstType.TagRecord.IsTrait
-            &&  srcType.Type is eCobType.Record or eCobType.Distinct)
-            {
-                var recordType = srcType.Tag as RecordType;
-                return recordType?.HasTrait(dstType.Tag as RecordType) ?? false;
-            }
+            &&  srcType.Type is eCobType.Record or eCobType.Distinct
+            &&  srcType.TagRecord != null
+            &&  srcType.TagRecord.HasTrait(dstType.TagRecord))
+                return true;
 
             if (dstType.Type == eCobType.Record && dstType.TagRecord.Type == eRecordType.Tuple
             &&  srcType.Type == eCobType.Record && srcType.TagRecord.Type == eRecordType.Tuple)
@@ -966,7 +965,7 @@ namespace Compiler.CodeGeneration.Artifacts
                 if (srcType.Tag == dstType.Tag)
                     return true;
 
-                if (srcType.Tag is RecordType srcRecordType && srcRecordType.IsAnonymous
+                if (srcType.Tag is RecordType srcRecordType && srcRecordType.IsBare
                 &&  dstType.Tag is RecordType dstRecordType)
                 {
                     return dstRecordType.IsFieldSignatureMatch(srcRecordType);
