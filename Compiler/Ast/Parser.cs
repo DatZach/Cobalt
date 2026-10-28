@@ -117,6 +117,7 @@ namespace Compiler.Ast
             bool isArray = false;
             bool isErrorable = false;
             bool isNillable = false;
+            bool isConst = false;
 
             // Prefix
             if (Match(TokenType.Generic))
@@ -249,6 +250,12 @@ namespace Compiler.Ast
                 union = ParseTypeName();
             }
 
+            if (Match(TokenType.BitXor))
+            {
+                Take(TokenType.BitXor);
+                isConst = true;
+            }
+
             return new TypeName
             {
                 Type = type,
@@ -259,7 +266,8 @@ namespace Compiler.Ast
                 Generic = generic,
                 IsArray = isArray,
                 IsErrorable = isErrorable,
-                IsNillable = isNillable
+                IsNillable = isNillable,
+                IsConst = isConst
             };
         }
 

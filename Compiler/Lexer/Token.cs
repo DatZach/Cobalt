@@ -153,7 +153,7 @@ namespace Compiler.Lexer
         [Description("'^='")] BitXorAssign,
 
         [Description("::")] Is,
-        [Description("!:")] IsNot,
+        [Description("!::")] IsNot,
 
         [Description("'?.'")] NilDot,
         [Description("'??'")] NilCoalesce,

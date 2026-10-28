@@ -32,6 +32,8 @@ namespace Compiler.Lexer
 
         public bool IsNillable { get; init; }
 
+        public bool IsConst { get; init; }
+
         public static TypeName FromIdentifier(string name) => new() { Type = eTypeName.Identifier, Identifier = name };
 
         public override string ToString()
@@ -40,60 +42,72 @@ namespace Compiler.Lexer
             var type = this;
             while (type != null)
             {
-                switch (Type)
+                switch (type.Type)
                 {
                     case eTypeName.Identifier:
-                        sb.Append(Identifier);
+                        sb.Append(type.Identifier);
                         break;
 
                     case eTypeName.FunctionSignature:
                         sb.Append("function(");
-                        for (var i = 0; i < Function.Parameters.Count; ++i)
+                        for (var i = 0; i < type.Function.Parameters.Count; ++i)
                         {
-                            var x = Function.Parameters[i];
+                            var x = type.Function.Parameters[i];
                             if (x.IsSpread) sb.Append("...");
                             sb.Append(x.TypeName);
                             sb.Append(' ');
                             sb.Append(x.Name);
                             
-                            if (i < Function.Parameters.Count - 1)
+                            if (i < type.Function.Parameters.Count - 1)
                                 sb.Append(", ");
                         }
 
                         sb.Append(')');
 
-                        if (Function.ReturnTypeName != null)
+                        if (type.Function.ReturnTypeName != null)
                         {
                             sb.Append(' ');
-                            sb.Append(Function.ReturnTypeName);
+                            sb.Append(type.Function.ReturnTypeName);
                         }
 
-                        if (Function.CallingConvention != CallingConvention.Default)
+                        if (type.Function.CallingConvention != CallingConvention.Default)
                         {
                             sb.Append(", ");
-                            sb.Append(Function.CallingConvention);
+                            sb.Append(type.Function.CallingConvention);
                         }
                         break;
 
                     case eTypeName.RecordSignature:
-                        sb.Append(Record.Name);
+                        sb.Append(type.Record.Name);
                         break;
 
                     default:
                         throw new ArgumentOutOfRangeException();
                 }
 
-                if (IsArray)
+                if (type.Generic != null)
+                {
+                    foreach (var generic in type.Generic)
+                    {
+                        sb.Append('`');
+                        sb.Append(generic);
+                    }
+                }
+
+                if (type.IsArray)
                     sb.Append("[]");
-                if (IsNillable)
+                if (type.IsNillable)
                     sb.Append('?');
-                if (IsErrorable)
+                if (type.IsErrorable)
                     sb.Append('!');
 
                 type = type.Union;
                 if (type != null)
                     sb.Append(" | ");
             }
+
+            if (IsConst)
+                sb.Append('^');
 
             return sb.ToString();
         }

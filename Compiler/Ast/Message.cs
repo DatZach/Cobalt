@@ -338,6 +338,8 @@ namespace Compiler.Ast
 
         public static Def IllegalLinearTypeLifetimeExpiration { get; } = new(MessageType.Error, "Lifetime of '{0}' unexpectedly terminated, must call destructor or pass ownership");
 
+        public static Def ConstTypeProhibitsCallsWithSideEffects { get; } = new(MessageType.Error, "Const type prohibits calls to methods which have side-effects");
+
         public sealed record Def(
             MessageType Type,
             string Content,

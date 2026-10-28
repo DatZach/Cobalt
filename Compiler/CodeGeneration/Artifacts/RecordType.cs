@@ -327,6 +327,16 @@ namespace Compiler.CodeGeneration.Artifacts
                 AllocateConstructor(x.Name, parameters, x.IsSignature);
             }
 
+            foreach (var x in pendingSuperType.destructors)
+            {
+                var parameters = x.Parameters.Skip(1).Select(
+                    y => new Function.Parameter(y.Name, y.Type.ToConcreteType(pendingBType), y.IsSpread)
+                ).ToList();
+
+                var returnType = x.ReturnType.ToConcreteType(pendingBType);
+                AllocateDestructor(x.Name, parameters, returnType, x.IsSignature);
+            }
+
             foreach (var x in pendingSuperType.functions)
             {
                 var parameters = x.Parameters.Skip(1).Select(

@@ -74,6 +74,8 @@ namespace Compiler.CodeGeneration
             contextStack = new Stack<IScopeContext>();
             loopStack = new Stack<LoopContext>();
 
+            lateConstChecks = new List<(Expression, Function)>();
+
             Modules.Add(RootModule);
             contextStack.Push(new RootScopeContext(this));
         }
@@ -791,7 +793,8 @@ namespace Compiler.CodeGeneration
             {
                 if (CurrentFunction.ReturnType == eCobType.None)
                     CurrentFunction.ReturnType = rhs.Type;
-                else if (!CobType.IsExplicitCastable(CurrentFunction.ReturnType, rhs.Type, rhs.Operand.Value))
+                else if (!CobType.IsExplicitCastable(CurrentFunction.ReturnType, rhs.Type, rhs.Operand.Value)
+                     &&  !CobType.IsConstCastable(CurrentFunction.ReturnType, rhs.Type))
                     messages.Add(Message.ReturnTypeMismatch, expression, CurrentFunction.ReturnType, rhs.Type);
 
                 // TODO Might clobber rhs storage...
@@ -881,6 +884,7 @@ namespace Compiler.CodeGeneration
         public Storage? AssignmentRHS { get; set; }
         private int conditionalStack;
         private bool isUnionAssignment;
+        private List<(Expression, Function)> lateConstChecks;
 
         public Storage? Visit(BinaryOperatorExpression expression)
         {
@@ -1799,6 +1803,11 @@ namespace Compiler.CodeGeneration
                 }
 
                 arguments.Insert(0, thisStorage);
+
+                // FORBID CONST CALLS ON MUTABLES
+                if (thisStorage.Type.IsConst)
+                    lateConstChecks.Add((expression, function));
+                    
             }
 
             var parameters = function.Parameters;
@@ -2677,6 +2686,14 @@ namespace Compiler.CodeGeneration
 
                     seen.AddRange(hack);
                     hack = seen.Except(hack).ToList();
+                }
+
+
+                // PASS 3 - Const Correctness
+                foreach (var x in compiler.lateConstChecks)
+                {
+                    if (x.Item2.MutatedSymbols.Count > 0)
+                        messages.Add(Message.ConstTypeProhibitsCallsWithSideEffects, x.Item1);
                 }
                 
                 return artifact;

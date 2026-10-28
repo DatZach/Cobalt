@@ -25,6 +25,14 @@ type Array = {
         data = Heap.Alloc(_capacity); // TODO * T.Size)
     }
 
+    destruct() {
+        
+    }
+
+    destruct ToReadOnly() This^ {
+        return this;
+    }
+
     function Add(T value) { // intrinsic
         if (Length >= data.Length) {
             data = Heap.ReAlloc(data, data.Length << 1);

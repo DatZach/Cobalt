@@ -206,6 +206,8 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public bool HasNilFlag => Type == eCobType.Union && UnionedTypes!.Contains(Nil);
 
+        public bool IsConst { get; }
+
         public CobType? ElementType { get; }
 
         public IReadOnlyList<CobType>? UnionedTypes { get; }
@@ -231,6 +233,7 @@ namespace Compiler.CodeGeneration.Artifacts
             int size = SizeUnadorned,
             CobType? elementType = null,
             IReadOnlyList<CobType>? unionedTypes = null,
+            bool isConst = false,
             CobType? parent = null,
             string? name = null,
             object? tag = null,
@@ -243,8 +246,16 @@ namespace Compiler.CodeGeneration.Artifacts
             Size = size;
             ElementType = elementType;
             UnionedTypes = unionedTypes;
+            IsConst = isConst;
             Tag = tag;
             Refinement = refinement;
+        }
+
+        private CobType(CobType other, bool isConst)
+            : this(other.Type, other.Size, other.ElementType, other.UnionedTypes, isConst, other.Parent,
+                   other.Name, other.Tag, other.Refinement)
+        {
+
         }
 
         public static bool operator ==(CobType? left, eCobType right) => !ReferenceEquals(left, null) && left.Type == right;
@@ -265,9 +276,11 @@ namespace Compiler.CodeGeneration.Artifacts
             return Equals(Parent, other.Parent)
                 && Type == other.Type
                 && Size == other.Size
+                && IsConst == other.IsConst
                 && Equals(ElementType, other.ElementType)
                 && Equals(UnionedTypes, other.UnionedTypes)
                 && Equals(Tag, other.Tag);
+                // TODO && Equals(Refinement, other.Refinement); ?
         }
 
         public override bool Equals(object? obj)
@@ -280,6 +293,7 @@ namespace Compiler.CodeGeneration.Artifacts
             return HashCode.Combine((int)Type, Size, ElementType, Tag);
         }
 
+        // TODO Error when ^ suffix is used incorrectly 
         public static CobType? FromTypeName(TypeName? typeName, IScopeContext? context)
         {
             if (typeName == null)
@@ -444,7 +458,7 @@ namespace Compiler.CodeGeneration.Artifacts
             if (typeName.IsArray)
             {
                 var tag = Intrinsics.Array.TagRecord.FindConcretizedRecord(type) ?? Intrinsics.Array.TagRecord.AllocateConcretizedRecord(type);
-                type = new CobType(eCobType.Record, tag: tag);
+                type = new CobType(eCobType.Record, tag: tag, isConst: typeName.IsConst);
             }
 
             if (typeName.Union != null)
@@ -462,6 +476,9 @@ namespace Compiler.CodeGeneration.Artifacts
                 );
             }
             
+            if (typeName.IsConst)
+                type = new CobType(type, typeName.IsConst);
+
             if (typeName.IsErrorable && typeName.IsNillable)
                 return new CobType(eCobType.Union, unionedTypes: new[] { type, Error, Nil });
             else if (typeName.IsErrorable)
@@ -482,7 +499,7 @@ namespace Compiler.CodeGeneration.Artifacts
             else if (Tag is RecordType recordType && recordType.IsGeneric)
             {
                 var tag = recordType.FindConcretizedRecord(bType) ?? recordType.AllocateConcretizedRecord(bType);
-                return tag.ThisType; // new CobType(Type, tag: tag);
+                return IsConst ? new CobType(tag.ThisType, true) : tag.ThisType; // new CobType(Type, tag: tag);
             }
             else if (this == eCobType.Function)
             {
@@ -498,7 +515,7 @@ namespace Compiler.CodeGeneration.Artifacts
                     };
                 }
 
-                return new CobType(Type, Size, ElementType, UnionedTypes, Parent, Name, tag);
+                return new CobType(Type, Size, ElementType, UnionedTypes, IsConst, Parent, Name, tag);
             }
             else
                 return this;
@@ -806,7 +823,7 @@ namespace Compiler.CodeGeneration.Artifacts
                 case eCobType.Record:
                 case eCobType.Function:
                 case eCobType.Module:
-                    return Tag?.ToString() ?? $"(NULL {Type.ToString()})";
+                    return (Tag?.ToString() ?? $"(NULL {Type.ToString()})") + (IsConst ? "^" : "");
 
                 case eCobType.Distinct:
                     return "(distinct)";
@@ -823,6 +840,22 @@ namespace Compiler.CodeGeneration.Artifacts
         //      some way to universalize or specialize the function signatures below...
 
         // TODO IsExplicitCastable needs to also validate refinements
+
+        public static bool IsConstCastable(CobType dstType, CobType srcType)
+        {
+            if (ReferenceEquals(dstType, srcType))
+                return true;
+
+            // TODO Primitives should not be equal on reference but on identity, will simplify a lot of code
+            return Equals(dstType.Parent, srcType.Parent)
+                && dstType.Type == srcType.Type
+                && dstType.Size == srcType.Size
+                //&& IsConst == other.IsConst
+                && Equals(dstType.ElementType, srcType.ElementType)
+                && Equals(dstType.UnionedTypes, srcType.UnionedTypes)
+                && Equals(dstType.Tag, srcType.Tag);
+            // TODO && Equals(Refinement, other.Refinement); ?
+        }
 
         // dst = src
         public static bool IsExplicitCastable(CobType dstType, CobType srcType, long? srcValue = null)
