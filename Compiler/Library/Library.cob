@@ -15,6 +15,8 @@ error {
     FileNotFound
 }
 
+type POD = { };
+
 import SysCall;
 import Range;
 import Lens;

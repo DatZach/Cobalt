@@ -257,6 +257,8 @@ namespace Compiler.CodeGeneration
                 // TODO Can this be moved back into Intrinsics.Pass1?
                 if (expression.SubTypeName == "Array")
                     Intrinsics.Array = subType;
+                else if (expression.SubTypeName == "POD")
+                    Intrinsics.POD = subType;
             }
             else if (phase > DeclPhase.Types)
             {
@@ -375,7 +377,7 @@ namespace Compiler.CodeGeneration
         {
             if (phase == DeclPhase.Types)
             {
-                RecordType structType;
+                RecordType recordType;
                 if (!HACK_ContextAlreadyDived)
                 {
                     if (CurrentModule.FindRecordType(expression.Name) != null)
@@ -384,14 +386,14 @@ namespace Compiler.CodeGeneration
                         return Unit.Value;
                     }
 
-                    structType = CurrentModule.AllocateRecordType(expression.Name, eRecordType.Struct);
-                    contextStack.Push(structType);
+                    recordType = CurrentModule.AllocateRecordType(expression.Name, eRecordType.Struct);
+                    contextStack.Push(recordType);
                 }
                 else
-                    structType = (RecordType)CurrentContext;
+                    recordType = (RecordType)CurrentContext;
 
                 foreach (var generic in expression.Generics)
-                    structType.AttachGeneric(generic);
+                    recordType.AttachGeneric(generic);
 
                 foreach (var traitTypeName in expression.Mixins)
                 {
@@ -402,7 +404,7 @@ namespace Compiler.CodeGeneration
                         continue;
                     }
 
-                    structType.AttachTrait(traitType.TagRecord);
+                    recordType.AttachTrait(traitType.TagRecord);
                 }
 
                 for (var i = 0; i < expression.Types.Count; ++i)
@@ -413,8 +415,8 @@ namespace Compiler.CodeGeneration
             }
             else if (phase > DeclPhase.Types)
             {
-                var structType = CurrentModule.FindRecordType(expression.Name)!;
-                contextStack.Push(structType);
+                var recordType = CurrentModule.FindRecordType(expression.Name)!;
+                contextStack.Push(recordType);
 
                 for (var i = 0; i < expression.Constants.Count; ++i)
                     expression.Constants[i].Accept(this);
@@ -438,15 +440,15 @@ namespace Compiler.CodeGeneration
 
                         if (fieldName == null || fieldName == "_")
                         {
-                            if (i > 0 && !structType.IsBare && structType.Type == eRecordType.Tuple)
+                            if (i > 0 && !recordType.IsBare && recordType.Type == eRecordType.Tuple)
                                 messages.Add(Message.IllegalFieldForTuple, expression);
 
                             fieldName = $"'{i}";
                         }
-                        else if (i > 0 && structType.IsBare)
+                        else if (i > 0 && recordType.IsBare && recordType.Type == eRecordType.Tuple)
                             messages.Add(Message.IllegalFieldForBareTuple, expression);
 
-                        structType.AllocateField(fieldName, fieldType, field.IsFinal, field.GetterExpression != null, field.SetterExpression != null);
+                        recordType.AllocateField(fieldName, fieldType, field.IsFinal, field.GetterExpression != null, field.SetterExpression != null);
                     }
 
                     if (expression.Indexer != null)
@@ -454,8 +456,37 @@ namespace Compiler.CodeGeneration
                         var keyType = ResolveTypeFromTypeName(expression.Indexer.KeyTypeName, expression);
                         var returnType = ResolveTypeFromTypeName(expression.Indexer.ReturnTypeName, expression);
 
-                        structType.AllocateIndexer(keyType, returnType);
+                        recordType.AllocateIndexer(keyType, returnType);
                     }
+                }
+
+                if (phase == DeclPhase.Fields && recordType.HasTrait(Intrinsics.POD.TagRecord))
+                {
+                    if (expression.Mixins.Count > 1)
+                        messages.Add(Message.PODIllegalMixin, expression);
+
+                    long size = 0;
+                    for (var i = 0; i < expression.Fields.Count; ++i)
+                    {
+                        var field = expression.Fields[i];
+                        if (field.Name == null || field.Name == "SIZE")
+                        {
+                            messages.Add(Message.PODIllegalField, expression, field.Name);
+                            continue;
+                        }
+
+                        if (field.GetterExpression != null)
+                            continue;
+
+                        var fieldName = field.Name == null || field.Name == "_" ? $"'{i}" : field.Name;
+                        var sField = recordType.FindField(fieldName);
+                        if (sField == null || sField.Type.Size <= 0)
+                            messages.Add(Message.PODIllegalField, expression, field.Name);
+                        else
+                            size += sField.Type.Size / 8;
+                    }
+
+                    recordType.AllocateGlobal("SIZE", CobType.UInt, false).Value = size;
                 }
 
                 contextStack.Pop();

@@ -1325,7 +1325,7 @@ namespace Compiler.CodeGeneration
                 var b = expression.Right.Accept(this);
                 contextStack.Pop();
 
-                lhs.Free();
+                //lhs.Free(); DO NOT FREE IMPLICIT CONTEXT WE DO NOT OWN IT
                 BinOpLHS = prevBinOpLHS;
 
                 return b;
@@ -1790,6 +1790,8 @@ namespace Compiler.CodeGeneration
                 }
                 else if (expression.FunctionExpression is BinaryOperatorExpression { Operator: TokenType.Dot } boe)
                     thisStorage = boe.Left.Accept(this);
+                else if (implicitContext != null && implicitContext.Type.TagRecord != null)
+                    thisStorage = implicitContext;
                 else
                 {
                     var thisSymbol = CurrentContext.FindSymbol("this");
@@ -1926,7 +1928,12 @@ namespace Compiler.CodeGeneration
             // CLEANUP
             functionStorage.Free();
             for (int i = 0; i < arguments.Count; ++i)
+            {
+                if (IsDivingInitializer && arguments[i] == implicitContext)
+                    continue;
+
                 CurrentFunction.FreeStorage(arguments[i].Operand);
+            }
 
             return retStorage;
         }
@@ -2227,10 +2234,13 @@ namespace Compiler.CodeGeneration
                 IsDivingInitializer = true;
                 var prevBinOpLHS = BinOpLHS;
                 BinOpLHS = storage;
+                var prevImplicitContext = implicitContext;
+                implicitContext = storage;
                 contextStack.Push(recordType);
                 for (var i = 0; i < expression.Assignments.Count; ++i)
                     expression.Assignments[i].Accept(this)?.Free();
                 contextStack.Pop();
+                implicitContext = prevImplicitContext;
                 BinOpLHS = prevBinOpLHS;
                 IsDivingInitializer = prevIsDivingInitializer;
             }

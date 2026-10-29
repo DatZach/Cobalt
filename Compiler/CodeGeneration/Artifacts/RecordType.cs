@@ -229,6 +229,9 @@ namespace Compiler.CodeGeneration.Artifacts
         {
             foreach (var field in fields)
             {
+                if (field.Name.StartsWith('\''))
+                    continue;
+
                 if (field.Getter != null && field.Setter == null)
                     continue;
 

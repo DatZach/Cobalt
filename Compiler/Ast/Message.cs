@@ -344,6 +344,10 @@ namespace Compiler.Ast
 
         public static Def IllegalFieldForBareTuple { get; } = new(MessageType.Error, "Named field illegal for bare tuples");
 
+        public static Def PODIllegalMixin { get; } = new(MessageType.Error, "Traits are not permitted on PODs");
+
+        public static Def PODIllegalField { get; } = new(MessageType.Error, "Field '{0}' is not legal on PODs");
+
         public sealed record Def(
             MessageType Type,
             string Content,

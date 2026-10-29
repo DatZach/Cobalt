@@ -13,6 +13,8 @@ namespace Compiler.CodeGeneration
 
         public static CobType StringType { get; set; } = null!;
 
+        public static CobType POD { get; set; } = null!;
+
         public static void InitializeForPass0(Compiler compiler)
         {
             

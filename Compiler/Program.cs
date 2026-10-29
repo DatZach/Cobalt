@@ -164,7 +164,7 @@ namespace Compiler
                     foreach (var label in function.Body.Labels.Where(x => x.Location == i))
                         Console.WriteLine($"\t{label}:");
 
-                    Console.WriteLine($"\t\t{inst}");
+                    Console.WriteLine($"{i}\t\t{inst}");
                 }
 
                 Console.WriteLine();
@@ -185,7 +185,7 @@ namespace Compiler
                     foreach (var label in function.Body.Labels.Where(x => x.Location == i))
                         Console.WriteLine($"\t{label}:");
 
-                    Console.WriteLine($"\t\t{inst}");
+                    Console.WriteLine($"{i}\t\t{inst}");
                 }
             }
 
