@@ -37,6 +37,7 @@ namespace Compiler.CodeGeneration.Artifacts
 
             InitializerFunction = AllocateFunction(
                 "$Initializer",
+                null,
                 CallingConvention.CCall,
                 Array.Empty<Function.Parameter>(),
                 CobType.None
@@ -113,11 +114,14 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public Function AllocateFunction(
             string name,
+            Token? @operator,
             CallingConvention callingConvention,
             IReadOnlyList<Function.Parameter> parameters,
             CobType returnType
         ) {
             var function = new Function(name, this, compiler, callingConvention, parameters, returnType, false);
+            function.Operator = @operator;
+
             functions.Add(function);
             compiler.Functions.Add(function);
 
@@ -135,6 +139,11 @@ namespace Compiler.CodeGeneration.Artifacts
             return candidates.Count > 0
                 ? new FunctionCandidates(candidates)
                 : null;
+        }
+
+        public Function? FindOperatorAlias(string name)
+        {
+            return functions.FirstOrDefault(x => x.Operator != null && x.Operator.Value == name);
         }
 
         public Global AllocateGlobal(string name, CobType type, bool mutable)
@@ -163,6 +172,11 @@ namespace Compiler.CodeGeneration.Artifacts
             FunctionCandidates? function;
             if ((function = FindFunctionCandidates(name)) != null)
                 return function;
+
+            // OPERATOR ALIAS
+            Function? @operator;
+            if ((@operator = FindOperatorAlias(name)) != null)
+                return @operator;
 
             // MODULES
             Module? module;

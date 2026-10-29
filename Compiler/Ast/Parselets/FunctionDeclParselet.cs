@@ -13,6 +13,10 @@ namespace Compiler.Ast.Parselets
 
             var name = parser.MatchAndTakeToken(TokenType.Identifier)?.Value;
 
+            var @operator = parser.MatchAndTakeToken(TokenType.Comma) != null ? parser.Take() : null;
+            if (@operator != null && !Function.IsLegalOperatorAlias(@operator))
+                parser.Messages.Add(Message.IllegalOperatorDeclaration, @operator, @operator.ToString());
+
             parser.Take(TokenType.LeftParen);
             if (!parser.Match(TokenType.RightParen))
             {
@@ -86,6 +90,7 @@ namespace Compiler.Ast.Parselets
             return new FunctionDeclStatement(
                 token,
                 name,
+                @operator,
                 parameters,
                 body,
                 returnTypeName,

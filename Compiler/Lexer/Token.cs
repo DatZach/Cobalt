@@ -100,8 +100,6 @@ namespace Compiler.Lexer
         [Description("'..='")] RangeInclusive,
         [Description("'..+'")] RangeLength,
         [Description("'..^'")] RangeTerminal,
-        [Description("'[?'")] ArrayWhere,
-        [Description("'[='")] ArraySelect,
         [Description("'=>'")] FatArrow,
 
         [Description("'+'")] Add,
@@ -118,6 +116,7 @@ namespace Compiler.Lexer
         [Description("'<<<'")] BitLeftRotate,
         [Description("'>>>'")] BitRightRotate,
         [Description("'<<|'")] BitPack,
+        [Description("'<=>'")] Sign,
         [Description("'&'")] BitAnd,
         [Description("'|'")] BitOr,
         [Description("'^'")] BitXor,

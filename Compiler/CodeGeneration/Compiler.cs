@@ -1234,6 +1234,25 @@ namespace Compiler.CodeGeneration
                 var b = expression.Right.Accept(this);
 
                 var cType = CobType.ResolveOperatorResultType(expression.Operator, a?.Type, b?.Type);
+                
+                // TODO Obviously rewrite this...
+                if (cType == CobType.None)
+                {
+                    foreach (var context in contextStack)
+                    {
+                        var symbol = context.FindSymbol(expression.Token.Value);
+                        if (symbol is Function function)
+                        {
+                            var cc = CurrentFunction.AllocateRegisterStorage(function.ReturnType);
+                            var functionStorage = context.EmitGetForSymbol(symbol);
+                            CurrentFunction.Body.Emit(Opcode.Call, functionStorage.Operand, cc.Operand,
+                                new[] { a.Operand, b.Operand });
+                            b.Free();
+                            a.Free();
+                            return cc;
+                        }
+                    }
+                }
                 if (cType == CobType.None)
                 {
                     messages.Add(Message.IllegalOperationBetweenTypes, expression, expression.Operator.GetDescription(), a?.Type, b?.Type);
@@ -2237,8 +2256,10 @@ namespace Compiler.CodeGeneration
                 var prevImplicitContext = implicitContext;
                 implicitContext = storage;
                 contextStack.Push(recordType);
+
                 for (var i = 0; i < expression.Assignments.Count; ++i)
                     expression.Assignments[i].Accept(this)?.Free();
+
                 contextStack.Pop();
                 implicitContext = prevImplicitContext;
                 BinOpLHS = prevBinOpLHS;
@@ -2659,7 +2680,7 @@ namespace Compiler.CodeGeneration
                 // PASS 1 - Compilation
                 // NOTE We must compile all imported scripts before we compile this script; list is in import order
                 Intrinsics.InitializeForPass1(compiler);
-                compiler.FunctionStringError = compiler.RootModule.AllocateFunction("string", CallingConvention.Default, new[] { new Function.Parameter("code", CobType.Error, false) }, CobType.String);
+                compiler.FunctionStringError = compiler.RootModule.AllocateFunction("string", null, CallingConvention.Default, new[] { new Function.Parameter("code", CobType.Error, false) }, CobType.String);
 
                 for (var i = 0; i < compiler.Scripts.Count; ++i)
                     compiler.Scripts[i].Accept(compiler);

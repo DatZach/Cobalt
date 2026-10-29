@@ -30,6 +30,8 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public HashSet<ISymbol> MutatedSymbols { get; }
 
+        public Token? Operator { get; set; }
+
         public string FullyQualifiedName => Parent.Name + '_' + Name;
 
         public BlockScope CurrentBlockScope => blockScopeStack.Peek();
@@ -298,6 +300,18 @@ namespace Compiler.CodeGeneration.Artifacts
             }
 
             return sb.ToString();
+        }
+
+        public static bool IsLegalOperatorAlias(Token token)
+        {
+            return token.Type is TokenType.Add or TokenType.Subtract or TokenType.Multiply or TokenType.Exponent
+                              or TokenType.Divide or TokenType.DivideCeil or TokenType.DivideFloor
+                              or TokenType.Remainder or TokenType.Modulo
+                              or TokenType.BitOr or TokenType.BitAnd or TokenType.BitXor or TokenType.BitLeftShift
+                              or TokenType.BitRightShift or TokenType.BitLeftRotate or TokenType.BitRightRotate
+                              or TokenType.Sign or TokenType.Is
+                              or TokenType.Equals or TokenType.NotEquals or TokenType.LessThanOrEquals
+                              or TokenType.MoreThanOrEquals or TokenType.LessThan or TokenType.MoreThan;
         }
 
         internal sealed record Parameter : Variable

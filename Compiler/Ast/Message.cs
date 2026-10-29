@@ -348,6 +348,8 @@ namespace Compiler.Ast
 
         public static Def PODIllegalField { get; } = new(MessageType.Error, "Field '{0}' is not legal on PODs");
 
+        public static Def IllegalOperatorDeclaration { get; } = new(MessageType.Error, "Operator alias for '{0}' may not be declared");
+
         public sealed record Def(
             MessageType Type,
             string Content,

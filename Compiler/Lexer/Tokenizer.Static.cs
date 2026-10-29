@@ -27,8 +27,6 @@ namespace Compiler.Lexer
                 ["..="] = TokenType.RangeInclusive,
                 ["..+"] = TokenType.RangeLength,
                 ["..^"] = TokenType.RangeTerminal,
-                ["[?"] = TokenType.ArrayWhere,
-                ["[="] = TokenType.ArraySelect,
                 ["=>"] = TokenType.FatArrow,
                 
                 ["+"] = TokenType.Add,
@@ -45,6 +43,7 @@ namespace Compiler.Lexer
                 ["<<<"] = TokenType.BitLeftRotate,
                 [">>>"] = TokenType.BitRightRotate,
                 ["<<|"] = TokenType.BitPack,
+                ["<=>"] = TokenType.Sign,
                 ["&"] = TokenType.BitAnd,
                 ["|"] = TokenType.BitOr,
                 ["^"] = TokenType.BitXor,

@@ -11,6 +11,8 @@ namespace Compiler.Ast.Expressions
 
         public bool IsAnonymous { get; }
 
+        public Token? Operator { get; }
+
         public TypeName? ReturnTypeName { get; }
 
         public CallingConvention CallingConvention { get; }
@@ -22,6 +24,7 @@ namespace Compiler.Ast.Expressions
         public FunctionDeclStatement(
             Token token,
             string? name,
+            Token? @operator,
             IReadOnlyList<Parameter> parameters,
             Expression? body,
             TypeName? returnTypeName,
@@ -31,6 +34,7 @@ namespace Compiler.Ast.Expressions
         {
             Name = name ?? $"fn_{Path.GetFileNameWithoutExtension(Token.Filename)}_{Token.Line + 1}_{Token.Column + 1}";
             IsAnonymous = name == null;
+            Operator = @operator;
             Parameters = parameters;
             Body = body;
             ReturnTypeName = returnTypeName;

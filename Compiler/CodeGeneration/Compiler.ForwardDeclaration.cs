@@ -121,6 +121,7 @@ namespace Compiler.CodeGeneration
             {
                 function = CurrentModule.AllocateFunction(
                     expression.SymbolName,
+                    null,
                     expression.SymbolTypeName.Function.CallingConvention,
                     expression.SymbolTypeName.Function.Parameters.Select(x => new Function.Parameter(x.Name, ResolveTypeFromTypeName(x.TypeName, expression), x.IsSpread)).ToList(),
                     ResolveTypeFromTypeName(expression.SymbolTypeName.Function.ReturnTypeName, expression)
@@ -569,11 +570,14 @@ namespace Compiler.CodeGeneration
                     &&  expression.CallingConvention != CallingConvention.ThisCall)
                         messages.Add(Message.IllegalCallingConvention, expression, expression.CallingConvention);
 
+                    if (expression.Operator != null)
+                        messages.Add(Message.CannotDeclareSymbolHere, expression);
+
                     recordType.AllocateFunction(expression.Name, parameters, returnType, expression.Body == null);
                 }
                 else if (CurrentContext is Module module)
                 {
-                    module.AllocateFunction(expression.Name, expression.CallingConvention, parameters, returnType);
+                    module.AllocateFunction(expression.Name, expression.Operator, expression.CallingConvention, parameters, returnType);
                 }
                 else
                     messages.Add(Message.CannotDeclareSymbolHere, expression);
