@@ -349,6 +349,7 @@ namespace Compiler.CodeGeneration.Artifacts
 
                     // Relative Type Name
                     // TODO This code is copy-pasted below, could be cleaned up
+                    // TODO Support This type
                     var ctx = context;
                     while (ctx != null && type == null)
                     {
@@ -367,6 +368,12 @@ namespace Compiler.CodeGeneration.Artifacts
                         {
                             CobType? aliasType;
                             if ((aliasType = recordType.FindGenericType(ident)) != null)
+                                type = aliasType;
+                        }
+                        else if (ctx is Function function)
+                        {
+                            CobType? aliasType;
+                            if ((aliasType = function.FindGenericType(ident)) != null)
                                 type = aliasType;
                         }
 
@@ -400,6 +407,12 @@ namespace Compiler.CodeGeneration.Artifacts
                         {
                             CobType? aliasType;
                             if ((aliasType = recordType.FindGenericType(ident)) != null)
+                                type = aliasType;
+                        }
+                        else if (ctx is Function function)
+                        {
+                            CobType? aliasType;
+                            if ((aliasType = function.FindGenericType(ident)) != null)
                                 type = aliasType;
                         }
                     }
@@ -979,6 +992,10 @@ namespace Compiler.CodeGeneration.Artifacts
 
             // TODO HACK Not implemented correctly; Check signature
             if (srcType == eCobType.Function && dstType == eCobType.Function && dstType.Tag is FunctionSignature)
+                return true;
+
+            // TODO HACK This isn't exactly true, but we need to match signatures for generic function resolvement
+            if (dstType == eCobType.Generic)
                 return true;
 
             return false;

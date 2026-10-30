@@ -110,12 +110,13 @@ namespace Compiler.CodeGeneration.Artifacts
 
             name ??= "$ctor";
             
-            var lParameters = new List<Function.Parameter>();
-            lParameters.Add(new Function.Parameter("this", ThisType, false));
-            lParameters.AddRange(parameters);
+            var function = new Function(name, this, compiler, CallingConvention.ThisCall, isSignature);
+            function.AllocateParameter("this", ThisType, false, null);
+            foreach (var x in parameters)
+                function.AllocateParameter(x.Name, x.Type, x.IsSpread, x.DefaultValue);
+            function.AttachReturnType(new CobType(eCobType.Union, unionedTypes: new[] { ThisType, CobType.Error }));
+            function.IsConstructor = true;
 
-            var returnType = new CobType(eCobType.Union, unionedTypes: new[] { ThisType, CobType.Error });
-            var function = new Function(name, this, compiler, CallingConvention.ThisCall, lParameters, returnType, isSignature) { IsConstructor = true };
             constructors.Add(function);
             compiler.Functions.Add(function);
 
@@ -135,12 +136,12 @@ namespace Compiler.CodeGeneration.Artifacts
                 throw new InvalidOperationException("Only structs may allocate destructor");
 
             name ??= "$dtor";
-            
-            var lParameters = new List<Function.Parameter>();
-            lParameters.Add(new Function.Parameter("this", ThisType, false));
-            lParameters.AddRange(parameters);
 
-            var function = new Function(name, this, compiler, CallingConvention.ThisCall, lParameters, returnType, isSignature) { IsDestructor = true };
+            var function = new Function(name, this, compiler, CallingConvention.ThisCall, isSignature);
+            function.AllocateParameter("this", ThisType, false, null);
+            function.AttachReturnType(returnType);
+            function.IsDestructor = true;
+
             destructors.Add(function);
             compiler.Functions.Add(function);
 
@@ -155,15 +156,11 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public Function AllocateFunction(
             string name,
-            IReadOnlyList<Function.Parameter> parameters,
-            CobType returnType,
             bool isSignature
         ) {
-            var lParameters = new List<Function.Parameter>();
-            lParameters.Add(new Function.Parameter("this", ThisType, false));
-            lParameters.AddRange(parameters);
+            var function = new Function(name, this, compiler, CallingConvention.ThisCall, isSignature);
+            function.AllocateParameter("this", ThisType, false, null);
 
-            var function = new Function(name, this, compiler, CallingConvention.ThisCall, lParameters, returnType, isSignature);
             functions.Add(function);
             compiler.Functions.Add(function);
 
@@ -206,8 +203,22 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public Field AllocateField(string name, CobType type, bool isFinal, bool hasGetter, bool hasSetter)
         {
-            var getter = hasGetter ? AllocateFunction($"{name}_$get", Array.Empty<Function.Parameter>(), type, false) : null;
-            var setter = hasSetter ? AllocateFunction($"{name}_$set", new [] { new Function.Parameter("value", type, false) }, type, false) : null;
+            Function? getter, setter;
+            if (hasGetter)
+            {
+                getter = AllocateFunction($"{name}_get", false);
+                getter.AttachReturnType(type);
+            }
+            else
+                getter = null;
+            if (hasSetter)
+            {
+                setter = AllocateFunction($"{name}_set", false);
+                setter.AllocateParameter("value", type, false, null);
+                setter.AttachReturnType(type);
+            }
+            else
+                setter = null;
 
             var field = new Field(this, name, type, isFinal, getter, setter);
             fields.Add(field);
@@ -244,8 +255,14 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public Indexer AllocateIndexer(CobType keyType, CobType returnType)
         {
-            var getter = AllocateFunction("$Indexer_$get", new [] { new Function.Parameter("key", keyType, false) }, returnType, false);
-            var setter = AllocateFunction("$Indexer_$set", new [] { new Function.Parameter("key", keyType, false), new Function.Parameter("value", returnType, false) }, returnType, false);
+            var getter = AllocateFunction("$Indexer_$get", false);
+            getter.AllocateParameter("key", keyType, false, null);
+            getter.AttachReturnType(returnType);
+
+            var setter = AllocateFunction("$Indexer_$set", false);
+            setter.AllocateParameter("key", keyType, false, null);
+            setter.AllocateParameter("value", returnType, false, null);
+            setter.AttachReturnType(returnType);
 
             var indexer = new Indexer
             {
@@ -260,6 +277,7 @@ namespace Compiler.CodeGeneration.Artifacts
             return indexer;
         }
 
+        // TODO Refactor to bring inline with signature in Function
         public void AttachGeneric(GenericDefinition generic)
         {
             generics.Add(generic);
@@ -341,12 +359,12 @@ namespace Compiler.CodeGeneration.Artifacts
 
             foreach (var x in pendingSuperType.functions)
             {
-                var parameters = x.Parameters.Skip(1).Select(
-                    y => new Function.Parameter(y.Name, y.Type.ToConcreteType(pendingBType), y.IsSpread)
-                ).ToList();
                 var returnType = x.ReturnType.ToConcreteType(pendingBType);
 
-                AllocateFunction(x.Name, parameters, returnType, x.IsSignature);
+                var function = AllocateFunction(x.Name, x.IsSignature);
+                foreach (var y in x.Parameters.Skip(1))
+                    function.AllocateParameter(y.Name, y.Type.ToConcreteType(pendingBType), y.IsSpread, y.DefaultValue);
+                function.AttachReturnType(returnType);
             }
 
             foreach (var x in pendingSuperType.fields)

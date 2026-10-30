@@ -1,9 +1,11 @@
-﻿using System.Diagnostics;
-using System.Text;
-using Compiler.Ast;
+﻿using Compiler.Ast;
 using Compiler.Ast.Expressions;
+using Compiler.Ast.Expressions.Statements;
 using Compiler.Interpreter;
 using Compiler.Lexer;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Text;
 
 namespace Compiler.CodeGeneration.Artifacts
 {
@@ -22,7 +24,7 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public Import? NativeImport { get; set; } // TODO init??
 
-        public IReadOnlyList<Parameter> Parameters { get; }
+        public IReadOnlyList<Parameter> Parameters => parameters;
 
         public CobType ReturnType { get; set; }
 
@@ -30,7 +32,7 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public HashSet<ISymbol> MutatedSymbols { get; }
 
-        public Token? Operator { get; set; }
+        public Token? Operator { get; private set; }
 
         public string FullyQualifiedName => Parent.Name + '_' + Name;
 
@@ -38,16 +40,25 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public bool IsCasting => ReturnType.Name == Name;
 
+        public bool IsGeneric => generics.Count > 0;
+
         public bool IsSignature { get; }
 
-        public bool IsConstructor { get; init; } // TODO Maybe this should be implemented as OOP, not sure
+        public bool IsConstructor { get; set; } // TODO Maybe this should be implemented as OOP, not sure
 
-        public bool IsDestructor { get; init; } // TODO Yeah definitely needs to be refactored somehow...
+        public bool IsDestructor { get; set; } // TODO Yeah definitely needs to be refactored somehow...
+
+        // TODO  HACK Fix this nonsense
+        private Function? pendingSuperType;
+        private CobType? pendingBType;
+        public Function? HACK_PendingSuperType => pendingSuperType;
 
         private int freeRegisterIndex;
         private int registers;
 
         private readonly Stack<BlockScope> blockScopeStack;
+        private readonly List<Parameter> parameters;
+        private readonly List<GenericDefinition> generics;
         private readonly List<Variable> locals;
         private readonly Compiler compiler;
 
@@ -56,21 +67,24 @@ namespace Compiler.CodeGeneration.Artifacts
             IScopeContext parent,
             Compiler compiler,
             CallingConvention callingConvention,
-            IReadOnlyList<Parameter> parameters,
-            CobType returnType,
+            //IReadOnlyList<Parameter> parameters,
+            //CobType returnType,
             bool isSignature
         ) {
             Name = name ?? throw new ArgumentNullException(nameof(name));
             Parent = parent ?? throw new ArgumentNullException(nameof(parent));
             ClobberedRegisters = 0;
             CallingConvention = callingConvention;
-            Parameters = parameters;
-            ReturnType = returnType;
+            //Parameters = parameters;
+            //ReturnType = returnType;
+            parameters = new List<Parameter>();
+            ReturnType = CobType.None;
             IsSignature = isSignature;
             Body = new InstructionBuffer();
             MutatedSymbols = new HashSet<ISymbol>();
 
             blockScopeStack = new Stack<BlockScope>();
+            generics = new List<GenericDefinition>();
             locals = new List<Variable>();
 
             this.compiler = compiler;
@@ -148,6 +162,22 @@ namespace Compiler.CodeGeneration.Artifacts
             return scope;
         }
 
+        public void AttachReturnType(CobType type)
+        {
+            if (ReturnType != CobType.None)
+                throw new InvalidOperationException();
+
+            ReturnType = type;
+        }
+
+        public void AttachOperator(Token? @operator)
+        {
+            if (Operator != null)
+                throw new InvalidOperationException();
+
+            Operator = @operator;
+        }
+
         public Variable AllocateLocal(string name, CobType type, bool mutable)
         {
             var local = new Variable(name, type, mutable);
@@ -176,6 +206,14 @@ namespace Compiler.CodeGeneration.Artifacts
             return locals.IndexOf(local);
         }
 
+        public Parameter AllocateParameter(string name, CobType type, bool isSpread, Expression? defaultValue)
+        {
+            var parameter = new Parameter(name, type, isSpread, defaultValue);
+            parameters.Add(parameter);
+
+            return parameter;
+        }
+
         public Parameter? FindParameter(string name)
         {
             return Parameters.FirstOrDefault(x => x.Name == name);
@@ -192,6 +230,67 @@ namespace Compiler.CodeGeneration.Artifacts
             return -1;
         }
 
+        // TODO Refactor to be more sane for this use case
+        public void AttachGeneric(GenericDefinition generic)
+        {
+            generics.Add(generic);
+        }
+
+        public CobType? FindGenericType(string name)
+        {
+            var generic = generics.FirstOrDefault(x => x.Name == name);
+            if (generic == null)
+                return null;
+
+            return new CobType(eCobType.Generic);
+        }
+
+        public Function? FindConcretizedFunction(CobType bType)
+        {
+            if (bType == eCobType.Generic)
+                return this;
+
+            var module = Parent as Module;
+            if (module == null)
+                throw new NotImplementedException(); // TODO Nested TupleType, StructType
+
+            var concreteName = $"{Name}`{bType}";
+
+            return module.FindFunction(concreteName);
+        }
+
+        public Function AllocateConcretizedRecord(CobType bType)
+        {
+            var module = Parent as Module;
+            if (module == null)
+                throw new NotImplementedException(); // TODO Nested TupleType, StructType
+
+            var concreteName = $"{Name}`{bType}";
+
+            var concreteFunction = module.AllocateFunction(concreteName, CallingConvention);
+            concreteFunction.AttachOperator(Operator);
+            concreteFunction.AttachReturnType(ReturnType.ToConcreteType(bType));
+            foreach (var x in Parameters)
+                concreteFunction.AllocateParameter(x.Name, x.Type.ToConcreteType(bType), x.IsSpread, x.DefaultValue);
+
+            // HACK Really should be able to do this in a single pass when algebraic type resolution is implemented
+            concreteFunction.pendingSuperType = this;
+            concreteFunction.pendingBType = bType;
+
+            return concreteFunction;
+        }
+
+        public bool PopulateConcretizedFunctionIfRequired()
+        {
+            if (pendingSuperType == null || pendingBType == null)
+                return false;
+
+            pendingSuperType = null;
+            pendingBType = null;
+
+            return true;
+        }
+
         public ISymbol? FindSymbol(string name)
         {
             Parameter? parameter;
@@ -201,6 +300,10 @@ namespace Compiler.CodeGeneration.Artifacts
             Variable? local;
             if ((local = FindLocal(name)) != null)
                 return local;
+
+            CobType? generic;
+            if ((generic = FindGenericType(name)) != null)
+                return generic;
 
             return null;
         }
@@ -222,6 +325,14 @@ namespace Compiler.CodeGeneration.Artifacts
                 return new Storage(
                     variable.Type,
                     Operand.Local(idx)
+                );
+            }
+
+            if (symbol is CobType cobType)
+            {
+                return new Storage(
+                    cobType,
+                    cobType.ToOperand(compiler.Artifact)
                 );
             }
 

@@ -121,11 +121,12 @@ namespace Compiler.CodeGeneration
             {
                 function = CurrentModule.AllocateFunction(
                     expression.SymbolName,
-                    null,
-                    expression.SymbolTypeName.Function.CallingConvention,
-                    expression.SymbolTypeName.Function.Parameters.Select(x => new Function.Parameter(x.Name, ResolveTypeFromTypeName(x.TypeName, expression), x.IsSpread)).ToList(),
-                    ResolveTypeFromTypeName(expression.SymbolTypeName.Function.ReturnTypeName, expression)
+                    expression.SymbolTypeName.Function.CallingConvention
                 );
+
+                foreach (var x in expression.SymbolTypeName.Function.Parameters)
+                    function.AllocateParameter(x.Name, ResolveTypeFromTypeName(x.TypeName, expression), x.IsSpread, null);
+                function.AttachReturnType(ResolveTypeFromTypeName(expression.SymbolTypeName.Function.ReturnTypeName, expression));
             }
             else
                 function = null;
@@ -550,20 +551,7 @@ namespace Compiler.CodeGeneration
                     return Unit.Value;
                 }
 
-                var parameters = expression.Parameters.Select(
-                    x => new Function.Parameter(x.Name, ResolveTypeFromTypeName(x.TypeName, expression), x.IsSpread, x.DefaultValue)
-                ).ToList();
-
-                // HACK Return Type cannot result This because the function context has not yet been allocated
-                //      Need to find a way to improve this, maybe late binding return types?
-                var returnTypeName = expression.ReturnTypeName;
-                if (returnTypeName != null
-                &&  returnTypeName.Type == eTypeName.Identifier && returnTypeName.Identifier == "This")
-                    returnTypeName = new TypeName { Type = eTypeName.Identifier, Identifier = expression.Name };
-
-                var returnType = ResolveTypeFromTypeName(returnTypeName, expression);
-
-                
+                Function function;
                 if (CurrentContext is RecordType recordType)
                 {
                     if (expression.CallingConvention != CallingConvention.Default
@@ -573,17 +561,58 @@ namespace Compiler.CodeGeneration
                     if (expression.Operator != null)
                         messages.Add(Message.CannotDeclareSymbolHere, expression);
 
-                    recordType.AllocateFunction(expression.Name, parameters, returnType, expression.Body == null);
+                    function = recordType.AllocateFunction(expression.Name, expression.Body == null);
                 }
                 else if (CurrentContext is Module module)
                 {
-                    module.AllocateFunction(expression.Name, expression.Operator, expression.CallingConvention, parameters, returnType);
+                    function = module.AllocateFunction(expression.Name, expression.CallingConvention);
+                    function.AttachOperator(expression.Operator);
                 }
                 else
+                {
                     messages.Add(Message.CannotDeclareSymbolHere, expression);
+                    return Unit.Value;
+                }
+
+                contextStack.Push(function);
+
+                foreach (var x in expression.Generics)
+                    function.AttachGeneric(new GenericDefinition(x.Identifier, null));
+
+                foreach (var x in expression.Parameters)
+                {
+                    var parameterType = ResolveTypeFromTypeName(x.TypeName, expression);
+                    function.AllocateParameter(x.Name, parameterType, x.IsSpread, x.DefaultValue);
+                }
+
+                var returnType = ResolveTypeFromTypeName(expression.ReturnTypeName, expression);
+                function.AttachReturnType(returnType);
+
+                contextStack.Pop();
             }
             else if (phase >= DeclPhase.Fields)
             {
+                Function? function;
+                var symbol = CurrentContext.FindSymbol(expression.Name);
+                if (symbol is Function symbolFunction)
+                    function = symbolFunction;
+                else if (symbol is FunctionCandidates candidates)
+                {
+                    var parameterTypes = expression.Parameters.Select(x => CobType.FromTypeName(x.TypeName, CurrentContext)).ToList();
+                    function   = parameterTypes.All(x => x != null) ? candidates.ResolveSingle(parameterTypes) : null;
+                    function ??= candidates.ResolveSingle(null);
+                }
+                else
+                    function = null;
+
+                if (function == null)
+                {
+                    messages.Add(Message.UndeclaredIdentifier, expression, expression.Name);
+                    return Unit.Value;
+                }
+
+                contextStack.Push(function);
+
                 foreach (var parameter in expression.Parameters)
                 {
                     var type = ResolveTypeFromTypeName(parameter.TypeName, expression);
@@ -597,6 +626,8 @@ namespace Compiler.CodeGeneration
                         HACK_ContextAlreadyDived = false;
                     }
                 }
+
+                contextStack.Pop();
             }
 
             return Unit.Value;

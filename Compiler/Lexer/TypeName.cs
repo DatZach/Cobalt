@@ -9,6 +9,7 @@ namespace Compiler.Lexer
     // Record Signature
     // Union
     // TODO struct?
+    // TODO StartToken, EndToken
     internal class TypeName
     {
         public static readonly TypeName None = new() { Type = eTypeName.None };

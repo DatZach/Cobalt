@@ -10,8 +10,20 @@ namespace Compiler.Ast.Parselets
         public Expression Parse(Parser parser, Token token)
         {
             IReadOnlyList<FunctionDeclStatement.Parameter> parameters;
+            IReadOnlyList<TypeName> generics;
 
             var name = parser.MatchAndTakeToken(TokenType.Identifier)?.Value;
+
+            if (parser.Match(TokenType.Generic))
+            {
+                var lGenerics = new List<TypeName>();
+                TypeName? generic;
+                while (parser.MatchAndTakeToken(TokenType.Generic) != null)
+                    lGenerics.Add(TypeName.FromIdentifier(parser.Take(TokenType.Identifier).Value));
+                generics = lGenerics;
+            }
+            else
+                generics = Array.Empty<TypeName>();
 
             var @operator = parser.MatchAndTakeToken(TokenType.Comma) != null ? parser.Take() : null;
             if (@operator != null && !Function.IsLegalOperatorAlias(@operator))
@@ -90,6 +102,7 @@ namespace Compiler.Ast.Parselets
             return new FunctionDeclStatement(
                 token,
                 name,
+                generics,
                 @operator,
                 parameters,
                 body,

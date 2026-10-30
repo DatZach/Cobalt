@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using Compiler.Ast.Expressions;
+using Compiler.Ast.Expressions.Statements;
 using Compiler.Lexer;
 
 namespace Compiler.CodeGeneration.Artifacts
@@ -37,10 +38,7 @@ namespace Compiler.CodeGeneration.Artifacts
 
             InitializerFunction = AllocateFunction(
                 "$Initializer",
-                null,
-                CallingConvention.CCall,
-                Array.Empty<Function.Parameter>(),
-                CobType.None
+                CallingConvention.Default
             );
         }
 
@@ -112,15 +110,12 @@ namespace Compiler.CodeGeneration.Artifacts
             return distinctTypes.FirstOrDefault(x => x.Name == name);
         }
 
+        // TODO Probably refactor callingConvention too
         public Function AllocateFunction(
             string name,
-            Token? @operator,
-            CallingConvention callingConvention,
-            IReadOnlyList<Function.Parameter> parameters,
-            CobType returnType
+            CallingConvention callingConvention
         ) {
-            var function = new Function(name, this, compiler, callingConvention, parameters, returnType, false);
-            function.Operator = @operator;
+            var function = new Function(name, this, compiler, callingConvention, false);
 
             functions.Add(function);
             compiler.Functions.Add(function);

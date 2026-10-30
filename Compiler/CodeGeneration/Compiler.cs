@@ -236,15 +236,15 @@ namespace Compiler.CodeGeneration
                 }
 
                 contextStack.Pop();
-            }
 
-            foreach (var mixin in expression.Mixins)
-            {
-                var traitType = CobType.FromTypeName(mixin, CurrentContext);
-                if (traitType == null)
-                    messages.Add(Message.IllegalTypeName, expression, mixin);
-                else if (!structType.IsTraitSignatureMatch(traitType.TagRecord))
-                    messages.Add(Message.TraitNotFullyImplemented, expression, mixin);
+                foreach (var mixin in expression.Mixins)
+                {
+                    var traitType = CobType.FromTypeName(mixin, CurrentContext);
+                    if (traitType == null)
+                        messages.Add(Message.IllegalTypeName, expression, mixin);
+                    else if (!structType.IsTraitSignatureMatch(traitType.TagRecord))
+                        messages.Add(Message.TraitNotFullyImplemented, expression, mixin);
+                }
             }
 
             return null;
@@ -327,44 +327,60 @@ namespace Compiler.CodeGeneration
             else
             {
                 var candidates = CurrentModule.FindFunctionCandidates(expression.Name)!;
-                var parameterTypes = expression.Parameters.Select(x => CobType.FromTypeName(x.TypeName, CurrentContext)!).ToList();
-                function = candidates.ResolveSingle(parameterTypes)!;
+                var parameterTypes = expression.Parameters.Select(x => CobType.FromTypeName(x.TypeName, CurrentContext)).ToList();
+                function   = parameterTypes.All(x => x != null) ? candidates.ResolveSingle(parameterTypes) : null;
+                function ??= candidates.ResolveSingle(null)!;
+                //var parameterTypes = expression.Parameters.Select(x => CobType.FromTypeName(x.TypeName, CurrentContext)!).ToList();
+                //function = candidates.ResolveSingle(parameterTypes)!;
                 //function = CurrentModule.FindFunction(expression.Name)!;
             }
 
             if (function == null) throw new InvalidOperationException("Unable to resolve declared function");
 
-            var mutations = new HashSet<ISymbol>();
-            mutationStack.Push(mutations);
-            contextStack.Push(function);
-            function.PushBlockScope();
-            forTempBlockScope = null;
-
-            // TODO Temporary hack to call our initializer functions in the entry point
-            if (HACK_isDivingFatArrow)
+            if (function.IsGeneric)
             {
-                foreach (var module in Modules)
-                {
-                    CurrentFunction.Body.Emit(
-                        Opcode.Call,
-                        Operand.Function(Functions.FindIndex(x => x.FullyQualifiedName == module.InitializerFunction.FullyQualifiedName)),
-                        Operand.R0,
-                        Array.Empty<Operand>()
-                    );
-                }
+                genericTypeAstReferences.Add(new GenericTypeAstReference(
+                    function,
+                    expression,
+                    new Stack<IScopeContext>(contextStack)
+                ));
+                return null;
             }
+            else
+            {
+                var mutations = new HashSet<ISymbol>();
+                mutationStack.Push(mutations);
+                contextStack.Push(function);
+                function.PushBlockScope();
+                forTempBlockScope = null;
 
-            expression.Body.Accept(this)?.Free();
+                // TODO Temporary hack to call our initializer functions in the entry point
+                if (HACK_isDivingFatArrow)
+                {
+                    foreach (var module in Modules)
+                    {
+                        CurrentFunction.Body.Emit(
+                            Opcode.Call,
+                            Operand.Function(Functions.FindIndex(x =>
+                                x.FullyQualifiedName == module.InitializerFunction.FullyQualifiedName)),
+                            Operand.R0,
+                            Array.Empty<Operand>()
+                        );
+                    }
+                }
 
-            function.PopBlockScope();
-            contextStack.Pop();
-            mutationStack.Pop();
+                expression.Body.Accept(this)?.Free();
 
-            foreach (var x in mutations) function.MutatedSymbols.Add(x);
+                function.PopBlockScope();
+                contextStack.Pop();
+                mutationStack.Pop();
 
-            // TODO Error if not all paths return
-            if (function.ReturnType == CobType.None)
-                function.Body.Emit(Opcode.Return);
+                foreach (var x in mutations) function.MutatedSymbols.Add(x);
+
+                // TODO Error if not all paths return
+                if (function.ReturnType == CobType.None)
+                    function.Body.Emit(Opcode.Return);
+            }
 
             return new Storage(
                 new CobType(eCobType.Function, tag: function),
@@ -792,7 +808,7 @@ namespace Compiler.CodeGeneration
             if (rhs != null)
             {
                 if (CurrentFunction.ReturnType == eCobType.None)
-                    CurrentFunction.ReturnType = rhs.Type;
+                    CurrentFunction.ReturnType = rhs.Type; // TODO Is this even permitted by the syntax?
                 else if (!CobType.IsExplicitCastable(CurrentFunction.ReturnType, rhs.Type, rhs.Operand.Value)
                      &&  !CobType.IsConstCastable(CurrentFunction.ReturnType, rhs.Type))
                     messages.Add(Message.ReturnTypeMismatch, expression, CurrentFunction.ReturnType, rhs.Type);
@@ -1735,18 +1751,29 @@ namespace Compiler.CodeGeneration
             }
             else if (candidatesStorage?.Type.Tag is FunctionSignature tagSignature)
             {
-                function = new Function(
-                    "$anonymous", CurrentModule, this, CallingConvention.Default,
-                    tagSignature.Parameters,
-                    tagSignature.ReturnType,
-                    false
-                );
+                function = new Function("$anonymous", CurrentModule, this, CallingConvention.Default, false);
+                foreach (var y in tagSignature.Parameters)
+                    function.AllocateParameter(y.Name, y.Type, y.IsSpread, y.DefaultValue);
+                function.AttachReturnType(tagSignature.ReturnType);
                 functionStorage = candidatesStorage;
             }
             else
             {
                 function = null;
                 functionStorage = null;
+            }
+
+            if (function != null && function.IsGeneric)
+            {
+                var aFunction = function;
+                var bType = arguments[0].Type; // TODO Implement correctly; needs to find actual generic type in list
+                function = function.FindConcretizedFunction(bType) ?? function.AllocateConcretizedRecord(bType);
+
+                if (function.PopulateConcretizedFunctionIfRequired())
+                    concreteTypeAstReferences.Add(new ConcreteTypeAstReference(aFunction, function));
+
+                functionStorage?.Free();
+                functionStorage = function?.Parent.EmitGetForSymbol(function)!;
             }
 
             if (function == null)
@@ -1979,9 +2006,7 @@ namespace Compiler.CodeGeneration
                 "$aot_eval$",
                 CurrentModule,
                 this,
-                CallingConvention.CCall,
-                Array.Empty<Function.Parameter>(),
-                CobType.None,
+                CallingConvention.Default,
                 false
             );
 
@@ -2539,9 +2564,7 @@ namespace Compiler.CodeGeneration
                     "$aot_eval$",
                     CurrentModule,
                     this,
-                    CallingConvention.CCall,
-                    Array.Empty<Function.Parameter>(),
-                    CobType.None,
+                    CallingConvention.Default,
                     false
                 );
 
@@ -2641,7 +2664,9 @@ namespace Compiler.CodeGeneration
                 // PASS 1 - Compilation
                 // NOTE We must compile all imported scripts before we compile this script; list is in import order
                 Intrinsics.InitializeForPass1(compiler);
-                compiler.FunctionStringError = compiler.RootModule.AllocateFunction("string", null, CallingConvention.Default, new[] { new Function.Parameter("code", CobType.Error, false) }, CobType.String);
+                compiler.FunctionStringError = compiler.RootModule.AllocateFunction("string", CallingConvention.Default);
+                compiler.FunctionStringError.AllocateParameter("code", CobType.Error, false, null);
+                compiler.FunctionStringError.AttachReturnType(CobType.String);
 
                 for (var i = 0; i < compiler.Scripts.Count; ++i)
                     compiler.Scripts[i].Accept(compiler);
@@ -2666,6 +2691,7 @@ namespace Compiler.CodeGeneration
                         Expression concreteExpression = genericType.Expression switch
                         {
                             RecordStatement x => new RecordStatement(x, concreteType.Concrete.Name),
+                            FunctionDeclStatement x => new FunctionDeclStatement(x, concreteType.Concrete.Name),
                             _ => throw new ArgumentOutOfRangeException($"Unknown generic type expression '{genericType.Expression.Token}'")
                         };
 
