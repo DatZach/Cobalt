@@ -891,8 +891,6 @@ namespace Compiler.CodeGeneration
             // Assignment
             var asnOpcode = expression.Operator switch
             {
-                TokenType.Assign => Opcode.Move,
-                TokenType.UnionAssign => Opcode.Move,
                 TokenType.AddAssign => Opcode.Add,
                 TokenType.SubtractAssign => Opcode.Sub,
                 TokenType.MultiplyAssign => Opcode.Mul,
@@ -911,8 +909,8 @@ namespace Compiler.CodeGeneration
                 _ => Opcode.None
             };
 
-            // Equality
-            var cmpOpcode = expression.Operator switch
+            // Binary
+            var binOpcode = expression.Operator switch
             {
                 TokenType.Equals => Opcode.CmpEQ,
                 TokenType.NotEquals => Opcode.CmpNEQ,
@@ -920,20 +918,10 @@ namespace Compiler.CodeGeneration
                 TokenType.LessThanOrEquals => Opcode.CmpLTE,
                 TokenType.MoreThan => Opcode.CmpGT,
                 TokenType.MoreThanOrEquals => Opcode.CmpGTE,
-                _ => Opcode.None
-            };
 
-            // Conditionals
-            var cndOpcode = expression.Operator switch
-            {
                 TokenType.ConditionalAnd => Opcode.CondAnd,
                 TokenType.ConditionalOr => Opcode.CondOr,
-                _ => Opcode.None
-            };
 
-            // Arithmetic
-            var artOpcode = expression.Operator switch
-            {
                 TokenType.Add => Opcode.Add,
                 TokenType.Subtract => Opcode.Sub,
                 TokenType.Multiply => Opcode.Mul,
@@ -950,6 +938,7 @@ namespace Compiler.CodeGeneration
                 TokenType.BitAnd => Opcode.BitAnd,
                 TokenType.BitOr => Opcode.BitOr,
                 TokenType.BitXor => Opcode.BitXor,
+
                 _ => Opcode.None
             };
 
@@ -987,68 +976,22 @@ namespace Compiler.CodeGeneration
 
                 return new Storage(cType, Operand.None);
             }
-            else if (expression.Operator == TokenType.NilCoalesce) // ??
-            {
-                var lhs = expression.Left.Accept(this);
-                var rhs = expression.Right.Accept(this);
-
-                if (!lhs.Type.HasNilFlag)
-                {
-                    messages.Add(Message.CannotNilCoalesceType, expression, lhs.Type);
-                    return null;
-                }
-                // TODO Validate RHS type matches LHS
-
-                var c = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
-                
-                var labelEnd = CurrentFunction.Body.AllocateLabel();
-                CurrentFunction.Body.Emit(Opcode.CmpTyEQ, c.Operand, lhs.Operand, CobType.Nil.ToOperand(artifact));
-                CurrentFunction.Body.Emit(Opcode.JmpF, c.Operand, labelEnd);
-                CurrentFunction.Body.Emit(Opcode.Move, lhs.Operand, rhs.Operand);
-                labelEnd.Mark();
-
-                c.Free();
-                rhs?.Free();
-
-                return lhs;
-            }
-            else if (expression.Operator == TokenType.ErrorCoalesce) // !!
+            else if (expression.Operator is TokenType.NilCoalesce or TokenType.ErrorCoalesce
+                                         or TokenType.NilErrorCoalesce) // ?? !! ?!
             {
                 ++conditionalStack;
                 var lhs = expression.Left.Accept(this);
                 var rhs = expression.Right.Accept(this);
                 --conditionalStack;
 
-                if (!lhs.Type.HasErrorFlag)
+                if (lhs == null || rhs == null || lhs.Type != rhs.Type)
                 {
-                    messages.Add(Message.CannotErrorCoalesceType, expression, lhs.Type);
+                    messages.Add(Message.TypeMismatch, expression, lhs?.Type, rhs?.Type);
                     return null;
                 }
-                // TODO Validate RHS type matches LHS
-
-                var c = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
-
-                var labelEnd = CurrentFunction.Body.AllocateLabel();
-                CurrentFunction.Body.Emit(Opcode.CmpTyEQ, c.Operand, lhs.Operand, CobType.Error.ToOperand(artifact));
-                CurrentFunction.Body.Emit(Opcode.JmpF, c.Operand, labelEnd);
-                CurrentFunction.Body.Emit(Opcode.Move, lhs.Operand, rhs.Operand);
-                labelEnd.Mark();
-
-                c.Free();
-                rhs?.Free();
-
-                return lhs;
-            }
-            else if (expression.Operator == TokenType.NilErrorCoalesce) // ?!
-            {
-                ++conditionalStack;
-                var lhs = expression.Left.Accept(this);
-                var rhs = expression.Right.Accept(this);
-                --conditionalStack;
-
                 if (!lhs.Type.HasErrorFlag)
                 {
-                    messages.Add(Message.CannotErrorCoalesceType, expression, lhs.Type);
+                    messages.Add(Message.CannotErrorCoalesceType, expression, lhs?.Type);
                     return null;
                 }
                 if (!lhs.Type.HasNilFlag)
@@ -1056,23 +999,28 @@ namespace Compiler.CodeGeneration
                     messages.Add(Message.CannotNilCoalesceType, expression, lhs.Type);
                     return null;
                 }
-                // TODO Validate RHS type matches LHS
 
                 var c = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
 
                 var labelEnd = CurrentFunction.Body.AllocateLabel();
                 var labelHandler = CurrentFunction.Body.AllocateLabel();
-                CurrentFunction.Body.Emit(Opcode.CmpTyEQ, c.Operand, lhs.Operand, CobType.Nil.ToOperand(artifact));
-                CurrentFunction.Body.Emit(Opcode.JmpT, c.Operand, labelHandler);
-                CurrentFunction.Body.Emit(Opcode.CmpTyEQ, c.Operand, lhs.Operand, CobType.Error.ToOperand(artifact));
-                CurrentFunction.Body.Emit(Opcode.JmpT, c.Operand, labelHandler);
+                if (expression.Operator is TokenType.NilCoalesce or TokenType.NilErrorCoalesce)
+                {
+                    CurrentFunction.Body.Emit(Opcode.CmpTyEQ, c.Operand, lhs.Operand, CobType.Nil.ToOperand(artifact));
+                    CurrentFunction.Body.Emit(Opcode.JmpT, c.Operand, labelHandler);
+                }
+                if (expression.Operator is TokenType.ErrorCoalesce or TokenType.NilErrorCoalesce)
+                {
+                    CurrentFunction.Body.Emit(Opcode.CmpTyEQ, c.Operand, lhs.Operand, CobType.Error.ToOperand(artifact));
+                    CurrentFunction.Body.Emit(Opcode.JmpT, c.Operand, labelHandler);
+                }
                 CurrentFunction.Body.Emit(Opcode.Jmp, labelEnd);
                 labelHandler.Mark();
                 CurrentFunction.Body.Emit(Opcode.Move, lhs.Operand, rhs.Operand);
                 labelEnd.Mark();
 
                 c.Free();
-                rhs?.Free();
+                rhs.Free();
 
                 return lhs;
             }
@@ -1186,119 +1134,95 @@ namespace Compiler.CodeGeneration
 
                 return c;
             }
-            else if (cndOpcode != Opcode.None) // Conditional && ||
+            else if (binOpcode != Opcode.None) // Binary + - * / | & ^ && || == != < <=
             {
                 var a = expression.Left.Accept(this);
                 var b = expression.Right.Accept(this);
 
-                var cType = CobType.ResolveOperatorResultType(expression.Operator, a?.Type, b?.Type);
-                if (cType == CobType.None)
+                CobType cType;
+                Function? function;
+                if ((cType = CobType.ResolveOperatorResultType(expression.Operator, a?.Type, b?.Type)) != CobType.None)
                 {
-                    messages.Add(Message.IllegalOperationBetweenTypes, expression, expression.Operator.GetDescription(), a?.Type, b?.Type);
-                    return null;
-                }
-
-                var c = CurrentFunction.AllocateRegisterStorage(cType);
-
-                CurrentFunction.Body.Emit(cndOpcode, c.Operand, a.Operand, b.Operand);
-
-                b.Free();
-                a.Free();
-
-                return c;
-            }
-            else if (cmpOpcode != Opcode.None) // Equality == != < > <= >=
-            {
-                var a = expression.Left.Accept(this);
-                var b = expression.Right.Accept(this);
-
-                var cType = CobType.ResolveOperatorResultType(expression.Operator, a?.Type, b?.Type);
-                if (cType == CobType.None)
-                {
-                    messages.Add(Message.IllegalOperationBetweenTypes, expression, expression.Operator.GetDescription(), a?.Type, b?.Type);
-                    return null;
-                }
-
-                var c = CurrentFunction.AllocateRegisterStorage(cType);
-
-                CurrentFunction.Body.Emit(cmpOpcode, c.Operand, a.Operand, b.Operand);
-
-                b.Free();
-                a.Free();
-
-                return c;
-            }
-            else if (artOpcode != Opcode.None) // Arithmetic + - * /
-            {
-                var a = expression.Left.Accept(this);
-                var b = expression.Right.Accept(this);
-
-                var cType = CobType.ResolveOperatorResultType(expression.Operator, a?.Type, b?.Type);
+                    var c = CurrentFunction.AllocateRegisterStorage(cType);
                 
-                // TODO Obviously rewrite this...
-                if (cType == CobType.None)
-                {
-                    foreach (var context in contextStack)
-                    {
-                        var symbol = context.FindSymbol(expression.Token.Value);
-                        if (symbol is Function function)
-                        {
-                            var cc = CurrentFunction.AllocateRegisterStorage(function.ReturnType);
-                            var functionStorage = context.EmitGetForSymbol(symbol);
-                            CurrentFunction.Body.Emit(Opcode.Call, functionStorage.Operand, cc.Operand,
-                                new[] { a.Operand, b.Operand });
-                            b.Free();
-                            a.Free();
-                            return cc;
-                        }
-                    }
-                }
-                if (cType == CobType.None)
-                {
-                    messages.Add(Message.IllegalOperationBetweenTypes, expression, expression.Operator.GetDescription(), a?.Type, b?.Type);
-                    return null;
-                }
-
-                var c = CurrentFunction.AllocateRegisterStorage(cType);
+                    CurrentFunction.Body.Emit(binOpcode, c.Operand, a!.Operand, b!.Operand);
                 
-                CurrentFunction.Body.Emit(artOpcode, c.Operand, a.Operand, b.Operand);
-                
-                b.Free();
-                a.Free();
+                    b.Free();
+                    a.Free();
 
-                return c;
-            }
-            else if (asnOpcode != Opcode.None) // Assignment = += -=
-            {
-                Storage? c;
-                var b = expression.Right.Accept(this);
-
-                if (asnOpcode != Opcode.Move)
+                    return c;
+                }
+                else if ((function = ResolveOperatorFunction(expression.Operator, a?.Type, b?.Type)) != null)
                 {
-                    // TODO Can be rewritten
-                    c = expression.Left.Accept(this);
-                    CurrentFunction.Body.Emit(asnOpcode, c.Operand, c.Operand, b.Operand);
-                    AssignmentRHS = c;
+                    var functionStorage = function.Parent.EmitGetForSymbol(function)!;
+                    var c = CurrentFunction.AllocateRegisterStorage(function.ReturnType);
+                    
+                    CurrentFunction.Body.Emit(
+                        Opcode.Call,
+                        functionStorage.Operand,
+                        c.Operand,
+                        new[] { a!.Operand, b!.Operand }
+                    );
+                
+                    b.Free();
+                    a.Free();
+                    functionStorage.Free();
 
-                    var cType = CobType.ResolveOperatorResultType(expression.Operator, c.Type, b.Type);
-                    if (cType == CobType.None)
-                    {
-                        messages.Add(Message.IllegalOperationBetweenTypes, expression, expression.Operator.GetDescription(), c.Type, b.Type);
-                        //return null;
-                    }
+                    return c;
                 }
                 else
                 {
-                    AssignmentRHS = b;
-                    c = null;
+                    messages.Add(Message.IllegalOperationBetweenTypes, expression, expression.Operator.GetDescription(), a?.Type, b?.Type);
+                    return null;
+                }
+            }
+            else if (asnOpcode != Opcode.None) // Assignment = += -=
+            {
+                var a = expression.Left.Accept(this);
+                var b = expression.Right.Accept(this);
+
+                CobType cType;
+                Function? function;
+                if ((cType = CobType.ResolveOperatorResultType(expression.Operator, a?.Type, b?.Type)) != CobType.None)
+                {
+                    CurrentFunction.Body.Emit(asnOpcode, a!.Operand, a.Operand, b!.Operand);
+                }
+                else if ((function = ResolveOperatorFunction(expression.Operator, a?.Type, b?.Type)) != null)
+                {
+                    var functionStorage = function.Parent.EmitGetForSymbol(function)!;
+                    CurrentFunction.Body.Emit(
+                        Opcode.Call,
+                        functionStorage.Operand,
+                        a!.Operand,
+                        new[] { a.Operand, b!.Operand }
+                    );
+                    functionStorage.Free();
+                }
+                else
+                {
+                    messages.Add(Message.IllegalOperationBetweenTypes, expression, expression.Operator.GetDescription(), a?.Type, b?.Type);
+                    return null;
                 }
 
+                AssignmentRHS = a;
+                    expression.Left.Accept(this)?.Free();
+                AssignmentRHS = null;
+
+                b.Free();
+                a.Free();
+
+                return null;
+            }
+            else if (expression.Operator is TokenType.Assign or TokenType.UnionAssign)
+            {
+                var b = expression.Right.Accept(this);
+
+                AssignmentRHS = b;
                 isUnionAssignment = expression.Operator == TokenType.UnionAssign;
 
                 var a = expression.Left.Accept(this);
 
                 a?.Free();
-                c?.Free();
                 b?.Free();
 
                 AssignmentRHS = null;
@@ -1307,6 +1231,43 @@ namespace Compiler.CodeGeneration
             }
             else
                 throw new ArgumentOutOfRangeException(nameof(expression));
+        }
+
+        private Function? ResolveOperatorFunction(TokenType @operator, CobType? lhsType, CobType? rhsType)
+        {
+            if (lhsType == null || rhsType == null)
+                return null;
+
+            @operator = @operator switch
+            {
+                TokenType.AddAssign => TokenType.Add,
+                TokenType.SubtractAssign => TokenType.Subtract,
+                TokenType.MultiplyAssign => TokenType.Multiply,
+                TokenType.DivideAssign => TokenType.Divide,
+                TokenType.DivideCeilAssign => TokenType.DivideCeil,
+                TokenType.DivideFloorAssign => TokenType.DivideFloor,
+                TokenType.RemainderAssign => TokenType.Remainder,
+                TokenType.ModuloAssign => TokenType.Modulo,
+                TokenType.BitLeftShiftAssign => TokenType.BitLeftShift,
+                TokenType.BitRightShiftAssign => TokenType.BitRightShift,
+                TokenType.BitLeftRotateAssign => TokenType.BitLeftRotate,
+                TokenType.BitRightRotateAssign => TokenType.BitRightRotate,
+                TokenType.BitAndAssign => TokenType.BitAnd,
+                TokenType.BitOrAssign => TokenType.BitOr,
+                TokenType.BitXorAssign => TokenType.BitXor,
+                var x => x
+            };
+
+            foreach (var context in contextStack)
+            {
+                var symbol = context.FindSymbol($"$op_{@operator}");
+                if (symbol is Function function)
+                    return function;
+                else if (symbol is FunctionCandidates candidates)
+                    return candidates.ResolveSingle(new[] { lhsType, rhsType }, lhsType);
+            }
+
+            return null;
         }
 
         public Storage? Visit(PrefixOperatorExpression expression)

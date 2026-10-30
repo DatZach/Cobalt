@@ -1024,6 +1024,7 @@ namespace Compiler.CodeGeneration.Artifacts
             return false;
         }
 
+        // TODO Probably move this out of here
         public static CobType ResolveOperatorResultType(TokenType @operator, CobType? lhsType, CobType? rhsType)
         {
             if (lhsType == null || rhsType == null)

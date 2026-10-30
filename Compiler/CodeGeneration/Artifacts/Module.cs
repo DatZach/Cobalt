@@ -141,9 +141,12 @@ namespace Compiler.CodeGeneration.Artifacts
                 : null;
         }
 
-        public Function? FindOperatorAlias(string name)
+        public FunctionCandidates? FindOperatorAlias(string name)
         {
-            return functions.FirstOrDefault(x => x.Operator != null && x.Operator.Value == name);
+            var candidates = functions.Where(x => x.Operator != null && $"$op_{x.Operator.Type}" == name).ToList();
+            return candidates.Count > 0
+                ? new FunctionCandidates(candidates)
+                : null;
         }
 
         public Global AllocateGlobal(string name, CobType type, bool mutable)
@@ -174,7 +177,7 @@ namespace Compiler.CodeGeneration.Artifacts
                 return function;
 
             // OPERATOR ALIAS
-            Function? @operator;
+            FunctionCandidates? @operator;
             if ((@operator = FindOperatorAlias(name)) != null)
                 return @operator;
 

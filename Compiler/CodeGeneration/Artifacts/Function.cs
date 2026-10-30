@@ -309,7 +309,7 @@ namespace Compiler.CodeGeneration.Artifacts
                               or TokenType.Remainder or TokenType.Modulo
                               or TokenType.BitOr or TokenType.BitAnd or TokenType.BitXor or TokenType.BitLeftShift
                               or TokenType.BitRightShift or TokenType.BitLeftRotate or TokenType.BitRightRotate
-                              or TokenType.Sign or TokenType.Is
+                              or TokenType.Sign
                               or TokenType.Equals or TokenType.NotEquals or TokenType.LessThanOrEquals
                               or TokenType.MoreThanOrEquals or TokenType.LessThan or TokenType.MoreThan;
         }
@@ -488,10 +488,13 @@ namespace Compiler.CodeGeneration.Artifacts
             this.candidates = candidates;
         }
 
-        public Function? ResolveSingle(IReadOnlyList<CobType>? arguments)
+        public Function? ResolveSingle(IReadOnlyList<CobType>? arguments, CobType? returnType = null)
         {
             var list = candidates.Where(x =>
             {
+                if (returnType != null && !CobType.IsExplicitCastable(x.ReturnType, returnType))
+                    return false;
+
                 if (arguments == null)
                     return true;
 

@@ -57,3 +57,14 @@ function int(string value, int radix = 10) This {
 
     return result;
 }
+
+function Add, +(string l, string r) string {
+    var result = [ u8 ];
+
+    for (var i in ..l.Length)
+        result.Add(l[i]);
+    for (var i in ..r.Length)
+        result.Add(r[i]);
+    
+    return result[..=];
+}
