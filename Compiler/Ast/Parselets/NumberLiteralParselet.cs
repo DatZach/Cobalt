@@ -140,7 +140,7 @@ namespace Compiler.Ast.Parselets
             {
                 if (t == eCobType.Signed)
                 {
-                    if (w == -1)
+                    if (w == -1 || w == -2)
                         result = Convert.ToInt64(value, fromBase);
                     else if (w <= 8)
                         result = Convert.ToSByte(value, fromBase);
@@ -155,7 +155,7 @@ namespace Compiler.Ast.Parselets
                 }
                 else if (t == eCobType.Unsigned)
                 {
-                    if (w == -1)
+                    if (w == -1 || w == -2)
                         result = (long)Convert.ToUInt64(value, fromBase);
                     else if (w <= 8)
                         result = Convert.ToByte(value, fromBase);
@@ -170,7 +170,7 @@ namespace Compiler.Ast.Parselets
                 }
                 else if (t == eCobType.Real)
                 {
-                    if (w == -1)
+                    if (w == -1 || w == -2)
                         result = BitConverter.DoubleToInt64Bits(double.Parse(value, NumberStyles.Float, CultureInfo.InvariantCulture));
                     else if (w == 32)
                         result = BitConverter.SingleToInt32Bits(float.Parse(value, NumberStyles.Float, CultureInfo.InvariantCulture));

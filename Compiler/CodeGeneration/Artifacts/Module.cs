@@ -74,6 +74,7 @@ namespace Compiler.CodeGeneration.Artifacts
         //    return traitTypes.FirstOrDefault(x => x.Name == name);
         //}
 
+        // TODO This needs to be removed, all type declarations are now done as distinct types
         public RecordType AllocateRecordType(string name, eRecordType type)
         {
             var recordType = new RecordType(name, type, this, compiler);
@@ -161,6 +162,11 @@ namespace Compiler.CodeGeneration.Artifacts
         // TODO FindExplicitSymbol
         public ISymbol? FindSymbol(string name)
         {
+            // TYPES
+            CobType? type;
+            if ((type = CobType.FromTypeName(TypeName.FromIdentifier(name), this)) != null)
+                return type;
+
             // GLOBAL
             Global? global;
             if ((global = FindGlobal(name)) != null)
@@ -186,14 +192,6 @@ namespace Compiler.CodeGeneration.Artifacts
             if ((tupleType = FindRecordType(name)) != null)
                 return tupleType;
 
-            // TYPES
-            CobType? type;
-            if ((type = FindDistinctType(name)) != null)
-                return type;
-
-            if ((type = CobType.FromTypeName(TypeName.FromIdentifier(name), this)) != null)
-                return type;
-
             return null;
         }
 
@@ -212,6 +210,15 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public Storage? EmitGetForSymbol(ISymbol symbol)
         {
+            // TYPES
+            if (symbol is CobType cobType)
+            {
+                return new Storage(
+                    cobType,
+                    cobType.ToOperand(compiler.Artifact)
+                );
+            }
+
             // GLOBAL
             if (symbol is Global global)
             {
@@ -252,22 +259,13 @@ namespace Compiler.CodeGeneration.Artifacts
             }
 
             // RECORD TYPES
-            if (symbol is RecordType recordType)
-            {
-                return new Storage(
-                    recordType.ThisType,
-                    recordType.ThisType.ToOperand(compiler.Artifact)
-                );
-            }
-
-            // RECORD TYPES
-            if (symbol is CobType cobType)
-            {
-                return new Storage(
-                    cobType,
-                    cobType.ToOperand(compiler.Artifact)
-                );
-            }
+            //if (symbol is RecordType recordType)
+            //{
+            //    return new Storage(
+            //        recordType.ThisType,
+            //        recordType.ThisType.ToOperand(compiler.Artifact)
+            //    );
+            //}
 
             return null;
         }

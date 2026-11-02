@@ -125,7 +125,15 @@ namespace Compiler.Ast
                 generic = new List<TypeName>();
                 while (MatchAndTakeToken(TokenType.Generic) != null)
                 {
-                    generic.Add(new TypeName { Type = eTypeName.Identifier, Identifier = Take(TokenType.Identifier).Value });
+                    if (MatchAndTakeToken(TokenType.LeftParen) != null)
+                    {
+                        var g = ParseTypeName();
+                        if (g == null) return null;
+                        generic.Add(g);
+                        Take(TokenType.RightParen);
+                    }
+                    else
+                        generic.Add(TypeName.FromIdentifier(Take(TokenType.Identifier).Value));
                 }
             }
 

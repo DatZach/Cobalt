@@ -5,6 +5,8 @@ namespace Compiler.CodeGeneration
 {
     internal static class Intrinsics
     {
+        public static CobType ErrorType { get; private set; } = null!;
+
         public static CobType Range { get; private set; } = null!;
 
         public static CobType Lens { get; private set; } = null!;
@@ -17,7 +19,7 @@ namespace Compiler.CodeGeneration
 
         public static void InitializeForPass0(Compiler compiler)
         {
-            
+            ErrorType = new CobType(eCobType.Error, name: "error", tag: compiler.Errors);
         }
 
         public static void InitializeForPass1(Compiler compiler)

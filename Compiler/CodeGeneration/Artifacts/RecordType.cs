@@ -394,6 +394,12 @@ namespace Compiler.CodeGeneration.Artifacts
             if (name == "This")
                 return this;
 
+            // TODO Standard type decls?
+
+            CobType? generic;
+            if ((generic = FindGenericType(name)) != null)
+                return generic;
+
             Global? global;
             if ((global = FindGlobal(name)) != null)
                 return global;
@@ -416,10 +422,6 @@ namespace Compiler.CodeGeneration.Artifacts
             FunctionCandidates? candidates;
             if ((candidates = FindFunctionCandidates(name)) != null)
                 return candidates;
-
-            CobType? generic;
-            if ((generic = FindGenericType(name)) != null)
-                return generic;
 
             return null;
         }
@@ -541,6 +543,20 @@ namespace Compiler.CodeGeneration.Artifacts
             for (int i = 0; i < fields.Count; ++i)
             {
                 if (!CobType.IsImplicitCastable(fields[i].Type, other.fields[i].Type))
+                    return false;
+            }
+
+            return true;
+        }
+
+        public bool IsFieldSignatureMatch(IReadOnlyList<Storage> other)
+        {
+            if (other.Count != fields.Count)
+                return false;
+
+            for (int i = 0; i < fields.Count; ++i)
+            {
+                if (!CobType.IsExplicitCastable(fields[i].Type, other[i].Type))
                     return false;
             }
 

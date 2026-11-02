@@ -350,6 +350,8 @@ namespace Compiler.Ast
 
         public static Def IllegalOperatorDeclaration { get; } = new(MessageType.Error, "Operator alias for '{0}' may not be declared");
 
+        public static Def ExpectedValue { get; } = new(MessageType.Error, "Expected value to be resolved at this time");
+
         public sealed record Def(
             MessageType Type,
             string Content,

@@ -594,6 +594,15 @@ namespace Compiler.CodeGeneration
             {
                 Function? function;
                 var symbol = CurrentContext.FindSymbol(expression.Name);
+                if (symbol is CobType)
+                {
+                    if (CurrentContext is Module module)
+                        symbol = module.FindFunctionCandidates(expression.Name);
+                    else if (CurrentContext is RecordType recordType)
+                        symbol = recordType.FindFunctionCandidates(expression.Name);
+                    else
+                        symbol = null;
+                }
                 if (symbol is Function symbolFunction)
                     function = symbolFunction;
                 else if (symbol is FunctionCandidates candidates)

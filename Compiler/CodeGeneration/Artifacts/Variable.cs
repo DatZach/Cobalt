@@ -186,7 +186,7 @@ namespace Compiler.CodeGeneration.Artifacts
         public readonly static CobType R32 = new(eCobType.Real, 32, name: "r32");
         public readonly static CobType R64 = new(eCobType.Real, 64, name: "r64");
         public readonly static CobType Module = new(eCobType.Module, name: null);
-        public readonly static CobType Error = new(eCobType.Error, name: "error");
+        public static CobType Error => Intrinsics.ErrorType;//  new(eCobType.Error, name: "error");
         public readonly static CobType Nil = new(eCobType.Nil, name: "nil");
         public readonly static CobType Generic = new(eCobType.Generic, name: null);
         public static CobType String => Intrinsics.StringType;

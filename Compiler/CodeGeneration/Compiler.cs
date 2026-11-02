@@ -814,7 +814,7 @@ namespace Compiler.CodeGeneration
                     messages.Add(Message.ReturnTypeMismatch, expression, CurrentFunction.ReturnType, rhs.Type);
 
                 // TODO Might clobber rhs storage...
-                EnforceRefinment(rhs, CurrentFunction.ReturnType, expression); // TODO Should be implemented in IsExplicitCastable?
+                EnforceRefinment(rhs, CurrentFunction.ReturnType); // TODO Should be implemented in IsExplicitCastable?
 
                 CurrentFunction.Body.Emit(Opcode.Return, rhs.Operand);
                 rhs.Free();
@@ -990,7 +990,7 @@ namespace Compiler.CodeGeneration
 
                 lhs?.Free();
 
-                return new Storage(cType, Operand.None);
+                return new Storage(cType, cType.ToOperand(artifact));
             }
             else if (expression.Operator is TokenType.NilCoalesce or TokenType.ErrorCoalesce
                                          or TokenType.NilErrorCoalesce) // ?? !! ?!
@@ -1058,8 +1058,9 @@ namespace Compiler.CodeGeneration
 
                 if (context is RecordType recordType)
                 {
+                    var superType = recordType.HACK_PendingSuperType;
                     if (recordType.PopulateConcretizedRecordIfRequired())
-                        concreteTypeAstReferences.Add(new ConcreteTypeAstReference(recordType.HACK_PendingSuperType, recordType));
+                        concreteTypeAstReferences.Add(new ConcreteTypeAstReference(superType, recordType));
                 }
 
                 implicitContext = lhs;//expression.Left;
@@ -1596,152 +1597,114 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(CallExpression expression)
         {
-            // EXPLICIT CAST
-            var storage = VisitExplicitCastExpression(expression);
-            if (storage != null)
-                return storage;
-
-            var candidatesStorage = expression.FunctionExpression.Accept(this); // TODO Cleanup, merge this with other implementations
-
-            // TUPLE ALLOCATION
-            if (storage == null)
-                storage = VisitTupleLiteralExpression(expression, candidatesStorage);
-
-            // CALL
-            if (storage == null)
-                storage = VisitCallExpression(expression, candidatesStorage);
-
-            candidatesStorage?.Free();
-
-            return storage;
-        }
-
-        private Storage? VisitExplicitCastExpression(CallExpression expression)
-        {
-            var dstStorage = expression.FunctionExpression.Accept(this);
-            if (dstStorage == null || dstStorage.Operand.Type != OperandType.Type)
+            var functionStorage = expression.FunctionExpression.Accept(this);
+            if (functionStorage == null)
+            {
+                messages.Add(Message.ExpectedValue, expression.FunctionExpression);
                 return null;
-            
-            var arguments = new List<Storage>();
+            }
+
+            var argumentsStorage = new List<Storage>(expression.Arguments.Count);
             foreach (var argExpression in expression.Arguments)
             {
                 var argStorage = argExpression.Accept(this);
                 if (argStorage == null)
-                    continue;
+                {
+                    messages.Add(Message.ExpectedValue, argExpression);
+                    return null;
+                }
 
-                arguments.Add(argStorage);
+                argumentsStorage.Add(argStorage);
             }
 
-            var function = dstStorage.Type.Tag switch
+            // HACK Find cast functions, might be better to have FindSymbol with a filter
+            FunctionCandidates? candidates = null;
+            var ctx = CurrentContext;
+            while (ctx != null && candidates == null)
             {
-                FunctionCandidates x => x.ResolveSingle(arguments.Select(y => y.Type).ToList()),
-                Function x => x,
-                _ => null
-            };
+                if (ctx is Module module)
+                    candidates = module.FindFunctionCandidates(functionStorage.Type.Name);
+                else if (ctx is RecordType recordType)
+                    candidates = recordType.FindFunctionCandidates(functionStorage.Type.Name);
 
-            // NOTE The outer call expression handles function calls and tuple ctors
-            if (dstStorage.Type.TagFunction != null || dstStorage.Type.TagFunctionCandidates != null ||
-                function != null || dstStorage.Type.TagRecord != null)// && !function.IsCasting)
-            {
-                arguments.ForEach(x => x.Free());
-                dstStorage.Free();
-                return null; // TODO Handle the call here?
+                ctx = ctx.Parent;
             }
 
-            var source = arguments.FirstOrDefault();
-            if (source == null)
+            var function = candidates?.ResolveSingle(argumentsStorage.Select(y => y.Type).ToList());
+            if (function != null)
             {
-                messages.Add(Message.FunctionParameterCountMismatch, expression, 1, arguments.Count);
-                return source;
+                functionStorage.Free();
+                functionStorage = function.Parent.EmitGetForSymbol(function)!;
             }
 
-            var dstType = dstStorage.Type; // dstType :: int | string | function() This | ...
+            Storage? result;
+            if (functionStorage.Operand.Type == OperandType.Type && argumentsStorage.Count == 1)
+                result = EmitExplicitCast(expression, functionStorage, argumentsStorage);
+            else if (functionStorage.Operand.Type == OperandType.Type && functionStorage.Type.TagRecord != null
+                 &&  functionStorage.Type.TagRecord.Type == eRecordType.Tuple
+                 &&  functionStorage.Type.TagRecord.IsFieldSignatureMatch(argumentsStorage))
+                result = EmitTupleLiteralAllocation(expression, functionStorage, argumentsStorage);
+            else
+                result = EmitCall(expression, functionStorage, argumentsStorage);
+
+            argumentsStorage.ForEach(x => x.Free());
+            functionStorage.Free();
+
+            return result;
+        }
+
+        private Storage? EmitExplicitCast(Expression expression, Storage functionStorage, IReadOnlyList<Storage> argumentsStorage)
+        {
+            var source = argumentsStorage[0];
+
+            var dstType = functionStorage.Type; // dstType :: int | string | function() This | ...
             var srcType = source.Type;
 
-            // TODO HACK Resolve int() when no user-defined cast function is found...
-            if ((dstType.TagFunction != null || dstType.TagFunctionCandidates != null) && function == null)
-                dstType = CobType.FromTypeName(new TypeName { Type = eTypeName.Identifier, Identifier = "int" }, CurrentContext);
-            
             if (!CobType.IsExplicitCastable(dstType, srcType))
             {
                 messages.Add(Message.CannotCastType, expression, srcType, dstType);
                 return source; // NOTE Non-null return prevents superfluous errors from being raised
             }
 
-            var target = EmitCast(source, dstType, expression);
+            var target = EmitCast(source, dstType);
             return target;
-
-
-            // OLD
-
-            //var arguments = expression.Arguments;
-            //if (arguments.Count != 1)
-            //{
-            //    messages.Add(Message.FunctionParameterCountMismatch, expression, 1, arguments.Count);
-            //    return null;
-            //}
-
-            //var source = arguments[0].Accept(this);
-            //var srcType = source.Type;
-
-            //if (!CobType.IsExplicitCastable(dstType, srcType))
-            //{
-            //    messages.Add(Message.CannotCastType, expression, srcType, dstType);
-            //    return source; // NOTE Non-null return prevents superfluous errors from being raised
-            //}
-
-            //var target = EmitCast(source, dstType);
-
-            //return target;
         }
 
-        private Storage? VisitTupleLiteralExpression(CallExpression expression, Storage? functionStorage)
+        private Storage? EmitTupleLiteralAllocation(Expression expression, Storage functionStorage, IReadOnlyList<Storage> argumentsStorage)
         {
-            if (functionStorage == null
-            ||  functionStorage.Type.Tag is not RecordType tupleType
-            ||  tupleType.Type != eRecordType.Tuple)
-                return null;
+            var tupleType = functionStorage.Type;
 
-            functionStorage.Free();
-
-            var cobType = functionStorage.Type;//new CobType(eCobType.Tuple, tag: tupleType);
-
-            var storage = CurrentFunction.AllocateRegisterStorage(cobType);
-            CurrentFunction.Body.Emit(Opcode.New, storage.Operand, cobType.ToOperand(artifact));
-
-            for (var i = 0; i < expression.Arguments.Count; ++i)
+            if (tupleType.TagRecord!.IsGeneric)
             {
-                var argStorage = expression.Arguments[i].Accept(this);
+                messages.Add(Message.IllegalTypeName, expression, tupleType);
+                return null;
+            }
+
+            var storage = CurrentFunction.AllocateRegisterStorage(tupleType);
+            CurrentFunction.Body.Emit(Opcode.New, storage.Operand, tupleType.ToOperand(artifact));
+
+            for (var i = 0; i < argumentsStorage.Count; ++i)
+            {
+                var argument = argumentsStorage[i];
                 CurrentFunction.Body.Emit(
                     Opcode.SetField,
                     storage.Operand,
                     Operand.ImmediateUnsigned(i),
-                    argStorage.Operand
+                    argument.Operand
                 );
             }
 
             return storage;
         }
 
-        private Storage? VisitCallExpression(CallExpression expression, Storage? candidatesStorage)
+        private Storage? EmitCall(Expression expression, Storage candidatesStorage, IReadOnlyList<Storage> argumentsStorage)
         {
-            // ARGUMENTS
-            var arguments = new List<Storage>();
-            foreach (var argExpression in expression.Arguments)
-            {
-                var argStorage = argExpression.Accept(this);
-                if (argStorage == null)
-                    continue;
-
-                arguments.Add(argStorage);
-            }
-
             // RESOLVE FUNCTION
             Function? function;
             Storage? functionStorage;
             if (candidatesStorage?.Type.Tag is FunctionCandidates tagCandidates)
             {
-                function = tagCandidates.ResolveSingle(arguments.Select(x => x.Type).ToList());
+                function = tagCandidates.ResolveSingle(argumentsStorage.Select(x => x.Type).ToList());
                 functionStorage = function?.Parent.EmitGetForSymbol(function)!;
             }
             else if (candidatesStorage?.Type.Tag is Function tagFunction)
@@ -1766,7 +1729,7 @@ namespace Compiler.CodeGeneration
             if (function != null && function.IsGeneric)
             {
                 var aFunction = function;
-                var bType = arguments[0].Type; // TODO Implement correctly; needs to find actual generic type in list
+                var bType = argumentsStorage[0].Type; // TODO Implement correctly; needs to find actual generic type in list
                 function = function.FindConcretizedFunction(bType) ?? function.AllocateConcretizedRecord(bType);
 
                 if (function.PopulateConcretizedFunctionIfRequired())
@@ -1778,14 +1741,15 @@ namespace Compiler.CodeGeneration
 
             if (function == null)
             {
-                messages.Add(Message.NoMatchingFunctionCandidate, expression.FunctionExpression,
-                    $"({string.Join(", ", arguments.Select(x => x.Type))})",
+                messages.Add(Message.NoMatchingFunctionCandidate, expression,
+                    $"({string.Join(", ", argumentsStorage.Select(x => x.Type))})",
                     candidatesStorage?.Type.Tag
                 );
                 return null;
             }
 
             // RECTIFY ARGUMENTS
+            var arguments = new List<Storage>(argumentsStorage);
             if (function.CallingConvention == CallingConvention.ThisCall)
             {
                 Storage? thisStorage;
@@ -1795,7 +1759,7 @@ namespace Compiler.CodeGeneration
                     thisStorage = CurrentFunction.AllocateRegisterStorage(thisType);
                     CurrentFunction.Body.Emit(Opcode.New, thisStorage.Operand, thisType.ToOperand(artifact));
                 }
-                else if (expression.FunctionExpression is BinaryOperatorExpression { Operator: TokenType.Dot } boe)
+                else if (expression is CallExpression { FunctionExpression: BinaryOperatorExpression { Operator: TokenType.Dot } boe })
                     thisStorage = boe.Left.Accept(this);
                 else if (implicitContext != null && implicitContext.Type.TagRecord != null)
                     thisStorage = implicitContext;
@@ -1807,7 +1771,7 @@ namespace Compiler.CodeGeneration
 
                 if (thisStorage == null)
                 {
-                    messages.Add(Message.CannotResolveThis, expression.FunctionExpression);
+                    messages.Add(Message.CannotResolveThis, expression);
                     return null;
                 }
 
@@ -1888,7 +1852,7 @@ namespace Compiler.CodeGeneration
                     && !CobType.IsImplicitCastable(parameter.Type, argument.Type, argument.Operand.Value))
                         messages.Add(Message.IllegalAssignmentTypeMismatch, expression, argument.Type, parameter.Type);
                     
-                    argument = EmitCast(argument, parameter.Type, null);
+                    argument = EmitCast(argument, parameter.Type);
                 }
 
                 // TODO HACK Resolve function candidates to matching signature
@@ -1930,16 +1894,6 @@ namespace Compiler.CodeGeneration
                 else
                     throw new NotImplementedException();
                 // .Owner = null
-            }
-
-            // CLEANUP
-            functionStorage.Free();
-            for (int i = 0; i < arguments.Count; ++i)
-            {
-                if (IsDivingInitializer && arguments[i] == implicitContext)
-                    continue;
-
-                CurrentFunction.FreeStorage(arguments[i].Operand);
             }
 
             return retStorage;
@@ -2263,7 +2217,7 @@ namespace Compiler.CodeGeneration
             {
                 var storage2 = CurrentFunction.AllocateRegisterStorage(cobType);
                 CurrentFunction.Body.Emit(Opcode.Move, storage2.Operand, storage.Operand);
-                EnforceRefinment(storage2, cobType, expression);
+                EnforceRefinment(storage2, cobType);
                 storage2.Free();
             }
 
@@ -2511,8 +2465,7 @@ namespace Compiler.CodeGeneration
         }
 
         // NOTE Takes ownership of source; discards if needed
-        // TODO Expression? expression is super weird here
-        private Storage EmitCast(Storage source, CobType dstType, Expression? expression)
+        private Storage? EmitCast(Storage source, CobType dstType)
         {
             var srcType = source.Type;
             if (srcType == dstType)
@@ -2547,15 +2500,16 @@ namespace Compiler.CodeGeneration
             }
 
             // REFINEMENTS
-            EnforceRefinment(source, dstType, expression);
+            if (!EnforceRefinment(source, dstType))
+                return null;
 
             return new Storage(source, dstType);
         }
 
-        private void EnforceRefinment(Storage source, CobType dstType, Expression? expression)
+        private bool EnforceRefinment(Storage source, CobType dstType)
         {
             if (dstType.Refinement == null)
-                return;
+                return true;
 
             if (source.Operand.Type.IsImmediate() && IsCompileTimeResolvable(dstType.Refinement))
             {
@@ -2592,7 +2546,10 @@ namespace Compiler.CodeGeneration
                 var result = vm.ExecuteFunction(function);
 
                 if (result == null || result.IntValue != 1)
-                    messages.Add(Message.RefinementViolated, expression);
+                {
+                    messages.Add(Message.RefinementViolated, dstType.Refinement);
+                    return false;
+                }
             }
             else
             {
@@ -2614,6 +2571,8 @@ namespace Compiler.CodeGeneration
 
                 implicitContext = prevImplicitContext;
             }
+
+            return true;
         }
 
         public static bool IsSymbolVisible(IScopeContext? context, IScopeContext? parent, string? name)

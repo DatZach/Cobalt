@@ -1,5 +1,6 @@
 type string = Lens`u8;
-//type cstring    LPVOID;
+type char = uint;
+type cstring = uint;
 
 function string(int value, int radix = 10) This {
     if (value == 0)
