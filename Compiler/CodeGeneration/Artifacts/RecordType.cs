@@ -253,20 +253,21 @@ namespace Compiler.CodeGeneration.Artifacts
             return true;
         }
 
-        public Indexer AllocateIndexer(CobType keyType, CobType returnType)
+        public Indexer AllocateIndexer(CobType keyType, string keyIdent, CobType returnType)
         {
             var getter = AllocateFunction("$Indexer_$get", false);
-            getter.AllocateParameter("key", keyType, false, null);
+            getter.AllocateParameter(keyIdent, keyType, false, null);
             getter.AttachReturnType(returnType);
 
             var setter = AllocateFunction("$Indexer_$set", false);
-            setter.AllocateParameter("key", keyType, false, null);
+            setter.AllocateParameter(keyIdent, keyType, false, null);
             setter.AllocateParameter("value", returnType, false, null);
             setter.AttachReturnType(returnType);
 
             var indexer = new Indexer
             {
                 KeyType = keyType,
+                KeyIdent = keyIdent,
                 ReturnType = returnType,
                 Getter = getter,
                 Setter = setter
@@ -377,6 +378,7 @@ namespace Compiler.CodeGeneration.Artifacts
             {
                 Indexer = AllocateIndexer(
                     pendingSuperType.Indexer.KeyType.ToConcreteType(pendingBType),
+                    pendingSuperType.Indexer.KeyIdent,
                     pendingSuperType.Indexer.ReturnType.ToConcreteType(pendingBType)
                 );
             }
@@ -575,6 +577,8 @@ namespace Compiler.CodeGeneration.Artifacts
     internal sealed class Indexer
     {
         public CobType KeyType { get; init; }
+
+        public string KeyIdent { get; init; }
 
         public CobType ReturnType { get; init; }
 

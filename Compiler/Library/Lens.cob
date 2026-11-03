@@ -7,7 +7,7 @@ type Lens = (
     uint Length;
 
     // NOTE Implemented in Compiler as an intrinsic
-    index [uint] T! {
+    index [uint key] T! {
         get {
             if (key < 0 || key >= Length) return error.OutOfBounds;
             

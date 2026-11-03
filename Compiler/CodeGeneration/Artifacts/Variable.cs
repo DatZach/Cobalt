@@ -305,8 +305,14 @@ namespace Compiler.CodeGeneration.Artifacts
             {
                 var ident = typeName.Identifier!;
 
+                // TODO Probably should be resolved by the context itself
                 if (ident == "This" && context != null)
-                    ident = context.Name;
+                {
+                    if (context is Function && context.Parent is RecordType)
+                        ident = context.Parent.Name;
+                    else
+                        ident = context.Name;
+                }
 
                 if (ident == "any")
                     type = Any;

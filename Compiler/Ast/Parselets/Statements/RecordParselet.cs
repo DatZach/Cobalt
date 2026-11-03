@@ -80,15 +80,28 @@ namespace Compiler.Ast.Parselets.Statements
                 }
                 else if (parser.Match(TokenType.Indexer)) // Indexer
                 {
-                    parser.Take(TokenType.Indexer);
+                    var idxToken = parser.Take(TokenType.Indexer);
                     parser.Take(TokenType.LeftSquare);
                     var keyTypeName = parser.ParseTypeName();
+                    var keyIdentifier = parser.Take(TokenType.Identifier).Value;
                     parser.Take(TokenType.RightSquare);
                     var returnTypeName = parser.ParseTypeName();
 
                     ParseGetterSetters(parser, out var getterExpression, out var setterExpression);
 
-                    indexerDefinition = new IndexerDefinition(keyTypeName, returnTypeName, getterExpression, setterExpression);
+                    if (keyTypeName == null || returnTypeName == null)
+                    {
+                        parser.Messages.Add(Message.ExpectedTypeName, idxToken);
+                        continue;
+                    }
+
+                    indexerDefinition = new IndexerDefinition(
+                        keyTypeName,
+                        keyIdentifier,
+                        returnTypeName,
+                        getterExpression,
+                        setterExpression
+                    );
                 }
                 else // Field
                 {
@@ -98,7 +111,7 @@ namespace Compiler.Ast.Parselets.Statements
                     if (fieldType == null)
                     {
                         parser.Messages.Add(Message.ExpectedTypeName, parser.Peek());
-                        continue;
+                        break;
                     }
 
                     Token? fieldName;
@@ -111,7 +124,7 @@ namespace Compiler.Ast.Parselets.Statements
                     else if (type == eRecordType.Struct)
                     {
                         parser.Take(TokenType.Identifier); // Raise 'expected identifier' error
-                        continue;
+                        break;
                     }
                     else
                     {
@@ -154,15 +167,27 @@ namespace Compiler.Ast.Parselets.Statements
                     var keyword = parser.Take(TokenType.Identifier);
                     if (keyword.Value == "get")
                     {
-                        getterExpression = parser.MatchAndTakeToken(TokenType.FatArrow) != null
-                                         ? parser.ParseExpression()
-                                         : parser.ParseBlock(true);
+                        if (parser.MatchAndTakeToken(TokenType.FatArrow) != null)
+                            getterExpression = parser.ParseExpression();
+                        else if (parser.Match(TokenType.LeftBrace))
+                            getterExpression = parser.ParseBlock(true);
+                        else
+                        {
+                            parser.Take(TokenType.Semicolon);
+                            getterExpression = null;
+                        }
                     }
                     else if (keyword.Value == "set")
                     {
-                        setterExpression = parser.MatchAndTakeToken(TokenType.FatArrow) != null
-                                         ? parser.ParseExpression()
-                                         : parser.ParseBlock(true);
+                        if (parser.MatchAndTakeToken(TokenType.FatArrow) != null)
+                            setterExpression = parser.ParseExpression();
+                        else if (parser.Match(TokenType.LeftBrace))
+                            setterExpression = parser.ParseBlock(true);
+                        else
+                        {
+                            parser.Take(TokenType.Semicolon);
+                            setterExpression = null;
+                        }
                     }
                     else
                         parser.Messages.Add(Message.UnexpectedToken2, keyword, "get or set", keyword.Value);

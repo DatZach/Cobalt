@@ -31,7 +31,7 @@ namespace Compiler.Ast.Expressions
 
         public override string ToString()
         {
-            return $"{Left} {Operator.GetDescription()} {Right}";
+            return $"{Left}{Operator.GetDescription()}{Right}";
         }
     }
 }

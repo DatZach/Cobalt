@@ -1,4 +1,5 @@
-﻿using Compiler.Ast;
+﻿using System.Security.Cryptography.X509Certificates;
+using Compiler.Ast;
 using Compiler.Ast.Expressions;
 using Compiler.Ast.Expressions.Statements;
 using Compiler.Ast.Visitors;
@@ -456,9 +457,10 @@ namespace Compiler.CodeGeneration
                     if (expression.Indexer != null)
                     {
                         var keyType = ResolveTypeFromTypeName(expression.Indexer.KeyTypeName, expression);
+                        var keyIdent = expression.Indexer.KeyIdentifer;
                         var returnType = ResolveTypeFromTypeName(expression.Indexer.ReturnTypeName, expression);
 
-                        recordType.AllocateIndexer(keyType, returnType);
+                        recordType.AllocateIndexer(keyType, keyIdent, returnType);
                     }
                 }
 

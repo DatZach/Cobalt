@@ -11,7 +11,7 @@ type Array = {
     uint Capacity => data.Length;
     //Capacity: uint { get { return data.Length; } }
 
-    index [uint] T! {
+    index [uint key] T! {
         get { return data[key]; }
         set { data[key] = value; }
     }

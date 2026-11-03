@@ -807,14 +807,17 @@ namespace Compiler.CodeGeneration
 
             if (rhs != null)
             {
-                if (CurrentFunction.ReturnType == eCobType.None)
-                    CurrentFunction.ReturnType = rhs.Type; // TODO Is this even permitted by the syntax?
-                else if (!CobType.IsExplicitCastable(CurrentFunction.ReturnType, rhs.Type, rhs.Operand.Value)
-                     &&  !CobType.IsConstCastable(CurrentFunction.ReturnType, rhs.Type))
-                    messages.Add(Message.ReturnTypeMismatch, expression, CurrentFunction.ReturnType, rhs.Type);
+                var dstType = CurrentFunction.ReturnType;
+                var srcType = rhs.Type;
 
-                // TODO Might clobber rhs storage...
-                EnforceRefinment(rhs, CurrentFunction.ReturnType); // TODO Should be implemented in IsExplicitCastable?
+                if (dstType != srcType)
+                {
+                    if (!CobType.IsExplicitCastable(CurrentFunction.ReturnType, rhs.Type, rhs.Operand.Value)
+                    &&  !CobType.IsConstCastable(CurrentFunction.ReturnType, rhs.Type))
+                        messages.Add(Message.ReturnTypeMismatch, expression, CurrentFunction.ReturnType, rhs.Type);
+                    else
+                        rhs = EmitCast(rhs, dstType);
+                }
 
                 CurrentFunction.Body.Emit(Opcode.Return, rhs.Operand);
                 rhs.Free();
@@ -2465,7 +2468,7 @@ namespace Compiler.CodeGeneration
         }
 
         // NOTE Takes ownership of source; discards if needed
-        private Storage? EmitCast(Storage source, CobType dstType)
+        private Storage EmitCast(Storage source, CobType dstType)
         {
             var srcType = source.Type;
             if (srcType == dstType)
@@ -2501,7 +2504,7 @@ namespace Compiler.CodeGeneration
 
             // REFINEMENTS
             if (!EnforceRefinment(source, dstType))
-                return null;
+                return source;
 
             return new Storage(source, dstType);
         }
@@ -2534,7 +2537,10 @@ namespace Compiler.CodeGeneration
                 implicitContext = prevImplicitContext;
 
                 if (evalStorage == null || evalStorage.Type != eCobType.Boolean)
+                {
                     messages.Add(Message.RefinementMustResolveToBoolean, dstType.Refinement);
+                    return false;
+                }
 
                 function.ReturnType = evalStorage.Type;
                 CurrentFunction.Body.Emit(Opcode.Return, evalStorage.Operand);

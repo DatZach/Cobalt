@@ -93,6 +93,7 @@ namespace Compiler.Ast.Expressions.Statements
 
     internal sealed record IndexerDefinition(
         TypeName KeyTypeName,
+        string KeyIdentifer,
         TypeName ReturnTypeName,
         Expression? GetterExpression,
         Expression? SetterExpression
