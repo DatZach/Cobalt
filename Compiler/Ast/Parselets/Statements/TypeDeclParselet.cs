@@ -9,26 +9,44 @@ namespace Compiler.Ast.Parselets.Statements
         public Expression Parse(Parser parser, Token token)
         {
             var name = parser.Take(TokenType.Identifier);
-            parser.Take(TokenType.Assign);
-            var typeName = parser.ParseTypeName();
-            if (typeName == null)
-            {
-                parser.Messages.Add(Message.ExpectedTypeName, token);
-                typeName = TypeName.Any;
-            }
 
-            Expression? refinementExpression;
-            if (parser.MatchAndTakeToken(TokenType.Colon) != null)
+            if (parser.Match(TokenType.Assign))
             {
-                if (parser.Match(TokenType.LeftBrace))
-                    refinementExpression = ParseEnumExpression(parser);
+                parser.Take(TokenType.Assign);
+                var typeName = parser.ParseTypeName();
+                if (typeName == null)
+                {
+                    parser.Messages.Add(Message.ExpectedTypeName, token);
+                    typeName = TypeName.Any;
+                }
+
+                Expression? refinementExpression;
+                if (parser.MatchAndTakeToken(TokenType.Colon) != null)
+                {
+                    if (parser.Match(TokenType.LeftBrace))
+                        refinementExpression = ParseEnumExpression(parser);
+                    else
+                        refinementExpression = parser.ParseExpression();
+                }
                 else
-                    refinementExpression = parser.ParseExpression();
+                    refinementExpression = null;
+
+                return new TypeDeclStatement(token, name.Value, typeName, refinementExpression);
+            }
+            else if (parser.Match(TokenType.Mixin))
+            {
+                parser.Take(TokenType.Mixin);
+                var traitTypeName = parser.ParseTypeName();
+                var record = parser.Match(TokenType.LeftBrace)
+                           ? (RecordStatement)RecordParselet.Instance.Parse(parser, parser.Take())
+                           : null;
+                return new MixinDeclStatement(token, name.Value, null, null, traitTypeName, record);
             }
             else
-                refinementExpression = null;
-
-            return new TypeDeclStatement(token, name.Value, typeName, refinementExpression);
+            {
+                parser.Messages.Add(Message.UnexpectedToken2, token, "'=' or 'mixin'", parser.Take());
+                return new EmptyExpression(token);
+            }
         }
 
         private static Expression ParseEnumExpression(Parser parser)

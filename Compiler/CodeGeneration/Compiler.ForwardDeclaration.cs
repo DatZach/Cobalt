@@ -1,5 +1,4 @@
-﻿using System.Security.Cryptography.X509Certificates;
-using Compiler.Ast;
+﻿using Compiler.Ast;
 using Compiler.Ast.Expressions;
 using Compiler.Ast.Expressions.Statements;
 using Compiler.Ast.Visitors;
@@ -418,8 +417,14 @@ namespace Compiler.CodeGeneration
             }
             else if (phase > DeclPhase.Types)
             {
-                var recordType = CurrentModule.FindRecordType(expression.Name)!;
-                contextStack.Push(recordType);
+                RecordType recordType;
+                if (!HACK_ContextAlreadyDived)
+                {
+                    recordType = CurrentModule.FindRecordType(expression.Name)!;
+                    contextStack.Push(recordType);
+                }
+                else
+                    recordType = (RecordType)CurrentContext;
 
                 for (var i = 0; i < expression.Constants.Count; ++i)
                     expression.Constants[i].Accept(this);
@@ -493,7 +498,8 @@ namespace Compiler.CodeGeneration
                     recordType.AllocateGlobal("SIZE", CobType.UInt, false).Value = size;
                 }
 
-                contextStack.Pop();
+                if (!HACK_ContextAlreadyDived)
+                    contextStack.Pop();
             }
 
             return Unit.Value;
@@ -646,28 +652,55 @@ namespace Compiler.CodeGeneration
 
         public Unit Visit(MixinDeclStatement expression)
         {
-            if (phase != DeclPhase.Functions)
+            // TODO Technically types should be able to be mixed in too
+            if (phase < DeclPhase.Functions)
                 return Unit.Value;
 
-            var context = CurrentModule.FindSymbol(expression.TargetTypeName) as IScopeContext;
-            if (context != null)
+            var cobType = CurrentModule.FindSymbol(expression.TargetTypeName) as CobType;
+            if (cobType == null || cobType.TagRecord == null)
             {
-                contextStack.Push(context);
-                expression.Function?.Accept(this);
-
-                if (expression.Field != null)
-                {
-                    var fieldType = ResolveTypeFromTypeName(expression.Field.TypeName, expression);
-                    if (context is RecordType recordType)
-                        recordType.AllocateField(expression.Field.Name, fieldType, expression.Field.IsFinal, expression.Field.GetterExpression != null, expression.Field.SetterExpression != null);
-                    else
-                        messages.Add(Message.CannotDeclareSymbolHere, expression);
-                }
-                
-                contextStack.Pop();
-            }
-            else
                 messages.Add(Message.UndeclaredIdentifier, expression, expression.TargetTypeName);
+                return Unit.Value;
+            }
+
+            var context = cobType.TagRecord;
+            contextStack.Push(context);
+            var prevHACK_ContextAlreadyDived = HACK_ContextAlreadyDived;
+            HACK_ContextAlreadyDived = true;
+
+            if (expression.Function != null)
+                expression.Function.Accept(this);
+            else if (expression.Field != null)
+            {
+                var fieldType = ResolveTypeFromTypeName(expression.Field.TypeName, expression);
+                if (context is RecordType recordType)
+                    recordType.AllocateField(expression.Field.Name, fieldType, expression.Field.IsFinal, expression.Field.GetterExpression != null, expression.Field.SetterExpression != null);
+                else
+                    messages.Add(Message.CannotDeclareSymbolHere, expression);
+            }
+            else if (expression.TraitTypeName != null)
+            {
+                if (context is not RecordType recordType)
+                {
+                    messages.Add(Message.CannotDeclareSymbolHere, expression);
+                    return Unit.Value;
+                }
+
+                var traitType = ResolveTypeFromTypeName(expression.TraitTypeName, expression);
+                if (traitType.TagRecord == null)
+                {
+                    messages.Add(Message.CannotMixinNonTraitType, expression, expression.TraitTypeName);
+                    return Unit.Value;
+                }
+
+                recordType.AttachTrait(traitType.TagRecord);
+                expression.Record?.Accept(this);
+            }
+            else if (expression.Record != null)
+                expression.Record.Accept(this);
+
+            HACK_ContextAlreadyDived = prevHACK_ContextAlreadyDived;
+            contextStack.Pop();
 
             return Unit.Value;
         }
@@ -843,6 +876,8 @@ namespace Compiler.CodeGeneration
             return Unit.Value;
         }
 
+        // TODO Storing Tokens on TypeName itself will release `expression` from having to be passed here
+        //      which will allow for cleaner API
         private CobType ResolveTypeFromTypeName(TypeName? typeName, Expression expression)
         {
             var result = CobType.FromTypeName(typeName, CurrentContext);

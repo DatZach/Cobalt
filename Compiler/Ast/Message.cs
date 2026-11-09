@@ -55,7 +55,13 @@ namespace Compiler.Ast
             if (IsMessageProhibited(definition, startToken))
                 return;
 
-            messages.Add(new Message(definition, startToken, endToken, content));
+            var message = new Message(definition, startToken, endToken, content);
+
+            if (HasErrors && message.Definition.Type == MessageType.Error
+            &&  messages.Count > 0 && messages[^1] == message)
+                throw new FatalParserException("Duplicate error encountered");
+
+            messages.Add(message);
             HasErrors = HasErrors || definition.Type == MessageType.Error;
         }
 
@@ -220,7 +226,9 @@ namespace Compiler.Ast
         string Content
     )
     {
-        public static Def UncaughtException { get; } = new(MessageType.Error, "Fatal: {0}\n{1}");
+        public static Def UncaughtException0 { get; } = new(MessageType.Error, "Fatal: {0}");
+
+        public static Def UncaughtException1 { get; } = new(MessageType.Error, "Fatal: {0}\n{1}");
 
         public static Def UnexpectedToken0 { get; } = new(MessageType.Error, "Unexpected token");
 
@@ -334,7 +342,7 @@ namespace Compiler.Ast
 
         public static Def TraitNotFullyImplemented { get; } = new(MessageType.Error, "Trait '{0}' is not fully implemented");
 
-        public static Def NotAllFieldsInitialized { get; } = new(MessageType.Error, "Not all fields assigned to by constructor and initializer");
+        public static Def NotAllFieldsInitialized { get; } = new(MessageType.Error, "Not all fields assigned to by constructor and initializer.\nUninitialized: {0}");
 
         public static Def IllegalLinearTypeLifetimeExpiration { get; } = new(MessageType.Error, "Lifetime of '{0}' unexpectedly terminated, must call destructor or pass ownership");
 

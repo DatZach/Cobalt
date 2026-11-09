@@ -29,7 +29,7 @@ namespace Compiler.Ast.Parselets.Statements
                 field = new FieldDefinition(fieldName.Value, fieldTypeName, false, getterExpression, setterExpression);
             }
 
-            return new MixinDeclStatement(token, targetTypeName.Value, function, field);
+            return new MixinDeclStatement(token, targetTypeName.Value, function, field, null, null);
         }
     }
 }

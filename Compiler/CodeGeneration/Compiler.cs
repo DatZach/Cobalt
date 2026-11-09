@@ -5,6 +5,7 @@ using Compiler.Ast.Visitors;
 using Compiler.CodeGeneration.Artifacts;
 using Compiler.Interpreter;
 using Compiler.Lexer;
+using Compiler.Utility;
 using System.Diagnostics;
 
 namespace Compiler.CodeGeneration
@@ -152,9 +153,10 @@ namespace Compiler.CodeGeneration
             return null;
         }
 
+        private bool HACK_ContextAlreadyDived;
         public Storage? Visit(RecordStatement expression)
         {
-            var structType = CurrentModule.FindRecordType(expression.Name)!;
+            var structType = HACK_ContextAlreadyDived ? (RecordType)CurrentContext : CurrentModule.FindRecordType(expression.Name)!;
             if (structType.IsGeneric)
             {
                 genericTypeAstReferences.Add(new GenericTypeAstReference(
@@ -272,8 +274,10 @@ namespace Compiler.CodeGeneration
 
             foreach (var x in mutations) function.MutatedSymbols.Add(x);
 
-            if (expression.Name != null && !recordType.IsFullyInitialized(mutations))
-                messages.Add(Message.NotAllFieldsInitialized, expression);
+            IReadOnlyList<Field> uninitializedFields;
+            if (expression.Name != null
+            &&  (uninitializedFields = recordType.ResolveUninitializedFields(mutations)) != null)
+                messages.Add(Message.NotAllFieldsInitialized, expression, string.Join(", ", uninitializedFields.Select(x => x.Name)));
 
             function.Body.Emit(Opcode.Return, Operand.This); // TODO Error if not all paths return
 
@@ -390,12 +394,22 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(MixinDeclStatement expression)
         {
-            var context = CurrentModule.FindSymbol(expression.TargetTypeName) as IScopeContext;
+            var cobType = CurrentModule.FindSymbol(expression.TargetTypeName) as CobType;
+            if (cobType == null || cobType.TagRecord == null)
+            {
+                messages.Add(Message.UndeclaredIdentifier, expression, expression.TargetTypeName);
+                return null;
+            }
+
+            var context = cobType.TagRecord;
+
             contextStack.Push(context);
+            var prevHACK_ContextAlreadyDived = HACK_ContextAlreadyDived;
+            HACK_ContextAlreadyDived = true;
 
-            expression.Function?.Accept(this);
-
-            if (expression.Field != null)
+            if (expression.Function != null)
+                expression.Function.Accept(this);
+            else if (expression.Field != null)
             {
                 Field? field;
                 if (context is RecordType recordType)
@@ -425,7 +439,14 @@ namespace Compiler.CodeGeneration
                     contextStack.Pop();
                 }
             }
+            else if (expression.TraitTypeName != null)
+            {
+                expression.Record?.Accept(this);
+            }
+            else if (expression.Record != null)
+                expression.Record.Accept(this);
 
+            HACK_ContextAlreadyDived = prevHACK_ContextAlreadyDived;
             contextStack.Pop();
 
             return null;
@@ -2210,8 +2231,9 @@ namespace Compiler.CodeGeneration
             }
 
             // VALIDATE ALL FIELDS INITIALIZED
-            if (!recordType.IsFullyInitialized(mutations))
-                messages.Add(Message.NotAllFieldsInitialized, expression);
+            IReadOnlyList<Field> uninitializedFields;
+            if ((uninitializedFields = recordType.ResolveUninitializedFields(mutations)) != null)
+                messages.Add(Message.NotAllFieldsInitialized, expression, string.Join(", ", uninitializedFields.Select(x => x.Name)));
 
             mutationStack.Pop();
 

@@ -236,8 +236,9 @@ namespace Compiler.CodeGeneration.Artifacts
             return fields.ElementAtOrDefault(index);
         }
 
-        public bool IsFullyInitialized(HashSet<ISymbol> symbols)
+        public IReadOnlyList<Field> ResolveUninitializedFields(HashSet<ISymbol> symbols)
         {
+            List<Field> uninitializedFields = null;
             foreach (var field in fields)
             {
                 if (field.Name.StartsWith('\''))
@@ -247,10 +248,13 @@ namespace Compiler.CodeGeneration.Artifacts
                     continue;
 
                 if (!symbols.Contains(field))
-                    return false;
+                {
+                    uninitializedFields ??= new List<Field>(4);
+                    uninitializedFields.Add(field);
+                }
             }
 
-            return true;
+            return uninitializedFields;
         }
 
         public Indexer AllocateIndexer(CobType keyType, string keyIdent, CobType returnType)

@@ -168,7 +168,10 @@ namespace Compiler.Ast.Parselets.Statements
                     if (keyword.Value == "get")
                     {
                         if (parser.MatchAndTakeToken(TokenType.FatArrow) != null)
+                        {
                             getterExpression = parser.ParseExpression();
+                            parser.Take(TokenType.Semicolon);
+                        }
                         else if (parser.Match(TokenType.LeftBrace))
                             getterExpression = parser.ParseBlock(true);
                         else
@@ -180,7 +183,10 @@ namespace Compiler.Ast.Parselets.Statements
                     else if (keyword.Value == "set")
                     {
                         if (parser.MatchAndTakeToken(TokenType.FatArrow) != null)
+                        {
                             setterExpression = parser.ParseExpression();
+                            parser.Take(TokenType.Semicolon);
+                        }
                         else if (parser.Match(TokenType.LeftBrace))
                             setterExpression = parser.ParseBlock(true);
                         else

@@ -12,17 +12,25 @@ namespace Compiler.Ast.Expressions.Statements
 
         public FieldDefinition? Field { get; }
 
+        public TypeName? TraitTypeName { get;  }
+
+        public RecordStatement? Record { get; }
+
         public MixinDeclStatement(
             Token token,
             string targetTypeName,
             FunctionDeclStatement? function,
-            FieldDefinition? field
+            FieldDefinition? field,
+            TypeName? traitTypeName,
+            RecordStatement? record
         )
             : base(token)
         {
             TargetTypeName = targetTypeName;
             Function = function;
             Field = field;
+            TraitTypeName = traitTypeName;
+            Record = record;
         }
 
         [DebuggerStepThrough]

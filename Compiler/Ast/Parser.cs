@@ -358,4 +358,13 @@ namespace Compiler.Ast
         public static long TotalMilliseconds => stopwatch.ElapsedMilliseconds;
         private static readonly Stopwatch stopwatch = new ();
     }
+
+    internal sealed class FatalParserException : Exception
+    {
+        public FatalParserException(string message)
+            : base(message)
+        {
+
+        }
+    }
 }
