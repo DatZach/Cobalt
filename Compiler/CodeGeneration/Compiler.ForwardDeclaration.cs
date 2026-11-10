@@ -693,7 +693,9 @@ namespace Compiler.CodeGeneration
                     return Unit.Value;
                 }
 
-                recordType.AttachTrait(traitType.TagRecord);
+                if (recordType.FindTrait(traitType.TagRecord.Name) == null)
+                    recordType.AttachTrait(traitType.TagRecord);
+
                 expression.Record?.Accept(this);
             }
             else if (expression.Record != null)

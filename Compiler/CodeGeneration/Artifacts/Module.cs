@@ -103,6 +103,9 @@ namespace Compiler.CodeGeneration.Artifacts
             distinctTypes.Add(subType);
             compiler.Types.Add(subType);
 
+            if (superType.TagRecord != null && superType.TagRecord.IsAnonymous && superType.TagRecord.Alias == null)
+                superType.TagRecord.Alias = name + '\'';
+
             return subType;
         }
 

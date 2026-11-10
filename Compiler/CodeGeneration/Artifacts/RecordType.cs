@@ -3,16 +3,20 @@ using System.Diagnostics;
 
 namespace Compiler.CodeGeneration.Artifacts
 {
-    [DebuggerDisplay("Record {Type} '{Name}'")]
+    [DebuggerDisplay("Record {Type} '{Alias ?? Name}'")]
     internal sealed class RecordType : IScopeContext, ISymbol
     {
         public string Name { get; }
+
+        public string? Alias { get; set; }
 
         public eRecordType Type { get; }
 
         public IScopeContext Parent { get; }
 
         public Indexer? Indexer { get; private set; }
+
+        public bool IsAnonymous => Name.StartsWith('$');
 
         public bool IsGeneric => generics.Count > 0;
 
@@ -83,6 +87,21 @@ namespace Compiler.CodeGeneration.Artifacts
         public bool HasTrait(RecordType? traitType)
         {
             return traitType != null && traitType.IsTrait && traits.Contains(traitType);
+        }
+
+        public IReadOnlyList<RecordType>? ResolveIncompleteTraits()
+        {
+            List<RecordType>? incompleteTraits = null;
+            foreach (var traitType in traits)
+            {
+                if (!IsTraitSignatureMatch(traitType))
+                {
+                    incompleteTraits ??= new List<RecordType>(4);
+                    incompleteTraits.Add(traitType);
+                }
+            }
+
+            return incompleteTraits;
         }
 
         public bool IsTraitSignatureMatch(RecordType? traitType)
@@ -329,6 +348,7 @@ namespace Compiler.CodeGeneration.Artifacts
             // HACK Really should be able to do this in a single pass when algebraic type resolution is implemented
             concreteRecordType.pendingSuperType = this;
             concreteRecordType.pendingBType = bType;
+            concreteRecordType.Alias = $"{Alias}`{bType}";
 
             return concreteRecordType;
         }
@@ -364,6 +384,9 @@ namespace Compiler.CodeGeneration.Artifacts
 
             foreach (var x in pendingSuperType.functions)
             {
+                if (x.Name.Contains('$'))
+                    continue;
+
                 var returnType = x.ReturnType.ToConcreteType(pendingBType);
 
                 var function = AllocateFunction(x.Name, x.IsSignature);
@@ -569,7 +592,7 @@ namespace Compiler.CodeGeneration.Artifacts
             return true;
         }
 
-        public override string ToString() => Name;
+        public override string ToString() => Alias ?? Name;
     }
 
     internal enum eRecordType

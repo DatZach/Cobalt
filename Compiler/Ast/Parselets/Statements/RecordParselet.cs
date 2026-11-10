@@ -139,7 +139,7 @@ namespace Compiler.Ast.Parselets.Statements
                 parser.MatchAndTakeToken(TokenType.Semicolon);
             }
 
-            var name = $"AnonymousRecord'{uniqueId++}";
+            var name = $"$AnonymousRecord'{uniqueId++}";
 
             return new RecordStatement(
                 token, type, name,
@@ -176,8 +176,8 @@ namespace Compiler.Ast.Parselets.Statements
                             getterExpression = parser.ParseBlock(true);
                         else
                         {
+                            getterExpression = new EmptyExpression(keyword);
                             parser.Take(TokenType.Semicolon);
-                            getterExpression = null;
                         }
                     }
                     else if (keyword.Value == "set")
@@ -191,8 +191,8 @@ namespace Compiler.Ast.Parselets.Statements
                             setterExpression = parser.ParseBlock(true);
                         else
                         {
+                            setterExpression = new EmptyExpression(keyword);
                             parser.Take(TokenType.Semicolon);
-                            setterExpression = null;
                         }
                     }
                     else

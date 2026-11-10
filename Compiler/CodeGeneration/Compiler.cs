@@ -5,7 +5,6 @@ using Compiler.Ast.Visitors;
 using Compiler.CodeGeneration.Artifacts;
 using Compiler.Interpreter;
 using Compiler.Lexer;
-using Compiler.Utility;
 using System.Diagnostics;
 
 namespace Compiler.CodeGeneration
@@ -238,15 +237,6 @@ namespace Compiler.CodeGeneration
                 }
 
                 contextStack.Pop();
-
-                foreach (var mixin in expression.Mixins)
-                {
-                    var traitType = CobType.FromTypeName(mixin, CurrentContext);
-                    if (traitType == null)
-                        messages.Add(Message.IllegalTypeName, expression, mixin);
-                    else if (!structType.IsTraitSignatureMatch(traitType.TagRecord))
-                        messages.Add(Message.TraitNotFullyImplemented, expression, mixin);
-                }
             }
 
             return null;
@@ -441,6 +431,14 @@ namespace Compiler.CodeGeneration
             }
             else if (expression.TraitTypeName != null)
             {
+                var traitType = CobType.FromTypeName(expression.TraitTypeName, CurrentContext);
+                if (traitType != null && traitType.TagRecord != null)
+                {
+                    var superType = traitType.TagRecord.HACK_PendingSuperType;
+                    if (traitType.TagRecord.PopulateConcretizedRecordIfRequired())
+                        concreteTypeAstReferences.Add(new ConcreteTypeAstReference(superType, traitType.TagRecord));
+                }
+
                 expression.Record?.Accept(this);
             }
             else if (expression.Record != null)
@@ -2694,13 +2692,20 @@ namespace Compiler.CodeGeneration
                 }
 
 
-                // PASS 3 - Const Correctness
+                // PASS 3 - Const Correctness, Mixin Correctness
                 foreach (var x in compiler.lateConstChecks)
                 {
                     if (x.Item2.MutatedSymbols.Count > 0)
                         messages.Add(Message.ConstTypeProhibitsCallsWithSideEffects, x.Item1);
                 }
-                
+
+                foreach (var recordType in compiler.RecordTypes)
+                {
+                    var incompleteTraits = recordType.ResolveIncompleteTraits();
+                    if (incompleteTraits != null)
+                        messages.Add(Message.TraitNotFullyImplemented, Token.EndOfStream, string.Join(", ", incompleteTraits));
+                }
+
                 return artifact;
             }
             finally
