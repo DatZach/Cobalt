@@ -360,6 +360,14 @@ namespace Compiler.Ast
 
         public static Def ExpectedValue { get; } = new(MessageType.Error, "Expected value to be resolved at this time");
 
+        public static Def UnsupportedArchitecture { get; } = new(MessageType.Error, "Unsupported architecture target '{0}'");
+
+        public static Def IllegalOpcode { get; } = new(MessageType.Error, "Illegal opcode '{0}'\n{1}");
+
+        public static Def IllegalOperand { get; } = new(MessageType.Error, "Illegal operand '{0}'\n{1}");
+
+        public static Def IllegalLabel { get; } = new(MessageType.Error, "Label not defined '{0}'\n{1}");
+
         public sealed record Def(
             MessageType Type,
             string Content,

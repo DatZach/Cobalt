@@ -11,26 +11,23 @@ type Lens = (
         get {
             if (key < 0 || key >= Length) return error.OutOfBounds;
             
-            machine cobil "Lens_Get";
-            // machine cobil "
-            //     GetField    r1, a0, 0
-            //     Add         r1, r1 a1
-            //     Peek        r0, r1, 1
-            //     Return      r0
-            // "
+            machine cvm "
+                getfield    r1, a0, 0
+                add         r1, r1, a1
+                peek        r0, r1, 1
+                return      r0
+            ";
         }
 
         set {
             if (key < 0 || key >= Length) return error.OutOfBounds;
             
-            machine cobil "Lens_Set";
-
-            // machine cobil "
-            //     GetField    r1, a0, 0
-            //     Add         r1, r1 a1
-            //     Poke        r1, 1, a2
-            //     Return
-            // "
+            machine cvm "
+                getfield    r1, a0, 0
+                add         r1, r1, a1
+                poke        r1, 1, a2
+                return      0
+            ";
         }
     }
 

@@ -6,6 +6,7 @@ using Compiler.CodeGeneration.Artifacts;
 using Compiler.Interpreter;
 using Compiler.Lexer;
 using System.Diagnostics;
+using Compiler.CodeGeneration.Architectures;
 
 namespace Compiler.CodeGeneration
 {
@@ -849,21 +850,106 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(MachineStatement expression)
         {
-            if (expression.Target == "cobil")
+            if (!ArtifactFactory.IsArchitectureSupported(expression.Target))
             {
-                if (expression.Source == "Lens_Get")
+                messages.Add(Message.UnsupportedArchitecture, expression, expression.Target);
+                return null;
+            }
+
+            if (expression.Target == "cvm")
+            {
+                var labels = new Dictionary<string, Label>();
+                foreach (var line in expression.Source.Split('\n'))
                 {
-                    CurrentFunction.Body.Emit(Opcode.GetField, Operand._Register(1), Operand.This, Operand.ImmediateUnsigned(0));
-                    CurrentFunction.Body.Emit(Opcode.Add, Operand._Register(1), Operand._Register(1), Operand.Argument(1));
-                    CurrentFunction.Body.Emit(Opcode.Peek, Operand._Register(0), Operand._Register(1), Operand.ImmediateUnsigned(1));
-                    CurrentFunction.Body.Emit(Opcode.Return, Operand._Register(0));
-                }
-                else if (expression.Source == "Lens_Set")
-                {
-                    CurrentFunction.Body.Emit(Opcode.GetField, Operand._Register(1), Operand.This, Operand.ImmediateUnsigned(0));
-                    CurrentFunction.Body.Emit(Opcode.Add, Operand._Register(1), Operand._Register(1), Operand.Argument(1));
-                    CurrentFunction.Body.Emit(Opcode.Poke, Operand._Register(1), Operand.ImmediateUnsigned(1), Operand.Argument(2));
-                    CurrentFunction.Body.Emit(Opcode.Return, Operand.ImmediateUnsigned(0));
+                    var parts = line.Trim().Split(new [] { ' ', '\t', ',' }, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length <= 0)
+                        continue;
+
+                    if (parts[0][0] == '.' && parts[0][^1] == ':')
+                    {
+                        var label = CurrentFunction.Body.AllocateLabel();
+                        labels[parts[0].Substring(1, parts[0].Length - 2)] = label;
+                        label.Mark();
+                        continue;
+                    }
+                    
+                    if (!Enum.TryParse<Opcode>(parts[0], true, out var opcode))
+                    {
+                        messages.Add(Message.IllegalOpcode, expression, parts[0], line);
+                        continue;
+                    }
+
+                    Operand? a = null, b = null, c = null;
+                    for (int i = 1; i < parts.Length; ++i)
+                    {
+                        Operand x;
+
+                        var part = parts[i];
+                        if (part.Length <= 0)
+                        {
+                            messages.Add(Message.IllegalOperand, expression, part, line);
+                            continue;
+                        }
+
+                        int intValue, idxDelim;
+                        if (part[0] == 'r' && int.TryParse(part[1..], out intValue))
+                            x = Operand._Register(intValue);
+                        else if (part[0] == 'a' && int.TryParse(part[1..], out intValue))
+                            x = Operand.Argument(intValue);
+                        else if (part[0] == 'l' && int.TryParse(part[1..], out intValue))
+                            x = Operand.Local(intValue);
+                        else if (part[0] == 'g' && int.TryParse(part[1..], out intValue))
+                            x = Operand.Global(intValue);
+                        else if (part[0] == '.')
+                        {
+                            if (!labels.TryGetValue(part[1..], out var label))
+                            {
+                                messages.Add(Message.IllegalLabel, expression, part[1..], line);
+                                continue;
+                            }
+
+                            x = Operand.Label(label.Index);
+                        }
+                        else if (int.TryParse(part, out intValue))
+                            x = Operand.Immediate(intValue, CobType.Int);
+                        else if ((idxDelim = part.IndexOf('_')) != -1 && int.TryParse(part[..idxDelim], out intValue))
+                        {
+                            var dstType = CobType.FromTypeName(TypeName.FromIdentifier(part[(idxDelim + 1)..]), CurrentContext);
+                            x = Operand.Immediate(intValue, dstType);
+                        }
+                        else
+                        {
+                            x = null!;
+                            foreach (var ctx in contextStack)
+                            {
+                                var symbol = ctx.FindSymbol(part);
+                                if (symbol == null)
+                                    continue;
+
+                                var storage = ctx.EmitGetForSymbol(symbol);
+                                x = storage!.Operand;
+                                storage.Free();
+                                break;
+                            }
+
+                            if (x == null!)
+                            {
+                                messages.Add(Message.IllegalOperand, expression, part, line);
+                                continue;
+                            }
+                        }
+
+                        if (a == null)
+                            a = x;
+                        else if (b == null)
+                            b = x;
+                        else if (c == null)
+                            c = x;
+                        else
+                            messages.Add(Message.IllegalOperand, expression, part, line);
+                    }
+                    
+                    CurrentFunction.Body.Emit(opcode, a!, b!, c!);
                 }
             }
 
@@ -1987,27 +2073,23 @@ namespace Compiler.CodeGeneration
             );
 
             contextStack.Push(function);
-            var evalStorage = expression.Expression.Accept(this);
-            if (evalStorage == null || evalStorage.Type == eCobType.None)
-                messages.Add(Message.AotCannotUseVoid, expression);
 
-            function.ReturnType = evalStorage.Type;
-            CurrentFunction.Body.Emit(Opcode.Return, evalStorage.Operand);
-            evalStorage.Free();
+            var evalStorage = expression.Expression.Accept(this);
+            if (evalStorage != null)
+            {
+                function.ReturnType = evalStorage.Type;
+                CurrentFunction.Body.Emit(Opcode.Return, evalStorage.Operand);
+                evalStorage.Free();
+            }
 
             contextStack.Pop();
 
             using var vm = new VirtualMachine(artifact);
             var result = vm.ExecuteFunction(function);
 
-            var reg = CurrentFunction.AllocateRegisterStorage(function.ReturnType);
-            CurrentFunction.Body.Emit(
-                Opcode.Move,
-                reg.Operand,
-                Operand.ImmediateSigned(result.IntValue) // TODO Not right
-            );
-            
-            return evalStorage;
+            return result != null
+                 ? new Storage(function.ReturnType, Operand.Immediate(result.IntValue, function.ReturnType))
+                 : null;
         }
 
         public Storage? Visit(LensExpression expression)
