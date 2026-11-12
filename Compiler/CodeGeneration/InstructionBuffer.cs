@@ -51,11 +51,34 @@
             });
         }
 
+        public void Emit(Opcode opcode, Opflag flags, Operand oprA, Operand oprB)
+        {
+            instructions.Add(new Instruction
+            {
+                Opcode = opcode,
+                Flags = flags,
+                A = oprA,
+                B = oprB
+            });
+        }
+
         public void Emit(Opcode opcode, Operand oprA, Operand oprB, Operand oprC)
         {
             instructions.Add(new Instruction
             {
                 Opcode = opcode,
+                A = oprA,
+                B = oprB,
+                C = oprC
+            });
+        }
+
+        public void Emit(Opcode opcode, Opflag flags, Operand oprA, Operand oprB, Operand oprC)
+        {
+            instructions.Add(new Instruction
+            {
+                Opcode = opcode,
+                Flags = flags,
                 A = oprA,
                 B = oprB,
                 C = oprC

@@ -39,6 +39,7 @@ namespace Compiler.Interpreter
                 for (; ctx.IP < instructions.Count; ++ctx.IP)
                 {
                     var inst = instructions[ctx.IP];
+                    var isChecked = (inst.Flags & Opflag.SuppressOverflow) == 0;
                     switch (inst.Opcode)
                     {
                         case Opcode.None:
@@ -190,7 +191,7 @@ namespace Compiler.Interpreter
                         {
                             var b = ReadOperand(inst.B!);
                             var c = ReadOperand(inst.C!);
-                            var a = SaturateTruncate(b.IntValue >> (int)c.IntValue, b.Type, c.Type, true);
+                            var a = SaturateTruncate(b.IntValue >> (int)c.IntValue, b.Type, c.Type, isChecked);
                             WriteOperand(inst.A!, a);
                             break;
                         }
@@ -198,7 +199,7 @@ namespace Compiler.Interpreter
                         {
                             var b = ReadOperand(inst.B!);
                             var c = ReadOperand(inst.C!);
-                            var a = SaturateTruncate(b.IntValue << (int)c.IntValue, b.Type, c.Type, true);
+                            var a = SaturateTruncate(b.IntValue << (int)c.IntValue, b.Type, c.Type, isChecked);
                             WriteOperand(inst.A!, a);
                             break;
                         }
@@ -216,7 +217,7 @@ namespace Compiler.Interpreter
                         {
                             var b = ReadOperand(inst.B!);
                             var c = ReadOperand(inst.C!);
-                            var a = SaturateTruncate(b.IntValue & c.IntValue, b.Type, c.Type, true);
+                            var a = SaturateTruncate(b.IntValue & c.IntValue, b.Type, c.Type, isChecked);
                             WriteOperand(inst.A!, a);
                             break;
                         }
@@ -224,7 +225,7 @@ namespace Compiler.Interpreter
                         {
                             var b = ReadOperand(inst.B!);
                             var c = ReadOperand(inst.C!);
-                            var a = SaturateTruncate(b.IntValue ^ c.IntValue, b.Type, c.Type, true);
+                            var a = SaturateTruncate(b.IntValue ^ c.IntValue, b.Type, c.Type, isChecked);
                             WriteOperand(inst.A!, a);
                             break;
                         }
@@ -232,28 +233,28 @@ namespace Compiler.Interpreter
                         {
                             var b = ReadOperand(inst.B!);
                             var c = ReadOperand(inst.C!);
-                            var a = SaturateTruncate(b.IntValue | c.IntValue, b.Type, c.Type, true);
+                            var a = SaturateTruncate(b.IntValue | c.IntValue, b.Type, c.Type, isChecked);
                             WriteOperand(inst.A!, a);
                             break;
                         }
                         case Opcode.BitNot:
                         {
                             var b = ReadOperand(inst.B!);
-                            var a = SaturateTruncate(~b.IntValue, b.Type, true);
+                            var a = SaturateTruncate(~b.IntValue, b.Type, isChecked);
                             WriteOperand(inst.A!, a);
                             break;
                         }
                         case Opcode.Not:
                         {
                             var b = ReadOperand(inst.B!);
-                            var a = SaturateTruncate(b.IntValue != 0 ? 0 : 1, b.Type, true);
+                            var a = SaturateTruncate(b.IntValue != 0 ? 0 : 1, b.Type, isChecked);
                             WriteOperand(inst.A!, a);
                             break;
                         }
                         case Opcode.Neg:
                         {
                             var b = ReadOperand(inst.B!);
-                            var a = SaturateTruncate(-b.IntValue, b.Type, true);
+                            var a = SaturateTruncate(-b.IntValue, b.Type, isChecked);
                             WriteOperand(inst.A!, a);
                             break;
                         }
@@ -261,7 +262,7 @@ namespace Compiler.Interpreter
                         {
                             var b = ReadOperand(inst.B!);
                             var c = ReadOperand(inst.C!);
-                            var a = SaturateTruncate(b.IntValue + c.IntValue, b.Type, c.Type, true);
+                            var a = SaturateTruncate(b.IntValue + c.IntValue, b.Type, c.Type, isChecked);
                             WriteOperand(inst.A!, a);
                             break;
                         }
@@ -269,7 +270,7 @@ namespace Compiler.Interpreter
                         {
                             var b = ReadOperand(inst.B!);
                             var c = ReadOperand(inst.C!);
-                            var a = SaturateTruncate(b.IntValue - c.IntValue, b.Type, c.Type, true);
+                            var a = SaturateTruncate(b.IntValue - c.IntValue, b.Type, c.Type, isChecked);
                             WriteOperand(inst.A!, a);
                             break;
                         }
@@ -277,7 +278,7 @@ namespace Compiler.Interpreter
                         {
                             var b = ReadOperand(inst.B!);
                             var c = ReadOperand(inst.C!);
-                            var a = SaturateTruncate(b.IntValue * c.IntValue, b.Type, c.Type, true);
+                            var a = SaturateTruncate(b.IntValue * c.IntValue, b.Type, c.Type, isChecked);
                             WriteOperand(inst.A!, a);
                             break;
                         }
@@ -290,7 +291,7 @@ namespace Compiler.Interpreter
                         {
                             var b = ReadOperand(inst.B!);
                             var c = ReadOperand(inst.C!);
-                            var a = SaturateTruncate(b.IntValue / c.IntValue, b.Type, c.Type, true);
+                            var a = SaturateTruncate(b.IntValue / c.IntValue, b.Type, c.Type, isChecked);
                             WriteOperand(inst.A!, a);
                             break;
                         }
@@ -298,7 +299,7 @@ namespace Compiler.Interpreter
                         {
                             var b = ReadOperand(inst.B!);
                             var c = ReadOperand(inst.C!);
-                            var a = SaturateTruncate((b.IntValue + c.IntValue - 1) / c.IntValue, b.Type, c.Type, true);
+                            var a = SaturateTruncate((b.IntValue + c.IntValue - 1) / c.IntValue, b.Type, c.Type, isChecked);
                             WriteOperand(inst.A!, a);
                             break;
                         }
@@ -307,7 +308,7 @@ namespace Compiler.Interpreter
                             // TODO Technically only useful for floats
                             var b = ReadOperand(inst.B!);
                             var c = ReadOperand(inst.C!);
-                            var a = SaturateTruncate(b.IntValue / c.IntValue, b.Type, c.Type, true);
+                            var a = SaturateTruncate(b.IntValue / c.IntValue, b.Type, c.Type, isChecked);
                             WriteOperand(inst.A!, a);
                             break;
                         }
@@ -315,7 +316,7 @@ namespace Compiler.Interpreter
                         {
                             var b = ReadOperand(inst.B!);
                             var c = ReadOperand(inst.C!);
-                            var a = SaturateTruncate(b.IntValue % c.IntValue, b.Type, c.Type, true);
+                            var a = SaturateTruncate(b.IntValue % c.IntValue, b.Type, c.Type, isChecked);
                             WriteOperand(inst.A!, a);
                             break;
                         }
@@ -323,7 +324,7 @@ namespace Compiler.Interpreter
                         {
                             var b = ReadOperand(inst.B!);
                             var c = ReadOperand(inst.C!);
-                            var a = SaturateTruncate(((b.IntValue % c.IntValue) + c.IntValue) % c.IntValue, b.Type, c.Type, true);
+                            var a = SaturateTruncate(((b.IntValue % c.IntValue) + c.IntValue) % c.IntValue, b.Type, c.Type, isChecked);
                             WriteOperand(inst.A!, a);
                             break;
                         }

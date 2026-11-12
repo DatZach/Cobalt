@@ -368,6 +368,8 @@ namespace Compiler.Ast
 
         public static Def IllegalLabel { get; } = new(MessageType.Error, "Label not defined '{0}'\n{1}");
 
+        public static Def IllegalOverflowSuppression { get; } = new(MessageType.Error, "Cannot suppress overflow error when calling user-defined operator");
+
         public sealed record Def(
             MessageType Type,
             string Content,

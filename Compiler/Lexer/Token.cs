@@ -123,6 +123,7 @@ namespace Compiler.Lexer
         [Description("!")] Not,
         [Description("~")] BitNot,
         [Description("?")] Question,
+        [Description("#")] Hash,
 
         [Description(" && ")] ConditionalAnd,
         [Description(" || ")] ConditionalOr,

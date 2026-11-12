@@ -9,7 +9,18 @@ namespace Compiler.Ast.Parselets.Statements
         public Expression Parse(Parser parser, Token token)
         {
             parser.Take(TokenType.LeftParen);
+            
+            Expression? initializer;
+            if (parser.Match(TokenType.Var))
+            {
+                initializer = parser.ParseStatement(false);
+                parser.Take(TokenType.Semicolon);
+            }
+            else
+                initializer = null;
+
             var conditional = parser.ParseExpression(isConditional: true);
+            
             parser.Take(TokenType.RightParen);
 
             var then = parser.ParseBlock();
@@ -19,7 +30,7 @@ namespace Compiler.Ast.Parselets.Statements
             if (Parser.IsStatementExpression(then))
                 parser.Messages.Add(Message.CannotNakedNestStatement, then);
 
-            return new IfStatement(token, conditional, then, @else);
+            return new IfStatement(token, initializer, conditional, then, @else);
         }
     }
 }

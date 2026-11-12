@@ -45,6 +45,8 @@
 
         //public const int ConditionalExpression = 2; // ?
 
+        public const int SuppressOverflow = 2;
+
         public const int Assignment = 1;
         public const int In = 1;
     }

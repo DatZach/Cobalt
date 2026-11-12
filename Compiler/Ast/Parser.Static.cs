@@ -62,6 +62,7 @@ namespace Compiler.Ast
             Register(TokenType.Not, new PrefixOperatorParselet(PrecedenceTable.Unary));
             Register(TokenType.Not, new PostfixOperatorParselet(PrecedenceTable.ErrorPropagate));
             Register(TokenType.BitNot, new PrefixOperatorParselet(PrecedenceTable.Unary));
+            Register(TokenType.Hash, new PrefixOperatorParselet(PrecedenceTable.SuppressOverflow));
             Register(TokenType.Dot, new BinaryOperatorParselet(PrecedenceTable.Dereference));
             Register(TokenType.ErrorCoalesce, new BinaryOperatorParselet(PrecedenceTable.Coalesce));
             Register(TokenType.NilCoalesce, new BinaryOperatorParselet(PrecedenceTable.Coalesce));
@@ -123,6 +124,7 @@ namespace Compiler.Ast
             Register(TokenType.FatArrow, new FatArrowParselet());
 
             Register(TokenType.If, new IfParselet());
+            Register(TokenType.If, new IdentifierParselet());
             Register(TokenType.For, new ForParselet());
             Register(TokenType.For, new IdentifierParselet());
             Register(TokenType.While, new WhileParselet());

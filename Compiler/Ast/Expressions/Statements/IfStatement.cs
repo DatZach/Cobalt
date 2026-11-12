@@ -6,15 +6,18 @@ namespace Compiler.Ast.Expressions.Statements
 {
     internal sealed class IfStatement : Expression
     {
+        public Expression? Initializer { get; }
+
         public Expression Conditional { get; }
 
         public Expression Then { get; }
 
         public Expression? Else { get; }
 
-        public IfStatement(Token token, Expression conditional, Expression then, Expression? @else)
+        public IfStatement(Token token, Expression? initializer, Expression conditional, Expression then, Expression? @else)
             : base(token)
         {
+            Initializer = initializer;
             Conditional = conditional;
             Then = then;
             Else = @else;

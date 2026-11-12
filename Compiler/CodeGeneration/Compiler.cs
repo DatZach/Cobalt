@@ -49,7 +49,8 @@ namespace Compiler.CodeGeneration
         public MessageCollection Messages => messages; // TODO Only exposed for 1 function, could be cleaned up
 
         private Storage? implicitContext;
-        private IScopeContext? forTempBlockScope;
+        private IScopeContext? forTempBlockScope, ifTempBlockScope;
+        private bool flagSuppressOverflow;
 
         private readonly List<GenericTypeAstReference> genericTypeAstReferences;
         private readonly List<ConcreteTypeAstReference> concreteTypeAstReferences;
@@ -556,6 +557,9 @@ namespace Compiler.CodeGeneration
         public Storage? Visit(IfStatement expression)
         {
             var scope = CurrentFunction.PushBlockScope();
+            ifTempBlockScope = scope;
+
+            expression.Initializer?.Accept(this);
 
             ++conditionalStack;
             var conditional = expression.Conditional.Accept(this);
@@ -856,6 +860,7 @@ namespace Compiler.CodeGeneration
                 return null;
             }
 
+            // TODO Should split into a different function
             if (expression.Target == "cvm")
             {
                 var labels = new Dictionary<string, Label>();
@@ -1269,8 +1274,10 @@ namespace Compiler.CodeGeneration
                 if ((cType = CobType.ResolveOperatorResultType(expression.Operator, a?.Type, b?.Type)) != CobType.None)
                 {
                     var c = CurrentFunction.AllocateRegisterStorage(cType);
-                
-                    CurrentFunction.Body.Emit(binOpcode, c.Operand, a!.Operand, b!.Operand);
+
+                    var flags = Opflag.None;
+                    if (flagSuppressOverflow) flags |= Opflag.SuppressOverflow;
+                    CurrentFunction.Body.Emit(binOpcode, flags, c.Operand, a!.Operand, b!.Operand);
                 
                     b.Free();
                     a.Free();
@@ -1282,6 +1289,9 @@ namespace Compiler.CodeGeneration
                     var functionStorage = function.Parent.EmitGetForSymbol(function)!;
                     var c = CurrentFunction.AllocateRegisterStorage(function.ReturnType);
                     
+                    if (flagSuppressOverflow)
+                        messages.Add(Message.IllegalOverflowSuppression, expression);
+
                     CurrentFunction.Body.Emit(
                         Opcode.Call,
                         functionStorage.Operand,
@@ -1409,6 +1419,14 @@ namespace Compiler.CodeGeneration
 
                 return c;
             }
+            else if (expression.Operator == TokenType.Hash)
+            {
+                flagSuppressOverflow = true;
+                var b = expression.Right.Accept(this);
+                flagSuppressOverflow = false;
+
+                return b;
+            }
             else if (expression.Operator == TokenType.Spread)
             {
                 // This is an error, cannot spread outside of array literals
@@ -1447,7 +1465,10 @@ namespace Compiler.CodeGeneration
                     _ => throw new ArgumentOutOfRangeException(nameof(expression))
                 };
 
-                CurrentFunction.Body.Emit(opcode, c.Operand, b.Operand);
+                var flags = Opflag.None;
+                if (flagSuppressOverflow) flags |= Opflag.SuppressOverflow;
+
+                CurrentFunction.Body.Emit(opcode, flags, c.Operand, b.Operand);
 
                 b.Free();
 
@@ -2805,7 +2826,8 @@ namespace Compiler.CodeGeneration
 
         private sealed class RootScopeContext : IScopeContext
         {
-            private static readonly RootSymbol ForSymbol = new (CobType.None, false);
+            private static readonly RootSymbol IfSymbol = new(CobType.None, false);
+            private static readonly RootSymbol ForSymbol = new(CobType.None, false);
             private static readonly RootSymbol PanicSymbol = new (new CobType(eCobType.Function, tag: new FunctionSignature()), true);
 
             public string Name => "(root)";
@@ -2824,6 +2846,7 @@ namespace Compiler.CodeGeneration
                 // TODO Move '.' implicit context here
                 return name switch
                 {
+                    "if" => IfSymbol,
                     "for" => ForSymbol,
                     "panic" => PanicSymbol,
                     _ => null
@@ -2832,10 +2855,13 @@ namespace Compiler.CodeGeneration
 
             public Storage? EmitGetForSymbol(ISymbol symbol)
             {
-                if (symbol == ForSymbol && compiler.forTempBlockScope != null)
+                if (ReferenceEquals(symbol, IfSymbol) && compiler.ifTempBlockScope != null)
+                    return new Storage(new CobType(eCobType.None, tag: compiler.ifTempBlockScope), Operand.None);
+
+                if (ReferenceEquals(symbol, ForSymbol) && compiler.forTempBlockScope != null)
                     return new Storage(new CobType(eCobType.None, tag: compiler.forTempBlockScope), Operand.None);
 
-                if (symbol == PanicSymbol)
+                if (ReferenceEquals(symbol, PanicSymbol))
                 {
                     compiler.CurrentFunction.Body.Emit(
                         Opcode.PanicOnErr,
@@ -2848,7 +2874,7 @@ namespace Compiler.CodeGeneration
 
             public bool EmitSetForSymbol(ISymbol symbol)
             {
-                if (symbol == PanicSymbol)
+                if (ReferenceEquals(symbol, PanicSymbol))
                 {
                     Storage? storage;
                     if (compiler.AssignmentRHS?.Type.TagFunctionCandidates != null)

@@ -50,6 +50,7 @@ namespace Compiler.Lexer
                 ["!"] = TokenType.Not,
                 ["~"] = TokenType.BitNot,
                 ["?"] = TokenType.Question,
+                ["#"] = TokenType.Hash,
 
                 ["&&"] = TokenType.ConditionalAnd,
                 ["||"] = TokenType.ConditionalOr,

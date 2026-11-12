@@ -177,7 +177,7 @@ namespace Compiler.CodeGeneration.Artifacts
         public readonly static CobType S16 = new (eCobType.Signed, 16, name: "s16");
         public readonly static CobType S32 = new(eCobType.Signed, 32, name: "s32");
         public readonly static CobType S64 = new(eCobType.Signed, 64, name: "s64");
-        public readonly static CobType UInt = new (eCobType.Unsigned, -1, name: "uint");
+        public readonly static CobType UInt = new(eCobType.Unsigned, -1, name: "uint");
         public readonly static CobType U8 = new (eCobType.Unsigned, 8, name: "u8");
         public readonly static CobType U16 = new (eCobType.Unsigned, 16, name: "u16");
         public readonly static CobType U32 = new(eCobType.Unsigned, 32, name: "u32");
@@ -443,14 +443,13 @@ namespace Compiler.CodeGeneration.Artifacts
             else if (typeName.Type == eTypeName.RecordSignature)
             {
                 var ctx = context;
-                while (ctx != null && ctx.Parent != null)
+                while (ctx != null && ctx.Parent != null && ctx is not Artifacts.Module)
                     ctx = ctx.Parent;
 
-                // TODO Might actually need to allocate on the CurrentContext instead for namespacing purposes
-                var rootModule = (Module)ctx!; // NOTE Root is always $root module
+                var module = (Module)ctx!;
                 var recordTypeIdentifier = typeName.Record!.Name;
-                var recordType = rootModule.FindRecordType(recordTypeIdentifier)
-                              ?? rootModule.AllocateRecordType(recordTypeIdentifier, typeName.Record.Type);
+                var recordType = module.FindRecordType(recordTypeIdentifier)
+                              ?? module.AllocateRecordType(recordTypeIdentifier, typeName.Record.Type);
 
                 type = new CobType(eCobType.Record, tag: recordType);
             }

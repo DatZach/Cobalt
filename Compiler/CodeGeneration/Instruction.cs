@@ -6,6 +6,8 @@ namespace Compiler.CodeGeneration
     {
         public Opcode Opcode { get; init; }
 
+        public Opflag Flags { get; init; }
+
         public Operand? A { get; init; }
 
         public Operand? B { get; init; }
@@ -198,6 +200,13 @@ namespace Compiler.CodeGeneration
 
         PanicOnErr,
         SetPanicHandler
+    }
+
+    [Flags]
+    public enum Opflag : byte
+    {
+        None             = 0x00,
+        SuppressOverflow = 0x01
     }
 
     public enum OperandType : byte
