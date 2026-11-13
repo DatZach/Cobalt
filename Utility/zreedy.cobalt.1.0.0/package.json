@@ -1,47 +1,84 @@
 {
 	"name": "cobalt",
 	"displayName": "Cobalt Tools",
-	"description": "",
+	"description": "Cobalt",
 	"version": "1.0.0",
-	"engines": {
-		"vscode": "^1.0.0"
-	},
-	"dependencies": {
-		"vscode-languageclient": "^7.0.0"
-	},
+	"categories": [ "Programming Languages" ],
 	"authors": {
 		"name": "Zach Reedy"
 	},
 	"publisher": "zreedy",
-	"contributes": {
-		"languages": [
-			{
-				"id": "cmc",
-				"aliases": [
-					"CMC"
-				],
-				"extensions": [
-					".cmc"
-				],
-				"configuration": "./language-configuration.json"
-			}
-		],
-		"grammars": [
-			{
-				"language": "cmc",
-				"scopeName": "source.cmc",
-				"path": "./syntaxes/cmc.tmLanguage"
-			}
-		]
-	},
-	"categories": [
-		"Programming Languages"
-	],
 	"repository": {
 		"url": "https://github.com/DatZach/Cobalt",
 		"type": "git"
 	},
-	"__metadata": {
-		"size": 2510
+	"engines": {
+		"vscode": "^1.105.0"
+	},
+	"dependencies": {
+		"vscode-languageclient": "^7.0.0"
+	},
+	"contributes": {
+		"languages": [{
+			"id": "cmc",
+			"aliases": [ "CMC", "Cobalt Machine Code" ],
+			"extensions": [ ".cmc" ],
+			"configuration": "./cmc-language-configuration.json",
+			"icon":{
+				"dark": "./Icon.png",
+				"light": "./Icon.png"
+			}
+		}, {
+			"id": "cob",
+			"aliases": [ "COB", "Cobalt" ],
+			"extensions": [ ".cob" ],
+			"configuration": "./cob-language-configuration.json",
+			"icon":{
+				"dark": "./Icon.png",
+				"light": "./Icon.png"
+			}
+		}],
+		"grammars": [{
+			"language": "cmc",
+			"scopeName": "source.cmc",
+			"path": "./syntaxes/cmc.tmLanguage"
+		}, {
+			"language": "cob",
+			"scopeName": "source.cob",
+			"path": "./syntaxes/cobalt.tmLanguage"
+		}]
+	},
+	"configuration": [{
+		"title": "Cobalt",
+        "properties": {
+        	"cobalt.toolchainDirectory": {
+            	"type": "string",
+            	"default": null,
+            	"description": "Directory where the Cobalt Toolchain exists"
+          	}
+        }
+    }],
+	"scripts": {
+		"vscode:prepublish": "npm run compile",
+		"compile": "tsc -p ./",
+		"watch": "tsc -watch -p ./",
+		"pretest": "npm run compile && npm run lint",
+		"lint": "eslint src",
+		"test": "vscode-test"
+	},
+	"dependencies": {
+		"glob": "^11.0.0",
+		"vscode-languageclient": "^9.0.1"
+	},
+	"devDependencies": {
+		"@types/vscode": "^1.146.0",
+		"@types/mocha": "^10.0.10",
+		"@types/node": "22.x",
+		"@types/markdown-it": "^14.1.0",
+		"typescript-eslint": "^8.52.0",
+		"eslint": "^9.39.2",
+		"typescript": "^5.9.3",
+		"@vscode/test-cli": "^0.0.12",
+		"@vscode/test-electron": "^2.5.2"
 	}
 }
