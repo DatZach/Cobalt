@@ -370,6 +370,8 @@ namespace Compiler.Ast
 
         public static Def IllegalOverflowSuppression { get; } = new(MessageType.Error, "Cannot suppress overflow error when calling user-defined operator");
 
+        public static Def CannotLensType { get; } = new(MessageType.Error, "Cannot allocate lens for source type '{0}'");
+
         public sealed record Def(
             MessageType Type,
             string Content,

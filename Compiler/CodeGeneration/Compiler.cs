@@ -2115,14 +2115,85 @@ namespace Compiler.CodeGeneration
 
         public Storage? Visit(LensExpression expression)
         {
-            throw new NotImplementedException();
-            //var target = expression.Expression.Accept(this);
+            var sourceStorage = expression.Expression.Accept(this);
+            if (sourceStorage == null)
+            {
+                messages.Add(Message.ExpectedValue, expression);
+                return null;
+            }
 
-            //var storage = CurrentFunction.AllocateRegisterStorage(new CobType(eCobType.Lens, elementType: expression.ElementType));
-            //CurrentFunction.Body.Emit(Opcode.Lens, storage.Operand, target.Operand);
-            //target.Free();
+            var elementType = CobType.FromTypeName(expression.ElementTypeName, CurrentContext);
+            var cobType = Intrinsics.Lens.ToConcreteType(elementType);
+            if (cobType.TagRecord != null && cobType.TagRecord.PopulateConcretizedRecordIfRequired())
+                concreteTypeAstReferences.Add(new ConcreteTypeAstReference(Intrinsics.Lens.TagRecord, cobType.TagRecord));
 
-            //return storage;
+            var storage = CurrentFunction.AllocateRegisterStorage(cobType);
+            CurrentFunction.Body.Emit(Opcode.New, storage.Operand, cobType.ToOperand(artifact));
+
+            Storage? addressStorage, lengthStorage;
+            if (sourceStorage.Type == Intrinsics.Range)
+            {
+                var sourceRange = sourceStorage.Type.TagRecord;
+                var startSymbol = sourceRange.FindSymbol("Start");
+                var endSymbol = sourceRange.FindSymbol("End");
+
+                var prevBinOpLHS = BinOpLHS;
+                BinOpLHS = sourceStorage;
+                var startStorage = sourceRange.EmitGetForSymbol(startSymbol);
+                var endStorage = sourceRange.EmitGetForSymbol(endSymbol);
+                BinOpLHS = prevBinOpLHS;
+
+                lengthStorage = CurrentFunction.AllocateRegisterStorage(CobType.UInt);
+                CurrentFunction.Body.Emit(Opcode.Sub, lengthStorage.Operand, endStorage.Operand, startStorage.Operand);
+                addressStorage = startStorage;
+                endStorage.Free();
+            }
+            else if (sourceStorage.Type == eCobType.Distinct
+                 &&  sourceStorage.Type.TagRecord.HasTrait(Intrinsics.POD.TagRecord))
+            {
+                var sourcePod = sourceStorage.Type.TagRecord;
+
+                addressStorage = CurrentFunction.AllocateRegisterStorage(CobType.UInt);
+                CurrentFunction.Body.Emit(Opcode.GetAddr, addressStorage.Operand, sourceStorage.Operand);
+
+                var sizeSymbol = sourcePod.FindSymbol("SIZE");
+                lengthStorage = sourcePod.EmitGetForSymbol(sizeSymbol);
+            }
+            else if (sourceStorage.Type.Size > 0)
+            {
+                addressStorage = CurrentFunction.AllocateRegisterStorage(CobType.UInt);
+                CurrentFunction.Body.Emit(Opcode.GetAddr, addressStorage.Operand, sourceStorage.Operand);
+
+                lengthStorage = new Storage(CobType.UInt, Operand.ImmediateUnsigned(sourceStorage.Type.Size / 8));
+            }
+            else
+            {
+                messages.Add(Message.CannotLensType, expression, sourceStorage.Type);
+                return null;
+            }
+
+            // TODO EmitSetForSymbol could accept the value to set instead of directly emitting setfield
+
+            // Address
+            CurrentFunction.Body.Emit(
+                Opcode.SetField,
+                storage.Operand,
+                Operand.ImmediateUnsigned(0),
+                addressStorage.Operand
+            );
+
+            // Length
+            CurrentFunction.Body.Emit(
+                Opcode.SetField,
+                storage.Operand,
+                Operand.ImmediateUnsigned(1),
+                lengthStorage.Operand
+            );
+
+            addressStorage.Free();
+            lengthStorage.Free();
+
+            return storage;
         }
 
         public Storage? Visit(IndexerExpression expression)

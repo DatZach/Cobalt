@@ -10,6 +10,12 @@ namespace Compiler.Ast.Parselets
             var elementTypeName = parser.ParseTypeName();
             var expression = parser.ParseExpression();
 
+            if (elementTypeName == null)
+            {
+                parser.Messages.Add(Message.ExpectedTypeName, parser.Peek());
+                elementTypeName = TypeName.None;
+            }
+
             return new LensExpression(token, elementTypeName, expression);
         }
     }

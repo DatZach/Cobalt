@@ -124,18 +124,13 @@ namespace Compiler.Interpreter
                             obj.RecordValue[fieldIdx] = value;
                             break;
                         }
-                        case Opcode.GetElem:
+                        case Opcode.GetAddr:
                         {
-                            Variable? elemValue;
-                            var arr = ReadOperand(inst.B!);
-                            var idx = ReadOperand(inst.C!);
-                            elemValue = arr.ElementAt(idx.IntValue);
-                            WriteOperand(inst.A!, elemValue);
-                            break;
-                        }
-                        case Opcode.SetElem:
-                        {
-                            throw new NotImplementedException();
+                            // TODO Leaks memory!
+                            var b = ReadOperand(inst.B!);
+                            var bHandle = GCHandle.Alloc(b.Value, GCHandleType.Pinned);
+                            var bAddr = (long)bHandle.AddrOfPinnedObject();
+                            WriteOperand(inst.A!, bAddr.ToCobVariable());
                             break;
                         }
                         case Opcode.Peek:
