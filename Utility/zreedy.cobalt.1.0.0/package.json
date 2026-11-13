@@ -18,6 +18,7 @@
 	"dependencies": {
 		"vscode-languageclient": "^7.0.0"
 	},
+	"main": "./out/extension.js",
 	"contributes": {
 		"languages": [{
 			"id": "cmc",
@@ -58,6 +59,17 @@
           	}
         }
     }],
+	"cobServer.trace.server": {
+		"scope": "window",
+		"type": "string",
+		"enum": [
+			"off",
+			"messages",
+			"verbose"
+		],
+		"default": "verbose",
+		"description": "Traces the communication between VS Code and the language server."
+	},
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
 		"compile": "tsc -p ./",

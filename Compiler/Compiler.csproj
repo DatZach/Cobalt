@@ -9,6 +9,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="OmniSharp.Extensions.LanguageServer" Version="0.19.11" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Update="Library\Array.cob">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

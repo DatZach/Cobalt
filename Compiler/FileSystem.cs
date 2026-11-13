@@ -127,6 +127,12 @@ namespace Compiler
             return Cache.ContainsKey(path);
         }
 
+        // TODO HACK Remove
+        public static void ClearCache(string path)
+        {
+            Cache.Remove(path);
+        }
+
         public static long TotalMilliseconds => stopwatch.ElapsedMilliseconds;
         private static readonly Stopwatch stopwatch = new ();
     }

@@ -4,6 +4,8 @@ using Compiler.CodeGeneration;
 using Compiler.CodeGeneration.Artifacts;
 using Compiler.Interpreter;
 using Compiler.Lexer;
+using Compiler.Server;
+using Nerdbank.Streams;
 
 namespace Compiler
 {
@@ -20,7 +22,7 @@ namespace Compiler
         private static Stopwatch swCompiler;
         private static Stopwatch swRuntime;
 
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
             Config = RuntimeConfig.FromCommandLine(args);
             if (Config == null)
@@ -31,6 +33,33 @@ namespace Compiler
 
             EstablishEnvironment();
 
+            switch (Config.Mode)
+            {
+                case eRunMode.CompileAndRun:
+                    DoCompileAndRun();
+                    break;
+
+                case eRunMode.LanguageServer:
+                    await DoLanguageServer();
+                    break;
+
+                case eRunMode.REPL:
+                    DoREPL();
+                    break;
+            }
+        }
+
+        private static void EstablishEnvironment()
+        {
+            var asm = typeof(Program).Assembly;
+            SourceDirectory = Path.GetDirectoryName(Config.EntrySourceFilePath);
+            LibraryDirectory = Config.LibraryDirectory ?? Path.Combine(Path.GetDirectoryName(asm.Location), "Library");
+
+            PreambleSource = Config.PreambleSource ?? $"import Library;{Environment.NewLine}{Environment.NewLine}";
+        }
+
+        private static void DoCompileAndRun()
+        {
             var messages = new MessageCollection();
             Artifact? artifact;
 
@@ -100,13 +129,25 @@ namespace Compiler
             }
         }
 
-        private static void EstablishEnvironment()
+        private static async Task DoLanguageServer()
         {
-            var asm = typeof(Program).Assembly;
-            SourceDirectory = Path.GetDirectoryName(Config.EntrySourceFilePath);
-            LibraryDirectory = Config.LibraryDirectory ?? Path.Combine(Path.GetDirectoryName(asm.Location), "Library");
+            Console.SetOut(TextWriter.Null);
 
-            PreambleSource = Config.PreambleSource ?? $"import Library;{Environment.NewLine}{Environment.NewLine}";
+            var iStream = Console.OpenStandardInput();
+            var oStream = Console.OpenStandardOutput();
+
+            var server = new CobLanguageServer(
+                iStream.UsePipeReader(),
+                oStream.UsePipeWriter()
+            );
+
+            await server.Initialize();
+            await server.WaitForExitAsync();
+        }
+
+        private static void DoREPL()
+        {
+
         }
 
         private static void PrintCompilerState(Artifact artifact)
@@ -224,7 +265,9 @@ namespace Compiler
 
     internal sealed class RuntimeConfig
     {
-        public string EntrySourceFilePath { get; init; }
+        public eRunMode Mode { get; init; }
+
+        public string? EntrySourceFilePath { get; init; }
 
         public string? LibraryDirectory { get; init; }
 
@@ -247,12 +290,20 @@ namespace Compiler
 
         public static RuntimeConfig? FromCommandLine(string[] args)
         {
-            if (args.Length < 1)
+            eRunMode mode;
+            if (args.Length == 0)
+                mode = eRunMode.REPL;
+            else if (OptionalArgument("--server", false))
+                mode = eRunMode.LanguageServer;
+            else if (args.Length >= 1 && !args[0].StartsWith("--"))
+                mode = eRunMode.CompileAndRun;
+            else
                 return null;
 
             return new RuntimeConfig
             {
-                EntrySourceFilePath = args[0],
+                Mode = mode,
+                EntrySourceFilePath = args.FirstOrDefault(),
                 LibraryDirectory = OptionalArgument<string>("--library-directory"),
                 PreambleSource = OptionalArgument<string>("--preamble"),
                 FasmPath = OptionalArgument<string>("--fasm"),
@@ -278,7 +329,15 @@ namespace Compiler
 
         public static void PrintHelp()
         {
-            Console.WriteLine("Cobalt <SourceFile>");
+            Console.WriteLine("Cobalt [SourceFile] [--server]");
         }
+    }
+
+    internal enum eRunMode
+    {
+        None,
+        CompileAndRun,
+        LanguageServer,
+        REPL
     }
 }
