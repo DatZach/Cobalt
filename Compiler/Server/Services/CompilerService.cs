@@ -1,14 +1,7 @@
 ﻿using Compiler.Ast;
-using Compiler.CodeGeneration;
 using Compiler.CodeGeneration.Artifacts;
 using Compiler.Lexer;
 using OmniSharp.Extensions.LanguageServer.Protocol;
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
@@ -29,8 +22,23 @@ namespace Compiler.Server.Services
         public void OpenDocument(DocumentUri uri, string content)
         {
             var path = uri.GetFileSystemPath();
-            FileSystem.ClearCache(path);
-            FileSystem.ReadAllText(path);
+
+            FileSystem.OpenDocument(path, content);
+
+            ParseSingle(uri);
+        }
+
+        public void CloseDocument(DocumentUri uri)
+        {
+            var path = uri.GetFileSystemPath();
+            FileSystem.CloseDocument(path);
+        }
+
+        public void ChangeDocument(DocumentUri uri, Container<TextDocumentContentChangeEvent> changes)
+        {
+            var path = uri.GetFileSystemPath();
+            foreach (var change in changes)
+                FileSystem.ChangeDocument(path, change.Text, change.Range);
 
             ParseSingle(uri);
         }
@@ -60,27 +68,41 @@ namespace Compiler.Server.Services
                 artifact = null;
             }
 
+            DispatchDiagnosticsFromMessage(messages);
+        }
+
+        private void DispatchDiagnosticsFromMessage(MessageCollection messages)
+        {
             var allDiagnostics = new Dictionary<string, List<Diagnostic>>();
-            foreach (var x in messages)
+            foreach (var message in messages)
             {
-                if (!allDiagnostics.TryGetValue(x.StartToken.Filename, out var diagnostics))
+                if (!allDiagnostics.TryGetValue(message.StartToken.Filename, out var diagnostics))
                 {
                     diagnostics = new List<Diagnostic>();
-                    allDiagnostics[x.StartToken.Filename] = diagnostics;
+                    allDiagnostics[message.StartToken.Filename] = diagnostics;
                 }
 
-                var startLine = x.StartToken.Line;
-                var startColumn = x.StartToken.Column;
+                var startLine = message.StartToken.Line;
+                var startColumn = message.StartToken.Column;
                 int endLine, endColumn;
-                if (x.EndToken == null)
+                if (message.EndToken == null)
                 {
                     endLine = startLine;
-                    endColumn = startColumn + x.StartToken.Value.Length;
+                    endColumn = startColumn + message.StartToken.Value.Length;
                 }
                 else
                 {
-                    endLine = x.EndToken.Line;
-                    endColumn = x.EndToken.Column + x.EndToken.Value.Length;
+                    endLine = message.EndToken.Line;
+                    endColumn = message.EndToken.Column + message.EndToken.Value.Length;
+                }
+
+                // HACK TODO Not always true...
+                //if (message.StartToken.Filename == Program.Config.EntrySourceFilePath)
+                if (true)
+                {
+                    int preambleLineCount = Program.PreambleSource.Count(x => x == '\n');
+                    startLine -= preambleLineCount - 1;
+                    endLine -= preambleLineCount - 1;
                 }
 
                 startLine = Math.Max(startLine, 1);
@@ -90,9 +112,9 @@ namespace Compiler.Server.Services
 
                 diagnostics.Add(new Diagnostic
                 {
-                    Code = x.Definition.Id,
-                    Message = x.Content,
-                    Severity = x.Definition.Type switch
+                    Code = message.Definition.Id,
+                    Message = message.Content,
+                    Severity = message.Definition.Type switch
                     {
                         MessageType.Error => DiagnosticSeverity.Error,
                         MessageType.Warning => DiagnosticSeverity.Warning,

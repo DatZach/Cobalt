@@ -38,6 +38,11 @@ namespace Compiler.Server.Handlers
 
         public override Task<Unit> Handle(DidChangeTextDocumentParams request, CancellationToken cancellationToken)
         {
+            compilerService.ChangeDocument(
+                request.TextDocument.Uri,
+                request.ContentChanges
+            );
+
             return Unit.Task;
         }
 
@@ -48,6 +53,10 @@ namespace Compiler.Server.Handlers
 
         public override Task<Unit> Handle(DidCloseTextDocumentParams request, CancellationToken cancellationToken)
         {
+            compilerService.CloseDocument(
+                request.TextDocument.Uri
+            );
+
             return Unit.Task;
         }
 

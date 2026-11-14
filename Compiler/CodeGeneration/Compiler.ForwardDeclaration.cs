@@ -1,4 +1,5 @@
-﻿using Compiler.Ast;
+﻿using System.Diagnostics;
+using Compiler.Ast;
 using Compiler.Ast.Expressions;
 using Compiler.Ast.Expressions.Statements;
 using Compiler.Ast.Visitors;
@@ -19,6 +20,8 @@ namespace Compiler.CodeGeneration
         private readonly DeclPhase phase;
         private readonly Compiler compiler;
         private readonly MessageCollection messages;
+
+        public readonly static HashSet<string> SeenImports = new();
 
         public ForwardDeclaration(DeclPhase phase, Compiler compiler, MessageCollection messages)
         {
@@ -91,8 +94,7 @@ namespace Compiler.CodeGeneration
                 messages.Add(Message.CannotFindImport, expression, expression.SourceFile);
             else foreach (var path in paths)
             {
-                // HACK Caching the FileSystem level does not mean the compiler has already seen this file per se
-                if (FileSystem.IsCached(path))
+                if (!SeenImports.Add(path))
                     continue;
 
                 var source = FileSystem.ReadAllText(path);

@@ -1,10 +1,17 @@
 ﻿using System.Diagnostics;
+using System.Text;
+using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using Range = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 
 namespace Compiler
 {
     internal static class FileSystem
     {
         private static readonly Dictionary<string, string> Cache = new (StringComparer.OrdinalIgnoreCase);
+
+        /*
+         *  LOCAL FILESYSTEM
+         */
 
         public static void WriteAllBytes(string path, byte[] bytes)
         {
@@ -127,10 +134,63 @@ namespace Compiler
             return Cache.ContainsKey(path);
         }
 
-        // TODO HACK Remove
-        public static void ClearCache(string path)
+
+        /*
+         *  SERVER FILESYSTEM
+         */
+
+        public static void OpenDocument(string path, string content)
+        {
+            Cache[path] = content;
+        }
+
+        public static void CloseDocument(string path)
         {
             Cache.Remove(path);
+        }
+
+        public static void ChangeDocument(string path, string content, Range? range)
+        {
+            if (!Cache.TryGetValue(path, out var document))
+                return;
+
+            if (range == null)
+                document = content;
+            else
+            {
+                var startIndex = ResolveLineOffset(document, range.Start);
+                var endIndex = ResolveLineOffset(document, range.End);
+                var sb = new StringBuilder(document.Length);
+                sb.Append(document[..startIndex]);
+                sb.Append(content);
+                sb.Append(document[endIndex..]);
+                document = sb.ToString();
+            }
+
+            Cache[path] = document;
+
+            return;
+
+            static int ResolveLineOffset(string document, Position position)
+            {
+                int curLine = 0;
+                int i = 0, j = 0;
+                while (true)
+                {
+                    i = document.IndexOf('\n', i);
+                    if (i == -1)
+                        return document.Length;
+
+                    if (curLine == position.Line)
+                    {
+                        j += position.Character;
+                        return j >= i ? i : j;
+                    }
+
+                    j = ++i;
+                    ++curLine;
+                }
+            }
         }
 
         public static long TotalMilliseconds => stopwatch.ElapsedMilliseconds;

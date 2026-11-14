@@ -2808,6 +2808,7 @@ namespace Compiler.CodeGeneration
                 // PASS 0 - Forward Declarations
                 Intrinsics.InitializeForPass0(compiler);
 
+                ForwardDeclaration.SeenImports.Clear(); // TODO HACK Find a way to remove static state
                 for (var phase = ForwardDeclaration.DeclPhase.Begin;
                      phase < ForwardDeclaration.DeclPhase.Complete;
                      ++phase
