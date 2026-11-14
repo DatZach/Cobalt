@@ -755,7 +755,9 @@ namespace Compiler.CodeGeneration
             startLabel.Mark();
             if (expression.Conditional != null)
             {
+                //++conditionalStack;
                 var conditional = expression.Conditional.Accept(this);
+                //--conditionalStack;
                 // TODO Error if conditional is null
 
                 CurrentFunction.Body.Emit(Opcode.JmpF, conditional.Operand, endLabel);
@@ -1202,6 +1204,8 @@ namespace Compiler.CodeGeneration
                 var c = CurrentFunction.AllocateRegisterStorage(cType);
                 var shlValue = b.Type.Size;
 
+                a = EmitCast(a, new CobType(a.Type.Type, a.Type.Size * 2));
+
                 CurrentFunction.Body.Emit(Opcode.BitShl, c.Operand, a.Operand, Operand.ImmediateUnsigned(shlValue));
                 CurrentFunction.Body.Emit(Opcode.BitOr, c.Operand, a.Operand, b.Operand);
                 
@@ -1408,7 +1412,7 @@ namespace Compiler.CodeGeneration
         public Storage? Visit(PrefixOperatorExpression expression)
         {
             // TODO Support rhs logical !
-            if (expression.Operator == TokenType.Not && conditionalStack != 0) // Logical !
+            if (expression.Operator == TokenType.Not)// && conditionalStack != 0) // Logical !
             {
                 var b = expression.Right.Accept(this);
                 var c = CurrentFunction.AllocateRegisterStorage(b.Type);

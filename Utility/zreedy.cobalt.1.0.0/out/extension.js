@@ -36,9 +36,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = activate;
 exports.deactivate = deactivate;
 const lspClient = __importStar(require("./lsp-client"));
+const dapClient = __importStar(require("./dap-client"));
 function activate(context) {
     const lspResult = lspClient.activate(context);
-    return lspResult;
+    const dapResult = dapClient.activate(context);
+    return { ...lspResult, ...dapResult };
 }
 function deactivate() {
     lspClient.deactivate();

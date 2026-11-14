@@ -129,11 +129,6 @@ namespace Compiler
             }
         }
 
-        public static bool IsCached(string path)
-        {
-            return Cache.ContainsKey(path);
-        }
-
 
         /*
          *  SERVER FILESYSTEM

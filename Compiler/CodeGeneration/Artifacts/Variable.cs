@@ -557,6 +557,7 @@ namespace Compiler.CodeGeneration.Artifacts
             return Type switch
             {
                 eCobType.Any => typeof(object),
+                eCobType.Boolean => typeof(bool),
                 eCobType.Signed => Size switch
                 {
                     SizePlatformSpecified => Environment.Is64BitProcess ? typeof(long) : typeof(int),

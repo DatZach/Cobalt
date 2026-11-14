@@ -19,6 +19,9 @@
 		"vscode-languageclient": "^7.0.0"
 	},
 	"main": "./out/extension.js",
+	"workspaceTrust": {
+		"request": "never"
+	},
 	"contributes": {
 		"languages": [{
 			"id": "cmc",
@@ -31,7 +34,7 @@
 			}
 		}, {
 			"id": "cob",
-			"aliases": [ "COB", "Cobalt" ],
+			"aliases": [ "Cobalt" ],
 			"extensions": [ ".cob" ],
 			"configuration": "./cob-language-configuration.json",
 			"icon":{
@@ -47,6 +50,51 @@
 			"language": "cob",
 			"scopeName": "source.cob",
 			"path": "./syntaxes/cobalt.tmLanguage"
+		}],
+		"commands": [{
+			"command": "extension.cobalt-debug.debugEditorContents",
+			"title": "Debug",
+			"category": "Cobalt Debug",
+			"enablement": "!inDebugMode",
+			"icon": "$(debug-alt)"
+		}, {
+			"command": "extension.cobalt-debug.runEditorContents",
+			"title": "Execute",
+			"category": "Cobalt Debug",
+			"enablement": "!inDebugMode",
+			"icon": "$(play)"
+		}],
+		"menus": {
+			"editor/title/run": [{
+				"command": "extension.cobalt-debug.runEditorContents",
+				"when": "resourceLangId == cob",
+				"group": "navigation@1"
+			}, {
+				"command": "extension.cobalt-debug.debugEditorContents",
+				"when": "resourceLangId == cob",
+				"group": "navigation@2"
+			}],
+			"commandPalette": [{
+				"command": "extension.cobalt-debug.debugEditorContents",
+				"when": "resourceLangId == cob"
+			}, {
+				"command": "extension.cobalt-debug.runEditorContents",
+				"when": "resourceLangId == cob"
+			}]
+		},
+		"keybindings":[{
+			"command": "extension.cobalt-debug.runEditorContents",
+			"key": "f5"
+		}],
+		"breakpoints": [{
+			"language": "cob"
+		}],
+		"debuggers": [{
+			"type": "cobalt",
+			"languages": [ "cob" ],
+			"label": "Cobalt Debugger",
+			"program": "./out/extension.js",
+			"runtime": "node"
 		}]
 	},
 	"configuration": [{
@@ -59,17 +107,6 @@
           	}
         }
     }],
-	"cobServer.trace.server": {
-		"scope": "window",
-		"type": "string",
-		"enum": [
-			"off",
-			"messages",
-			"verbose"
-		],
-		"default": "verbose",
-		"description": "Traces the communication between VS Code and the language server."
-	},
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
 		"compile": "tsc -p ./",

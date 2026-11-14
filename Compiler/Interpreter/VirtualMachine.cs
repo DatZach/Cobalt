@@ -759,6 +759,8 @@ namespace Compiler.Interpreter
                         il.Emit(System.Reflection.Emit.OpCodes.Ldc_I4, i);
                         il.Emit(System.Reflection.Emit.OpCodes.Ldelem_Ref);
                         il.Emit(System.Reflection.Emit.OpCodes.Callvirt, typeof(Variable).GetProperty(nameof(Variable.IntValue))!.GetGetMethod()!);
+                        if (import.Function!.Parameters[i].Type.Size == 32)
+                            il.Emit(System.Reflection.Emit.OpCodes.Conv_I4);
                     }
 
                     il.Emit(System.Reflection.Emit.OpCodes.Ldc_I8, address.ToInt64());
