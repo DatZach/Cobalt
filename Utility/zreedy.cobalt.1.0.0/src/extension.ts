@@ -10,5 +10,6 @@ export function activate(context: vscode.ExtensionContext) {
 
 export function deactivate(): Thenable<void> | undefined {
 	lspClient.deactivate();
+	dapClient.deactivate();
 	return undefined;
 }

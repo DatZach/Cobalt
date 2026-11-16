@@ -1,200 +1,124 @@
-'use strict';
-
+import * as path from 'path';
 import * as vscode from 'vscode';
-import { WorkspaceFolder, DebugConfiguration, ProviderResult, CancellationToken } from 'vscode';
-import * as proc from "child_process";
-// import { MockDebugSession } from './mockDebug';
-// import { FileAccessor } from './mockRuntime';
+import * as process from 'child_process';
+
+import {
+    WorkspaceFolder,
+    DebugConfiguration,
+    ProviderResult,
+    CancellationToken
+} from 'vscode';
 
 export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
-		vscode.commands.registerCommand('extension.cobalt-debug.runEditorContents', (resource: vscode.Uri) => {
-			let targetResource = resource;
-			if (!targetResource && vscode.window.activeTextEditor) {
-				targetResource = vscode.window.activeTextEditor.document.uri;
-			}
-			if (targetResource) {
-                // TODO Probably should unify collecting this?
-                const config = vscode.workspace.getConfiguration("cobalt");
-                let serverDirectory = config.get("toolchainDirectory") || "X:\\Cobalt\\Compiler\\bin\\Debug\\net6.0";
-                let uhm = serverDirectory + "\\Compiler.exe " + targetResource.fsPath;
-
-                //proc.spawn(serverDirectory + "\\Compiler.exe", [ targetResource.fsPath ]);
-                //proc.exec(uhm);
-
-                let terminal = vscode.window.createTerminal("Application");
-                terminal.show();
-                terminal.sendText(uhm);
-
-                // TODO Use this later
-				// vscode.debug.startDebugging(undefined, {
-				// 	type: 'cobalt',
-				// 	name: 'Run File',
-				// 	request: 'launch',
-				// 	program: targetResource.fsPath
-				// }, {
-                //     noDebug: true
-                // });
-			}
-		}),
-		vscode.commands.registerCommand('extension.cobalt-debug.debugEditorContents', (resource: vscode.Uri) => {
-			let targetResource = resource;
-			if (!targetResource && vscode.window.activeTextEditor) {
-				targetResource = vscode.window.activeTextEditor.document.uri;
-			}
-			if (targetResource) {
-				vscode.debug.startDebugging(undefined, {
-					type: 'cobalt',
-					name: 'Debug File',
-					request: 'launch',
-					program: targetResource.fsPath,
-					stopOnEntry: true
-				});
-			}
-		})
+		vscode.commands.registerCommand(
+            'extension.cobalt-debug.runEditorContents',
+            (resource: vscode.Uri) => launchDebugger(resource, false)
+        ),
+		vscode.commands.registerCommand(
+            'extension.cobalt-debug.debugEditorContents',
+            (resource: vscode.Uri) => launchDebugger(resource, true)
+        )
 	);
 
-	// register a configuration provider for 'mock' debug type
-	// const provider = new MockConfigurationProvider();
-	// context.subscriptions.push(vscode.debug.registerDebugConfigurationProvider('cobalt', provider));
+	context.subscriptions.push(
+        vscode.debug.registerDebugConfigurationProvider(
+            'cobalt',
+            new CobaltDebugConfigurationProvider()
+        )
+    );
 
-	// // register a dynamic configuration provider for 'mock' debug type
-	// context.subscriptions.push(vscode.debug.registerDebugConfigurationProvider('cobalt', {
-	// 	provideDebugConfigurations(folder: WorkspaceFolder | undefined): ProviderResult<DebugConfiguration[]> {
-	// 		return [
-	// 			{
-	// 				name: "Dynamic Launch",
-	// 				request: "launch",
-	// 				type: "cobalt",
-	// 				program: "${file}"
-	// 			}
-	// 		];
-	// 	}
-	// }, vscode.DebugConfigurationProviderTriggerKind.Dynamic));
-
-	
-	// let factory = new InlineDebugAdapterFactory();
-	
-	// context.subscriptions.push(vscode.debug.registerDebugAdapterDescriptorFactory('cobalt', factory));
-	// // if ('dispose' in factory) {
-	// // 	context.subscriptions.push(factory);
-	// // }
-
-	// // // override VS Code's default implementation of the debug hover
-	// // // here we match only Mock "variables", that are words starting with an '$'
-	// // context.subscriptions.push(vscode.languages.registerEvaluatableExpressionProvider('markdown', {
-	// // 	provideEvaluatableExpression(document: vscode.TextDocument, position: vscode.Position): vscode.ProviderResult<vscode.EvaluatableExpression> {
-
-	// // 		const VARIABLE_REGEXP = /\$[a-z][a-z0-9]*/ig;
-	// // 		const line = document.lineAt(position.line).text;
-
-	// // 		let m: RegExpExecArray | null;
-	// // 		while (m = VARIABLE_REGEXP.exec(line)) {
-	// // 			const varRange = new vscode.Range(position.line, m.index, position.line, m.index + m[0].length);
-
-	// // 			if (varRange.contains(position)) {
-	// // 				return new vscode.EvaluatableExpression(varRange);
-	// // 			}
-	// // 		}
-	// // 		return undefined;
-	// // 	}
-	// // }));
-
-	// // // override VS Code's default implementation of the "inline values" feature"
-	// // context.subscriptions.push(vscode.languages.registerInlineValuesProvider('markdown', {
-
-	// // 	provideInlineValues(document: vscode.TextDocument, viewport: vscode.Range, context: vscode.InlineValueContext) : vscode.ProviderResult<vscode.InlineValue[]> {
-
-	// // 		const allValues: vscode.InlineValue[] = [];
-
-	// // 		for (let l = viewport.start.line; l <= context.stoppedLocation.end.line; l++) {
-	// // 			const line = document.lineAt(l);
-	// // 			var regExp = /\$([a-z][a-z0-9]*)/ig;	// variables are words starting with '$'
-	// // 			do {
-	// // 				var m = regExp.exec(line.text);
-	// // 				if (m) {
-	// // 					const varName = m[1];
-	// // 					const varRange = new vscode.Range(l, m.index, l, m.index + varName.length);
-
-	// // 					// some literal text
-	// // 					//allValues.push(new vscode.InlineValueText(varRange, `${varName}: ${viewport.start.line}`));
-
-	// // 					// value found via variable lookup
-	// // 					allValues.push(new vscode.InlineValueVariableLookup(varRange, varName, false));
-
-	// // 					// value determined via expression evaluation
-	// // 					//allValues.push(new vscode.InlineValueEvaluatableExpression(varRange, varName));
-	// // 				}
-	// // 			} while (m);
-	// // 		}
-
-	// // 		return allValues;
-	// // 	}
-	// // }));
+	context.subscriptions.push(vscode.debug.registerDebugAdapterDescriptorFactory(
+        'cobalt',
+        new CobaltDebugAdapterFactory()
+    ));
 }
 
 export function deactivate(): Thenable<void> | undefined {
     return undefined;
 }
 
-// class MockConfigurationProvider implements vscode.DebugConfigurationProvider {
+function launchDebugger(resource: vscode.Uri, attach: boolean) {
+    if (resource == null && vscode.window.activeTextEditor != null)
+        resource = vscode.window.activeTextEditor.document.uri;
+    if (resource == null)
+        return;
+    
+    vscode.debug.startDebugging(
+        vscode.workspace.getWorkspaceFolder(resource),
+        {
+            type: 'cobalt',
+            name: 'Debug',
+            request: 'launch',
+            entryCobPath: resource.fsPath,
+            commandLine: []
+        },
+        {
+            noDebug: !attach
+        }
+    );
+}
 
-// 	/**
-// 	 * Massage a debug configuration just before a debug session is being launched,
-// 	 * e.g. add all missing attributes to the debug configuration.
-// 	 */
-// 	resolveDebugConfiguration(folder: WorkspaceFolder | undefined, config: DebugConfiguration, token?: CancellationToken): ProviderResult<DebugConfiguration> {
+class CobaltDebugConfigurationProvider implements vscode.DebugConfigurationProvider {
+	resolveDebugConfiguration(folder: WorkspaceFolder | undefined, config: DebugConfiguration, token?: CancellationToken): ProviderResult<DebugConfiguration> {
+		if (config.type == null
+        &&  config.request == null
+        &&  config.name == null) {
+			const editor = vscode.window.activeTextEditor;
+			if (editor != null && editor.document.languageId === 'cob') {
+				config.type = 'cobalt';
+				config.name = 'Launch';
+				config.request = 'launch';
+				config.entryCobPath = '${file}';
+                config.commandLine = [];
+			}
+		}
 
-// 		// // if launch.json is missing or empty
-// 		// if (!config.type && !config.request && !config.name) {
-// 		// 	const editor = vscode.window.activeTextEditor;
-// 		// 	if (editor && editor.document.languageId === 'markdown') {
-// 		// 		config.type = 'mock';
-// 		// 		config.name = 'Launch';
-// 		// 		config.request = 'launch';
-// 		// 		config.program = '${file}';
-// 		// 		config.stopOnEntry = true;
-// 		// 	}
-// 		// }
+		if (config.entryCobPath == null) {
+			return vscode.window.showInformationMessage("Cannot find a program to debug")
+                .then(_ => undefined);
+		}
 
-// 		// if (!config.program) {
-// 		// 	return vscode.window.showInformationMessage("Cannot find a program to debug").then(_ => {
-// 		// 		return undefined;	// abort launch
-// 		// 	});
-// 		// }
+		return config;
+	}
+}
 
-// 		return config;
-// 	}
-// }
+class CobaltDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory {
+    private server?: process.ChildProcess;
+    private stdout?: vscode.OutputChannel;
 
-// export const workspaceFileAccessor: FileAccessor = {
-// 	isWindows: typeof process !== 'undefined' && process.platform === 'win32',
-// 	async readFile(path: string): Promise<Uint8Array> {
-// 		let uri: vscode.Uri;
-// 		try {
-// 			uri = pathToUri(path);
-// 		} catch (e) {
-// 			return new TextEncoder().encode(`cannot read '${path}'`);
-// 		}
+	async createDebugAdapterDescriptor(_session: vscode.DebugSession): Promise<ProviderResult<vscode.DebugAdapterDescriptor>> {
+        const config = vscode.workspace.getConfiguration("cobalt");
+        const serverDirectory = config.get<string>("toolchainDirectory");
+        if (serverDirectory == null) {
+            return vscode.window.showErrorMessage("Cobalt Toolchain Directory not specified")
+                .then(_ => undefined);
+        }
 
-// 		return await vscode.workspace.fs.readFile(uri);
-// 	},
-// 	async writeFile(path: string, contents: Uint8Array) {
-// 		await vscode.workspace.fs.writeFile(pathToUri(path), contents);
-// 	}
-// };
+        const serverPath = path.join(serverDirectory, 'Compiler.exe');
 
-// function pathToUri(path: string) {
-// 	try {
-// 		return vscode.Uri.file(path);
-// 	} catch (e) {
-// 		return vscode.Uri.parse(path);
-// 	}
-// }
+        //const pipeName = "eb925160-12d5-485a-8b99-888865cb4ac3"; // For debugging
+        const pipeName = crypto.randomUUID();
+        const pipePath = path.join('\\\\.\\pipe\\', pipeName);
 
-// class InlineDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory {
+        this.server = process.spawn(serverPath, [ _session.configuration.entryCobPath, "--debug=" + pipeName, ..._session.configuration.commandLine ], {
+            cwd: _session.workspaceFolder?.uri.fsPath
+        });
 
-// 	createDebugAdapterDescriptor(_session: vscode.DebugSession): ProviderResult<vscode.DebugAdapterDescriptor> {
-// 		return new vscode.DebugAdapterInlineImplementation(new MockDebugSession(workspaceFileAccessor));
-// 	}
-// }
+        this.stdout = this.stdout || vscode.window.createOutputChannel("Cobalt Application");
+        this.stdout.clear();
+        this.stdout.show();
+        this.server.stdout?.on('data', (chunk) => {
+            this.stdout?.append(chunk.toString());
+        });
+
+        // TODO HACK Need to find a better way to wait for the pipe to open on the server
+        await new Promise(x => setTimeout(x, 150));
+
+        return new vscode.DebugAdapterNamedPipeServer(pipePath);
+	}
+
+    dispose() {
+        this.server?.kill();
+    }
+}

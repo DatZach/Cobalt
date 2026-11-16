@@ -15,9 +15,6 @@
 	"engines": {
 		"vscode": "^1.105.0"
 	},
-	"dependencies": {
-		"vscode-languageclient": "^7.0.0"
-	},
 	"main": "./out/extension.js",
 	"workspaceTrust": {
 		"request": "never"
@@ -83,8 +80,11 @@
 			}]
 		},
 		"keybindings":[{
-			"command": "extension.cobalt-debug.runEditorContents",
+			"command": "extension.cobalt-debug.debugEditorContents",
 			"key": "f5"
+		}, {
+			"command": "extension.cobalt-debug.runEditorContents",
+			"key": "shift+f5"
 		}],
 		"breakpoints": [{
 			"language": "cob"
@@ -93,20 +93,27 @@
 			"type": "cobalt",
 			"languages": [ "cob" ],
 			"label": "Cobalt Debugger",
-			"program": "./out/extension.js",
-			"runtime": "node"
+			"initialConfigurations": [
+				{
+					"type": "cobalt",
+					"request": "launch",
+					"name": "Ask for file name",
+					"entryCobPath": "${file}",
+					"commandLine": []
+				}
+			]
+		}],
+		"configuration": [{
+			"title": "Cobalt",
+			"properties": {
+				"cobalt.toolchainDirectory": {
+					"type": "string",
+					"default": "X:\\Cobalt\\Compiler\\bin\\Debug\\net6.0",
+					"description": "Directory where the Cobalt Toolchain exists"
+				}
+			}
 		}]
 	},
-	"configuration": [{
-		"title": "Cobalt",
-        "properties": {
-        	"cobalt.toolchainDirectory": {
-            	"type": "string",
-            	"default": null,
-            	"description": "Directory where the Cobalt Toolchain exists"
-          	}
-        }
-    }],
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
 		"compile": "tsc -p ./",
@@ -123,7 +130,8 @@
 		"@types/vscode": "^1.146.0",
 		"@types/mocha": "^10.0.10",
 		"@types/node": "22.x",
-		"@types/markdown-it": "^14.1.0",
+		"@vscode/debugadapter": "^1.56.0",
+    	"@vscode/debugadapter-testsupport": "^1.56.0",
 		"typescript-eslint": "^8.52.0",
 		"eslint": "^9.39.2",
 		"typescript": "^5.9.3",

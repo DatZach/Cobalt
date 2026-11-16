@@ -2979,6 +2979,8 @@ namespace Compiler.CodeGeneration
 
             private sealed class RootSymbol : ISymbol
             {
+                public string Name => "$RootSymbol";
+
                 public CobType Type { get; }
 
                 public bool Mutable { get; }
@@ -3011,6 +3013,8 @@ namespace Compiler.CodeGeneration
 
     internal interface ISymbol
     {
+        string Name { get; }
+
         CobType Type { get; }
 
         bool Mutable { get; }

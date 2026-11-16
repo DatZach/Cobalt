@@ -1,4 +1,4 @@
-﻿using Compiler.Server.Services;
+﻿using Compiler.Server.Language.Services;
 using MediatR;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
@@ -7,7 +7,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities;
 
-namespace Compiler.Server.Handlers
+namespace Compiler.Server.Language.Handlers
 {
     internal sealed class TextDocumentHandler : TextDocumentSyncHandlerBase
     {

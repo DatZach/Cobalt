@@ -2,12 +2,860 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json;
 using Compiler.CodeGeneration;
 using Compiler.CodeGeneration.Artifacts;
 using CallingConvention = Compiler.CodeGeneration.Artifacts.CallingConvention;
 
 namespace Compiler.Interpreter
 {
+    internal sealed class VirtualMachine2 : IDisposable
+    {
+        public const int MaxRegisters = 32;
+
+        public int IP => stack.Peek().IP;
+
+        private Function? userPanicCallback;
+
+        private readonly Stack<Frame> stack;
+        private readonly NativeLibrariesProxy nativeLibrariesProxy;
+        private readonly Artifact artifact;
+
+        public VirtualMachine2(Artifact artifact)
+        {
+            this.artifact = artifact ?? throw new ArgumentNullException(nameof(artifact));
+            
+            nativeLibrariesProxy = NativeLibrariesProxy.FromArtifact(artifact);
+            stack = new Stack<Frame>();
+        }
+
+        public void Push(Function function, IList<Variable> parameters, Operand? returnOperand)
+        {
+            var ctx = new Frame(function, parameters, returnOperand);
+            stack.Push(ctx);
+        }
+
+        public void Step()
+        {
+            var ctx = stack.Peek();
+            var inst = ctx.Function.Body.Instructions[ctx.IP];
+            var isChecked = (inst.Flags & Opflag.SuppressOverflow) == 0;
+            try
+            {
+                switch (inst.Opcode)
+                {
+                    case Opcode.None:
+                        break;
+                    case Opcode.Call:
+                    case Opcode.CallVirt:
+                    {
+                        Function callee;
+                        if (inst.Opcode == Opcode.Call)
+                            callee = ReadOperand(inst.A!).Type.TagFunction!;
+                        else
+                        {
+                            var virtFunc = ReadOperand(inst.A!).Type.TagFunction!;
+                            var @this = ReadOperand(inst.D![0]).Type.Tag;
+                            if (@this is RecordType recordType)
+                                callee = recordType.FindVirtualFunction(virtFunc)!;
+                            else
+                                throw new InvalidOperationException();
+                        }
+
+                        IList<Variable>? calleeParameters;
+                        if (callee.Parameters.Count > 0)
+                        {
+                            var aCalleeParameters = new Variable[callee.Parameters.Count];
+                            for (int j = 0; j < aCalleeParameters.Length; ++j)
+                            {
+                                var aCalleeParameter = ReadOperand(inst.D![j]);
+                                if (j != 0 || callee.CallingConvention != CallingConvention.ThisCall)
+                                    aCalleeParameter = aCalleeParameter.DeepClone();
+
+                                aCalleeParameters[j] = aCalleeParameter;
+                            }
+
+                            calleeParameters = aCalleeParameters;
+                        }
+                        else
+                            calleeParameters = null;
+
+                        //var native = callee.NativeImport;
+                        //var result = native != null
+                        //    ? nativeLibrariesProxy.Invoke(native, calleeParameters)
+                        //    : ExecuteFunction(callee, calleeParameters);
+
+                        //if (callee.ReturnType != eCobType.None && inst.B.Type != OperandType.None)
+                        //    WriteOperand(inst.B!, result);
+
+                        var native = callee.NativeImport;
+                        if (native != null)
+                        {
+                            var result = nativeLibrariesProxy.Invoke(native, calleeParameters);
+                            if (callee.ReturnType != eCobType.None && inst.B.Type != OperandType.None)
+                                WriteOperand(inst.B!, result);
+                        }
+                        else
+                        {
+                            Push(callee, calleeParameters, inst.B);
+                        }
+
+                        break;
+                    }
+                    case Opcode.Return:
+                    {
+                        var returnOperand = ctx.ReturnOperand;
+                        var value = inst.A != null ? ReadOperand(inst.A) : null;
+                        stack.Pop();
+                        ctx = stack.Peek();
+
+                        if (returnOperand != null && returnOperand.Type != OperandType.None)
+                            WriteOperand(returnOperand, value);
+                        return; // NOTE ctx has changed to caller frame
+                    }
+                    case Opcode.Move:
+                    {
+                        WriteOperand(inst.A!, ReadOperand(inst.B!));
+                        break;
+                    }
+                    case Opcode.GetField:
+                    {
+                        Variable? fieldValue;
+                        var obj = ReadOperand(inst.B!);
+                        var fieldIdx = inst.C!.Value;
+                        if (fieldIdx == 0)
+                        {
+                            // TODO Strings are actually Structs, when implemented in the language this hack can be fixed
+                            if (obj.Value is byte[])
+                                fieldValue = new Variable("$imm", CobType.U64, false, obj.BufferValue.Length);
+                            else
+                                fieldValue = obj.RecordValue[0];
+                        }
+                        else
+                            fieldValue = obj.RecordValue[fieldIdx];
+
+                        WriteOperand(inst.A!, fieldValue);
+                        break;
+                    }
+                    case Opcode.SetField:
+                    {
+                        var obj = ReadOperand(inst.A!);
+                        var fieldIdx = inst.B!.Value;
+                        var value = ReadOperand(inst.C!);
+                        obj.RecordValue[fieldIdx] = value;
+                        break;
+                    }
+                    case Opcode.GetAddr:
+                    {
+                        // TODO Leaks memory!
+                        var b = ReadOperand(inst.B!);
+                        var bHandle = GCHandle.Alloc(b.Value, GCHandleType.Pinned);
+                        var bAddr = (long)bHandle.AddrOfPinnedObject();
+                        WriteOperand(inst.A!, bAddr.ToCobVariable());
+                        break;
+                    }
+                    case Opcode.Peek:
+                    {
+                        var ptr = (IntPtr)ReadOperand(inst.B!).IntValue;
+                        var size = ReadOperand(inst.C!).IntValue;
+                        var value = size switch
+                        {
+                            1 => Marshal.ReadByte(ptr),
+                            2 => Marshal.ReadInt16(ptr),
+                            4 => Marshal.ReadInt32(ptr),
+                            8 => Marshal.ReadInt64(ptr),
+                            _ => throw new InvalidOperationException($"Cannot peek size {size}")
+                        };
+                        WriteOperand(inst.A!, value.ToCobVariable());
+                        break;
+                    }
+                    case Opcode.Poke:
+                    {
+                        var ptr = (IntPtr)ReadOperand(inst.A!).IntValue;
+                        var size = ReadOperand(inst.B!).IntValue;
+                        var value = ReadOperand(inst.C!).IntValue;
+                        switch (size)
+                        {
+                            case 1: Marshal.WriteByte(ptr, (byte)value); break;
+                            case 2: Marshal.WriteInt16(ptr, (short)value); break;
+                            case 4: Marshal.WriteInt32(ptr, (int)value); break;
+                            case 8: Marshal.WriteInt64(ptr, value); break;
+                            default: throw new InvalidOperationException($"Cannot poke size {size}");
+                        }
+
+                        break;
+                    }
+                    case Opcode.New:
+                    {
+                        var type = ReadOperand(inst.B!).Type;
+                        Variable obj;
+                        if (type.Tag is RecordType recordType)
+                            obj = recordType.ToVariable();
+                        else
+                            throw new InvalidOperationException($"Cannot allocate type {type.Tag?.GetType().Name}");
+
+                        WriteOperand(inst.A!, obj);
+                        break;
+                    }
+                    case Opcode.Delete:
+                    {
+                        var a = ReadOperand(inst.A!);
+                        // NOTE Nothing to do, C# GC does the work for us
+                        break;
+                    }
+                    case Opcode.BitShr:
+                    {
+                        var b = ReadOperand(inst.B!);
+                        var c = ReadOperand(inst.C!);
+                        var a = SaturateTruncate(b.IntValue >> (int)c.IntValue, b.Type, c.Type, isChecked);
+                        WriteOperand(inst.A!, a);
+                        break;
+                    }
+                    case Opcode.BitShl:
+                    {
+                        var b = ReadOperand(inst.B!);
+                        var c = ReadOperand(inst.C!);
+                        var a = SaturateTruncate(b.IntValue << (int)c.IntValue, b.Type, c.Type, isChecked);
+                        WriteOperand(inst.A!, a);
+                        break;
+                    }
+                    case Opcode.BitRol:
+                    {
+                        throw new NotImplementedException(); // BitOperations.RotateLeft
+                        break;
+                    }
+                    case Opcode.BitRor:
+                    {
+                        throw new NotImplementedException(); // BitOperations.RotateRight
+                        break;
+                    }
+                    case Opcode.BitAnd:
+                    {
+                        var b = ReadOperand(inst.B!);
+                        var c = ReadOperand(inst.C!);
+                        var a = SaturateTruncate(b.IntValue & c.IntValue, b.Type, c.Type, isChecked);
+                        WriteOperand(inst.A!, a);
+                        break;
+                    }
+                    case Opcode.BitXor:
+                    {
+                        var b = ReadOperand(inst.B!);
+                        var c = ReadOperand(inst.C!);
+                        var a = SaturateTruncate(b.IntValue ^ c.IntValue, b.Type, c.Type, isChecked);
+                        WriteOperand(inst.A!, a);
+                        break;
+                    }
+                    case Opcode.BitOr:
+                    {
+                        var b = ReadOperand(inst.B!);
+                        var c = ReadOperand(inst.C!);
+                        var a = SaturateTruncate(b.IntValue | c.IntValue, b.Type, c.Type, isChecked);
+                        WriteOperand(inst.A!, a);
+                        break;
+                    }
+                    case Opcode.BitNot:
+                    {
+                        var b = ReadOperand(inst.B!);
+                        var a = SaturateTruncate(~b.IntValue, b.Type, isChecked);
+                        WriteOperand(inst.A!, a);
+                        break;
+                    }
+                    case Opcode.Not:
+                    {
+                        var b = ReadOperand(inst.B!);
+                        var a = SaturateTruncate(b.IntValue != 0 ? 0 : 1, b.Type, isChecked);
+                        WriteOperand(inst.A!, a);
+                        break;
+                    }
+                    case Opcode.Neg:
+                    {
+                        var b = ReadOperand(inst.B!);
+                        var a = SaturateTruncate(-b.IntValue, b.Type, isChecked);
+                        WriteOperand(inst.A!, a);
+                        break;
+                    }
+                    case Opcode.Add:
+                    {
+                        var b = ReadOperand(inst.B!);
+                        var c = ReadOperand(inst.C!);
+                        var a = SaturateTruncate(b.IntValue + c.IntValue, b.Type, c.Type, isChecked);
+                        WriteOperand(inst.A!, a);
+                        break;
+                    }
+                    case Opcode.Sub:
+                    {
+                        var b = ReadOperand(inst.B!);
+                        var c = ReadOperand(inst.C!);
+                        var a = SaturateTruncate(b.IntValue - c.IntValue, b.Type, c.Type, isChecked);
+                        WriteOperand(inst.A!, a);
+                        break;
+                    }
+                    case Opcode.Mul:
+                    {
+                        var b = ReadOperand(inst.B!);
+                        var c = ReadOperand(inst.C!);
+                        var a = SaturateTruncate(b.IntValue * c.IntValue, b.Type, c.Type, isChecked);
+                        WriteOperand(inst.A!, a);
+                        break;
+                    }
+                    case Opcode.Pow:
+                    {
+                        throw new NotImplementedException();
+                        break;
+                    }
+                    case Opcode.Div:
+                    {
+                        var b = ReadOperand(inst.B!);
+                        var c = ReadOperand(inst.C!);
+                        var a = SaturateTruncate(b.IntValue / c.IntValue, b.Type, c.Type, isChecked);
+                        WriteOperand(inst.A!, a);
+                        break;
+                    }
+                    case Opcode.DivCeil:
+                    {
+                        var b = ReadOperand(inst.B!);
+                        var c = ReadOperand(inst.C!);
+                        var a = SaturateTruncate((b.IntValue + c.IntValue - 1) / c.IntValue, b.Type, c.Type, isChecked);
+                        WriteOperand(inst.A!, a);
+                        break;
+                    }
+                    case Opcode.DivFloor:
+                    {
+                        // TODO Technically only useful for floats
+                        var b = ReadOperand(inst.B!);
+                        var c = ReadOperand(inst.C!);
+                        var a = SaturateTruncate(b.IntValue / c.IntValue, b.Type, c.Type, isChecked);
+                        WriteOperand(inst.A!, a);
+                        break;
+                    }
+                    case Opcode.Mod:
+                    {
+                        var b = ReadOperand(inst.B!);
+                        var c = ReadOperand(inst.C!);
+                        var a = SaturateTruncate(b.IntValue % c.IntValue, b.Type, c.Type, isChecked);
+                        WriteOperand(inst.A!, a);
+                        break;
+                    }
+                    case Opcode.Rem:
+                    {
+                        var b = ReadOperand(inst.B!);
+                        var c = ReadOperand(inst.C!);
+                        var a = SaturateTruncate(((b.IntValue % c.IntValue) + c.IntValue) % c.IntValue, b.Type, c.Type, isChecked);
+                        WriteOperand(inst.A!, a);
+                        break;
+                    }
+                    case Opcode.CondAnd:
+                    {
+                        var b = ReadOperand(inst.B!).IntValue;
+                        var c = ReadOperand(inst.C!).IntValue;
+                        var d = b == 1 && c == 1;
+                        WriteOperand(inst.A!, d.ToCobVariable());
+                        break;
+                    }
+                    case Opcode.CondOr:
+                    {
+                        var b = ReadOperand(inst.B!).IntValue;
+                        var c = ReadOperand(inst.C!).IntValue;
+                        var d = b == 1 || c == 1;
+                        WriteOperand(inst.A!, d.ToCobVariable());
+                        break;
+                    }
+                    case Opcode.CmpEQ:
+                    {
+                        var b = ReadOperand(inst.B!).IntValue;
+                        var c = ReadOperand(inst.C!).IntValue;
+                        var d = b == c;
+                        WriteOperand(inst.A!, d.ToCobVariable());
+                        break;
+                    }
+                    case Opcode.CmpNEQ:
+                    {
+                        var b = ReadOperand(inst.B!).IntValue;
+                        var c = ReadOperand(inst.C!).IntValue;
+                        var d = b != c;
+                        WriteOperand(inst.A!, d.ToCobVariable());
+                        break;
+                    }
+                    case Opcode.CmpLT:
+                    {
+                        var b = ReadOperand(inst.B!).IntValue;
+                        var c = ReadOperand(inst.C!).IntValue;
+                        var d = b < c;
+                        WriteOperand(inst.A!, d.ToCobVariable());
+                        break;
+                    }
+                    case Opcode.CmpLTE:
+                    {
+                        var b = ReadOperand(inst.B!).IntValue;
+                        var c = ReadOperand(inst.C!).IntValue;
+                        var d = b <= c;
+                        WriteOperand(inst.A!, d.ToCobVariable());
+                        break;
+                    }
+                    case Opcode.CmpGT:
+                    {
+                        var b = ReadOperand(inst.B!).IntValue;
+                        var c = ReadOperand(inst.C!).IntValue;
+                        var d = b > c;
+                        WriteOperand(inst.A!, d.ToCobVariable());
+                        break;
+                    }
+                    case Opcode.CmpGTE:
+                    {
+                        var b = ReadOperand(inst.B!).IntValue;
+                        var c = ReadOperand(inst.C!).IntValue;
+                        var d = b >= c;
+                        WriteOperand(inst.A!, d.ToCobVariable());
+                        break;
+                    }
+                    case Opcode.CmpTyEQ:
+                    {
+                        var b = ReadOperand(inst.B!).Type;
+                        var c = ReadOperand(inst.C!).Type;
+                        var d = b == c;
+                        WriteOperand(inst.A!, d.ToCobVariable());
+                        break;
+                    }
+                    case Opcode.CmpTyNEQ:
+                    {
+                        var b = ReadOperand(inst.B!).Type;
+                        var c = ReadOperand(inst.C!).Type;
+                        var d = b != c;
+                        WriteOperand(inst.A!, d.ToCobVariable());
+                        break;
+                    }
+                    case Opcode.JmpT:
+                    {
+                        var cmp = ReadOperand(inst.A!).IntValue;
+                        if (cmp == 1)
+                            ctx.IP = ctx.Function.Body.Labels[(int)inst.B!.Value].Location - 1;
+                        break;
+                    }
+                    case Opcode.JmpF:
+                    {
+                        var cmp = ReadOperand(inst.A!).IntValue;
+                        if (cmp == 0)
+                            ctx.IP = ctx.Function.Body.Labels[(int)inst.B!.Value].Location - 1;
+                        break;
+                    }
+                    case Opcode.Jmp:
+                    {
+                        ctx.IP = ctx.Function.Body.Labels[(int)inst.A!.Value].Location - 1;
+                        break;
+                    }
+                    case Opcode.Cast:
+                    {
+                        var b = ReadOperand(inst.B!);
+                        var c = ReadOperand(inst.C!);
+                        var a = SaturateTruncate(b.IntValue, c.Type, false);
+                        WriteOperand(inst.A!, a);
+                        break;
+                    }
+                    case Opcode.PanicOnErr:
+                    {
+                        var a = ReadOperand(inst.A!);
+                        if (a.Type == eCobType.Error)
+                            throw new VmException(a.IntValue);
+                        break;
+                    }
+                    case Opcode.SetPanicHandler:
+                    {
+                        var a = ReadOperand(inst.A!);
+                        userPanicCallback = a.Type == eCobType.Nil ? null : a.Value as Function;
+                        break;
+                    }
+                    default:
+                        throw new ArgumentOutOfRangeException();
+                }
+
+                ++ctx.IP;
+            }
+            catch (UnwindException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // PREAMBLE
+                long errorCode;
+                if (ex is VmException vmEx)
+                    errorCode = vmEx.ErrorCode;
+                else if (ex is DivideByZeroException)
+                    errorCode = artifact.Globals.First(x => x.Type == eCobType.Error && x.Name == "DivideByZero").IntValue;
+                else if (ex is OverflowException)
+                    errorCode = artifact.Globals.First(x => x.Type == eCobType.Error && x.Name == "Overflow").IntValue;
+                else
+                    errorCode = -1;
+
+                var sbStackTrace = new StringBuilder();
+                foreach (var frame in stack)
+                {
+                    // at function_name in Filename, Line
+                    // TODO Resolve debug symbol
+
+                    // Full Name
+                    var sbFullName = new StringBuilder();
+                    IScopeContext? symbol = frame.Function;
+                    while (symbol != null)
+                    {
+                        string symbolName;
+                        if (symbol == artifact.EntryFunction)
+                            symbolName = "(entry)";
+                        else
+                            symbolName = symbol.Name;
+                        sbFullName.Insert(0, symbolName);
+                        symbol = symbol.Parent;
+                        if (symbol != null && symbol.Parent == null) symbol = null;
+                        if (symbol != null) sbFullName.Insert(0, '.');
+                    }
+
+                    var fullName = sbFullName.ToString();
+
+                    sbStackTrace.AppendLine($"  at {fullName} @ {frame.IP}"); // TODO @ is temporary, replace with line number
+                    
+                }
+
+                var stackTrace = sbStackTrace.ToString();
+                if (errorCode == -1)
+                {
+                    sbStackTrace.AppendLine();
+                    sbStackTrace.AppendLine("VM STACK TRACE");
+                    sbStackTrace.AppendLine(ex.StackTrace);
+                }
+
+                if (userPanicCallback != null)
+                {
+                    // USER HANDLER
+                    var cb = userPanicCallback;
+                    try
+                    {
+                        userPanicCallback = null;
+                        throw new NotImplementedException();
+                        //ExecuteFunction(cb, new[]
+                        //{
+                        //    new Variable("code", CobType.Error, errorCode),
+                        //    Intrinsics.AllocateStringLiteral(stackTrace, null)
+                        //});
+                    }
+                    catch { /* Second Chance exception, fall through to default handler */ }
+                    finally
+                    {
+                        userPanicCallback = cb;
+                    }
+                }
+                else
+                {
+                    // DEFAULT HANDLER
+                    string errorName;
+                    if (errorCode == -1)
+                        errorName = $"(VM EXCEPTION; {ex.Message})";
+                    else
+                    {
+                        errorName = artifact.Globals.FirstOrDefault(
+                            x => x.Type == eCobType.Error
+                              && x.IntValue == errorCode
+                        )?.Name ?? $"(UNKNOWN; {errorCode})";
+                    }
+
+                    Console.ForegroundColor = ConsoleColor.Red; Console.Write("Panic! ");
+                    Console.ForegroundColor = ConsoleColor.Gray; Console.WriteLine($"Unhandled '{errorName}' occurred.");
+                    Console.WriteLine(sbStackTrace.ToString());
+                }
+
+                // Unwind stack
+                throw new UnwindException(ex);
+            }
+
+            return;
+
+            void WriteOperand(Operand operand, Variable value)
+            {
+                switch (operand.Type)
+                {
+                    //case OperandType.ImmediateSigned:
+                    //case OperandType.ImmediateUnsigned:
+                    //case OperandType.ImmediateReal:
+                    //case OperandType.Function:
+                    //    throw new InvalidOperationException();
+                    case OperandType.Register:
+                        ctx.Registers[operand.Value] = value;
+                        break;
+                    case OperandType.Local:
+                        ctx.Locals[(int)operand.Value] = value;
+                        break;
+                    case OperandType.Global:
+                        artifact.Globals[(int)operand.Value] = value;
+                        break;
+                    case OperandType.Argument:
+                        ctx.Parameters[(int)operand.Value] = value;
+                        break;
+                    default:
+                        throw new InvalidOperationException();
+                }
+            }
+            
+            Variable ReadOperand(Operand operand)
+            {
+                switch (operand.Type)
+                {
+                    case OperandType.ImmediateSigned:
+                        return new Variable("$imm", CobType.Int, false, operand.Value);
+                    case OperandType.ImmediateSigned8:
+                        return new Variable("$imm", CobType.S8, false, operand.Value);
+                    case OperandType.ImmediateSigned16:
+                        return new Variable("$imm", CobType.S16, false, operand.Value);
+                    case OperandType.ImmediateSigned32:
+                        return new Variable("$imm", CobType.S32, false, operand.Value);
+                    case OperandType.ImmediateSigned64:
+                        return new Variable("$imm", CobType.S64, false, operand.Value);
+                    case OperandType.ImmediateUnsigned:
+                        return new Variable("$imm", CobType.UInt, false, operand.Value);
+                    case OperandType.ImmediateUnsigned8:
+                        return new Variable("$imm", CobType.U8, false, operand.Value);
+                    case OperandType.ImmediateUnsigned16:
+                        return new Variable("$imm", CobType.U16, false, operand.Value);
+                    case OperandType.ImmediateUnsigned32:
+                        return new Variable("$imm", CobType.U32, false, operand.Value);
+                    case OperandType.ImmediateUnsigned64:
+                        return new Variable("$imm", CobType.U64, false, operand.Value);
+                    case OperandType.ImmediateReal:
+                        return new Variable("$imm", CobType.Real, false, operand.Value);
+                    case OperandType.ImmediateReal32:
+                        return new Variable("$imm", CobType.R32, false, operand.Value);
+                    case OperandType.ImmediateReal64:
+                        return new Variable("$imm", CobType.R64, false, operand.Value);
+                    case OperandType.Register:
+                        return ctx.Registers[operand.Value];
+                    case OperandType.Argument:
+                        return ctx.Parameters[(int)operand.Value];
+                    case OperandType.Local:
+                        return ctx.Locals[(int)operand.Value];
+                    case OperandType.Global:
+                        return artifact.Globals[(int)operand.Value];
+                    case OperandType.Function:
+                    {
+                        var function = artifact.Functions[(int)operand.Value];
+                        var type = new CobType(eCobType.Function, tag: function);
+
+                        return new Variable("$func", type, false) { Value = function };
+                    }
+                    case OperandType.Type:
+                    {
+                        var type = CobType.FromOperand(operand, artifact);
+                        return new Variable("$type", type, false);
+                    }
+                    default:
+                        throw new InvalidOperationException();
+                }
+            }
+        }
+        
+
+        // TODO Optimize
+        // TODO Floats
+        private static Variable SaturateTruncate(long a, CobType b, CobType c, bool isChecked)
+        {
+            if (b == c)
+                return new Variable("$imm", b, a);
+
+            var t = b == eCobType.Signed || c == eCobType.Signed ? eCobType.Signed : eCobType.Unsigned;
+            var w = Math.Max(b.Size, c.Size);
+            return SaturateTruncate(a, t, w, isChecked);
+        }
+
+        private static Variable SaturateTruncate(long a, CobType b, bool isChecked)
+            => SaturateTruncate(a, b.Type, b.Size, isChecked);
+        
+        private static Variable SaturateTruncate(long a, eCobType t, int w, bool isChecked)
+        {
+            if (t == eCobType.Signed)
+            {
+                // Saturation
+                if (w == -1)
+                    a = isChecked ? checked((long)a) : unchecked((long)a);  // TODO Not sure if this is strictly correct
+                else if (w == 8)
+                    a = isChecked ? checked((sbyte)a) : unchecked((sbyte)a);
+                else if (w == 16)
+                    a = isChecked ? checked((short)a) : unchecked((short)a);
+                else if (w == 32)
+                    a = isChecked ? checked((int)a) : unchecked((int)a);
+                else if (w == 64)
+                    a = isChecked ? checked((long)a) : unchecked((long)a);
+                else
+                    throw new InvalidOperationException($"Cannot saturate {w} bit integer");
+            }
+            else if (t == eCobType.Unsigned)
+            {
+                // Truncation
+                if (w == -1)
+                    a = isChecked ? checked((long)(ulong)a) : unchecked((long)(ulong)a); // TODO Not sure if this is strictly correct
+                else if (w == 8)
+                    a = isChecked ? checked((byte)a) : unchecked((byte)a);
+                else if (w == 16)
+                    a = isChecked ? checked((ushort)a) : unchecked((ushort)a);
+                else if (w == 32)
+                    a = isChecked ? checked((uint)a) : unchecked((uint)a);
+                else if (w == 64)
+                    a = isChecked ? checked((long)(ulong)a) : unchecked((long)(ulong)a);
+                else
+                    throw new InvalidOperationException($"Cannot truncate {w} bit integer");
+            }
+            else
+                throw new InvalidOperationException($"Cannot saturate/truncate type {t}");
+
+            return new Variable("$imm", new CobType(t, w), a);
+        }
+
+        public void Dispose()
+        {
+            nativeLibrariesProxy.Dispose();
+        }
+
+        private sealed class Frame
+        {
+            public Function Function { get; }
+
+            public IList<Variable> Parameters { get; }
+
+            public Variable[] Locals { get; }
+
+            public Variable[] Registers { get; }
+
+            public Operand? ReturnOperand { get; }
+
+            public int IP;
+
+            public Frame(Function function, IList<Variable> parameters, Operand? returnOperand)
+            {
+                Function = function;
+                IP = 0;
+
+                Locals = new Variable[function.Locals.Count];
+                Registers = new Variable[MaxRegisters];
+                Parameters = parameters;
+                ReturnOperand = returnOperand;
+            }
+        }
+
+        public sealed class NativeLibrariesProxy : IDisposable
+        {
+            public delegate long NativeWrapperDelegate(Variable[]? variables);
+
+            private readonly Dictionary<string, NativeLibraryProxy> proxies;
+
+            private NativeLibrariesProxy(Dictionary<string, NativeLibraryProxy> proxies)
+            {
+                this.proxies = proxies;
+            }
+
+            public Variable? Invoke(Import native, IList<Variable>? parameters)
+            {
+                if (native.Function == null)
+                    return null;
+
+                var proxy = proxies[native.Library];
+                var methodDelegate = proxy.Functions[native.SymbolName!];
+                
+                var result = methodDelegate(parameters?.ToArray());
+
+                return new Variable("$imm", CobType.U64, false, result); // TODO Proxy more types than integers
+            }
+
+            public static NativeLibrariesProxy FromArtifact(Artifact artifact)
+            {
+                var proxies = new Dictionary<string, NativeLibraryProxy>();
+
+                foreach (var import in artifact.Imports)
+                {
+                    if (!proxies.TryGetValue(import.Library, out var proxy))
+                    {
+                        var nativeLibrary = System.Runtime.InteropServices.NativeLibrary.Load(import.Library);
+                        proxy = new NativeLibraryProxy(nativeLibrary);
+                        proxies.Add(import.Library, proxy);
+                    }
+
+                    var address = System.Runtime.InteropServices.NativeLibrary.GetExport(proxy.Library, import.SymbolName!);
+
+                    var method = new System.Reflection.Emit.DynamicMethod(
+                        $"dynm_{import.SymbolName}",
+                        typeof(long),
+                        new [] { typeof(Variable[]) },
+                        typeof(NativeLibrariesProxy).Module
+                    );
+
+                    method.DefineParameter(0, ParameterAttributes.In, "variables");
+
+                    var il = method.GetILGenerator();
+                    for (int i = 0; i < import.Function!.Parameters.Count; ++i)
+                    {
+                        il.Emit(System.Reflection.Emit.OpCodes.Ldarg_0);
+                        il.Emit(System.Reflection.Emit.OpCodes.Ldc_I4, i);
+                        il.Emit(System.Reflection.Emit.OpCodes.Ldelem_Ref);
+                        il.Emit(System.Reflection.Emit.OpCodes.Callvirt, typeof(Variable).GetProperty(nameof(Variable.IntValue))!.GetGetMethod()!);
+                        if (import.Function!.Parameters[i].Type.Size == 32)
+                            il.Emit(System.Reflection.Emit.OpCodes.Conv_I4);
+                    }
+
+                    il.Emit(System.Reflection.Emit.OpCodes.Ldc_I8, address.ToInt64());
+                    il.EmitCalli(
+                        System.Reflection.Emit.OpCodes.Calli, System.Runtime.InteropServices.CallingConvention.Cdecl,
+                        import.Function.ReturnType.ToManagedType(),
+                        import.Function.Parameters.Select(x => x.Type.ToManagedType()).ToArray()
+                    );
+
+                    il.Emit(System.Reflection.Emit.OpCodes.Ret);
+
+                    var methodDelegate = method.CreateDelegate<NativeWrapperDelegate>();
+                    proxy.Functions.Add(import.SymbolName!, methodDelegate);
+                }
+
+                return new NativeLibrariesProxy(proxies);
+            }
+
+            public void Dispose()
+            {
+                foreach (var proxy in proxies.Values)
+                    System.Runtime.InteropServices.NativeLibrary.Free(proxy.Library);
+
+                proxies.Clear();
+            }
+
+            private sealed class NativeLibraryProxy
+            {
+                public IntPtr Library { get; }
+
+                public Dictionary<string, NativeWrapperDelegate> Functions { get; }
+
+                public NativeLibraryProxy(IntPtr library)
+                {
+                    Library = library;
+                    Functions = new Dictionary<string, NativeWrapperDelegate>();
+                }
+            }
+
+            public static string GetString(byte[] data) => Encoding.UTF8.GetString(data);
+        }
+
+        private sealed class UnwindException : Exception
+        {
+            public UnwindException(Exception innerException)
+                : base("VM Exception", innerException)
+            {
+
+            }
+        }
+
+        private sealed class VmException : Exception
+        {
+            public long ErrorCode { get; }
+
+            public VmException(long errorCode)
+            {
+                ErrorCode = errorCode;
+            }
+        }
+    }
+
     internal sealed class VirtualMachine : IDisposable
     {
         public const int MaxRegisters = 32;

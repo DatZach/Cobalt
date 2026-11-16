@@ -3,6 +3,7 @@ using Compiler.Ast.Expressions;
 using Compiler.Ast.Expressions.Statements;
 using Compiler.Interpreter;
 using Compiler.Lexer;
+using Newtonsoft.Json.Linq;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -10,7 +11,7 @@ using System.Text;
 namespace Compiler.CodeGeneration.Artifacts
 {
     [DebuggerDisplay("Function '{FullyQualifiedName}'")]
-    internal sealed class Function : IScopeContext, ISymbol
+    internal sealed class Function : IScopeContext, ISymbol, IDebugSymbolProvider
     {
         public string Name { get; }
 
@@ -47,6 +48,15 @@ namespace Compiler.CodeGeneration.Artifacts
         public bool IsConstructor { get; set; } // TODO Maybe this should be implemented as OOP, not sure
 
         public bool IsDestructor { get; set; } // TODO Yeah definitely needs to be refactored somehow...
+
+        IEnumerable<ISymbol> IDebugSymbolProvider.Symbols
+        {
+            get
+            {
+                foreach (var x in parameters) yield return x;
+                foreach (var x in locals) yield return x;
+            }
+        }
 
         // TODO  HACK Fix this nonsense
         private Function? pendingSuperType;
@@ -592,6 +602,8 @@ namespace Compiler.CodeGeneration.Artifacts
 
     internal sealed class FunctionCandidates : ISymbol
     {
+        public string Name => "$FunctionCandidates";
+
         private readonly IReadOnlyList<Function> candidates;
 
         public FunctionCandidates(IReadOnlyList<Function> candidates)

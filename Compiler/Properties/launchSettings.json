@@ -2,7 +2,7 @@
   "profiles": {
     "Compiler": {
       "commandName": "Project",
-      "commandLineArgs": "C:\\Temp\\CobaltPlayground\\corn.cob --asm-verbose --fasm-verbose --stats-verbose=2"
+      "commandLineArgs": "C:\\Temp\\CobaltPlayground\\corn.cob --debug=eb925160-12d5-485a-8b99-888865cb4ac3"
     }
   }
 }

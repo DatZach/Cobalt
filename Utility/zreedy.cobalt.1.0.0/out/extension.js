@@ -44,6 +44,7 @@ function activate(context) {
 }
 function deactivate() {
     lspClient.deactivate();
+    dapClient.deactivate();
     return undefined;
 }
 //# sourceMappingURL=extension.js.map

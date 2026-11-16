@@ -1,17 +1,18 @@
 ﻿using System.IO.Pipelines;
-using Compiler.Server.Handlers;
-using Compiler.Server.Services;
+using Compiler.Server.Language.Handlers;
+using Compiler.Server.Language.Services;
 using Microsoft.Extensions.DependencyInjection;
-using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using OmniSharp.Extensions.LanguageServer.Server;
 
-namespace Compiler.Server
+namespace Compiler.Server.Language
 {
     internal sealed class CobLanguageServer
     {
         public const string Extension = "cob";
         public const string GlobPattern = $"**/*.{Extension}";
+
+        public ILanguageServer Interface => server;
 
         private readonly LanguageServer server;
 
@@ -23,19 +24,10 @@ namespace Compiler.Server
                     .WithContentModifiedSupport(false)
                     .WithInput(inputPipe)
                     .WithOutput(outputPipe)
-                    .WithServices(services => services.AddSingleton(_ => new CompilerService()))
+                    .WithServices(services => services.AddSingleton(_ => new CompilerService(this)))
                     .WithHandler<TextDocumentHandler>()
-                    .WithHandler<CompletionHandler>()
-                    .OnInitialized(LanguageServer_OnInitialized);
+                    .WithHandler<CompletionHandler>();
             });
-        }
-
-        private Task LanguageServer_OnInitialized(ILanguageServer languageServer, InitializeParams request, InitializeResult response, CancellationToken cancellationtoken)
-        {
-            var compilerService = languageServer.GetService<CompilerService>();
-            compilerService.Initialize(languageServer);
-
-            return Task.CompletedTask;
         }
 
         public Task Initialize()

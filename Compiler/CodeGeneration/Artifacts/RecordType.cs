@@ -4,7 +4,7 @@ using System.Diagnostics;
 namespace Compiler.CodeGeneration.Artifacts
 {
     [DebuggerDisplay("Record {Type} '{Alias ?? Name}'")]
-    internal sealed class RecordType : IScopeContext, ISymbol
+    internal sealed class RecordType : IScopeContext, ISymbol, IDebugSymbolProvider
     {
         public string Name { get; }
 
@@ -28,6 +28,18 @@ namespace Compiler.CodeGeneration.Artifacts
         public bool IsLinear => destructors.Any(x => x.Name != "$dtor");
 
         public CobType ThisType => new (eCobType.Record, tag: this);
+
+        IEnumerable<ISymbol> IDebugSymbolProvider.Symbols
+        {
+            get
+            {
+                foreach (var x in constructors) yield return x;
+                foreach (var x in destructors) yield return x;
+                foreach (var x in functions) yield return x;
+                foreach (var x in globals) yield return x;
+                foreach (var x in fields) yield return x;
+            }
+        }
 
         // TODO  HACK Fix this nonsense
         private RecordType? pendingSuperType;

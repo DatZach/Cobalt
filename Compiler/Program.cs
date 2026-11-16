@@ -1,11 +1,17 @@
 ﻿using System.Diagnostics;
+using System.IO.Pipelines;
+using System.IO.Pipes;
+using System.Net.NetworkInformation;
 using Compiler.Ast;
 using Compiler.CodeGeneration;
 using Compiler.CodeGeneration.Artifacts;
 using Compiler.Interpreter;
 using Compiler.Lexer;
 using Compiler.Server;
+using Compiler.Server.Debug;
+using Compiler.Server.Language;
 using Nerdbank.Streams;
+using PipeOptions = System.IO.Pipes.PipeOptions;
 
 namespace Compiler
 {
@@ -43,6 +49,10 @@ namespace Compiler
                     await DoLanguageServer();
                     break;
 
+                case eRunMode.DebugServer:
+                    await DoDebugServer();
+                    break;
+
                 case eRunMode.REPL:
                     DoREPL();
                     break;
@@ -58,7 +68,7 @@ namespace Compiler
             PreambleSource = Config.PreambleSource ?? $"import Library;{Environment.NewLine}{Environment.NewLine}";
         }
 
-        private static void DoCompileAndRun()
+        public static void DoCompileAndRun()
         {
             var messages = new MessageCollection();
             Artifact? artifact;
@@ -143,6 +153,28 @@ namespace Compiler
 
             await server.Initialize();
             await server.WaitForExitAsync();
+        }
+
+        private static async Task DoDebugServer()
+        {
+            //Console.SetOut(TextWriter.Null);
+
+            var pipeStream = new NamedPipeServerStream(Config.PipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+
+            await pipeStream.WaitForConnectionAsync();
+
+            var iStream = pipeStream;
+            var oStream = pipeStream;
+
+            var server = new CobDebugServer(
+                iStream,
+                oStream
+            );
+
+            await server.Initialize();
+            await server.WaitForExitAsync();
+
+            pipeStream.Close();
         }
 
         private static void DoREPL()
@@ -283,6 +315,8 @@ namespace Compiler
 
         public int StatisticsVerboseOutputLevel { get; init; }
 
+        public string? PipeName { get; init; }
+
         private RuntimeConfig()
         {
             // NOTE Private ctor to enforce factory pattern
@@ -291,10 +325,13 @@ namespace Compiler
         public static RuntimeConfig? FromCommandLine(string[] args)
         {
             eRunMode mode;
+            string? pipeName = null;
             if (args.Length == 0)
                 mode = eRunMode.REPL;
-            else if (OptionalArgument("--server", false))
+            else if (OptionalArgument("--language-server", false))
                 mode = eRunMode.LanguageServer;
+            else if ((pipeName = OptionalArgument<string?>("--debug")) != null)
+                mode = eRunMode.DebugServer;
             else if (args.Length >= 1 && !args[0].StartsWith("--"))
                 mode = eRunMode.CompileAndRun;
             else
@@ -310,7 +347,8 @@ namespace Compiler
                 FasmVerboseOutput = OptionalArgument("--fasm-verbose", false),
                 AstVerboseOutput = OptionalArgument("--ast-verbose", false),
                 AssemblyVerboseOutput = OptionalArgument("--asm-verbose", false),
-                StatisticsVerboseOutputLevel = OptionalArgument("--stats-verbose", 0)
+                StatisticsVerboseOutputLevel = OptionalArgument("--stats-verbose", 0),
+                PipeName = pipeName
             };
 
             T? OptionalArgument<T>(string key, T? fallback = default)
@@ -338,6 +376,7 @@ namespace Compiler
         None,
         CompileAndRun,
         LanguageServer,
+        DebugServer,
         REPL
     }
 }

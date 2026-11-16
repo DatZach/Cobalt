@@ -11,5 +11,10 @@ namespace Compiler.CodeGeneration.Artifacts
 
     }
 
-    internal sealed record DebugSymbol(Function Parent, int IP, string Filename, int Line);
+    internal sealed record DebugSymbol(string Name, object Value);
+
+    internal interface IDebugSymbolProvider
+    {
+        IEnumerable<ISymbol> Symbols { get; } // TODO Fix this signature, should not box...
+    }
 }

@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="OmniSharp.Extensions.DebugAdapter.Server" Version="0.19.11" />
     <PackageReference Include="OmniSharp.Extensions.LanguageServer" Version="0.19.11" />
   </ItemGroup>
 

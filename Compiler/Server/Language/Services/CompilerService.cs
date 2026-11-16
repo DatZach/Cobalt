@@ -4,17 +4,18 @@ using Compiler.Lexer;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
-using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using MessageType = Compiler.Ast.MessageType;
 using Range = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 
-namespace Compiler.Server.Services
+namespace Compiler.Server.Language.Services
 {
     internal sealed class CompilerService
     {
-        private ILanguageServer? languageServer;
+        public Artifact? Artifact { get; private set; }
 
-        public void Initialize(ILanguageServer languageServer)
+        private readonly CobLanguageServer languageServer;
+
+        public CompilerService(CobLanguageServer languageServer)
         {
             this.languageServer = languageServer;
         }
@@ -48,24 +49,23 @@ namespace Compiler.Server.Services
             var path = uri.GetFileSystemPath();
 
             var messages = new MessageCollection();
-            Artifact? artifact;
 
             try
             {
                 var source = Program.PreambleSource + FileSystem.ReadAllText(path);
                 var tokens = Tokenizer.Tokenize(source, path, messages);
                 var ast = Parser.Parse(tokens, messages);
-                artifact = CodeGeneration.Compiler.Compile(ast, messages);
+                Artifact = CodeGeneration.Compiler.Compile(ast, messages);
             }
             catch (FatalParserException ex)
             {
                 messages.Add(Message.UncaughtException0, Token.EndOfStream, Token.EndOfStream, ex.Message);
-                artifact = null;
+                Artifact = null;
             }
             catch (Exception ex)
             {
                 messages.Add(Message.UncaughtException1, Token.EndOfStream, Token.EndOfStream, ex.Message, ex.StackTrace);
-                artifact = null;
+                Artifact = null;
             }
 
             DispatchDiagnosticsFromMessage(messages);
@@ -127,7 +127,7 @@ namespace Compiler.Server.Services
 
             foreach (var x in allDiagnostics)
             {
-                languageServer?.TextDocument.PublishDiagnostics(new PublishDiagnosticsParams
+                languageServer.Interface.TextDocument.PublishDiagnostics(new PublishDiagnosticsParams
                 {
                     Uri = new DocumentUri("file", null, x.Key, null, null),
                     Diagnostics = x.Value

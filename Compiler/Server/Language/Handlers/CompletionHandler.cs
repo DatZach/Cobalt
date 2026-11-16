@@ -1,10 +1,12 @@
-﻿using Compiler.Server.Services;
+﻿using Compiler.CodeGeneration;
+using Compiler.CodeGeneration.Artifacts;
+using Compiler.Server.Language.Services;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 
-namespace Compiler.Server.Handlers
+namespace Compiler.Server.Language.Handlers
 {
     internal sealed class CompletionHandler : CompletionHandlerBase
     {
@@ -25,17 +27,40 @@ namespace Compiler.Server.Handlers
 
         public override Task<CompletionList> Handle(CompletionParams request, CancellationToken cancellationToken)
         {
-            return Task.FromResult(new CompletionList(
-                new CompletionItem
+            var items = new List<CompletionItem>();
+
+            var artifact = compilerService.Artifact;
+            if (artifact != null)
+            {
+                // TODO Resolve ctx at cursor position
+                var ctx = artifact.EntryFunction as IScopeContext;
+                while (ctx != null)
                 {
-                    Label = "add",
-                    Kind = CompletionItemKind.Function,
-                    Detail = "add(int x, int y) int\n---\nSome description here",
-                    InsertText = "add",
-                    InsertTextFormat = InsertTextFormat.PlainText,
-                    InsertTextMode = InsertTextMode.AdjustIndentation
+                    if (ctx is IDebugSymbolProvider provider)
+                    {
+                        items.AddRange(provider.Symbols.Select(x => new CompletionItem
+                        {
+                            Label = x.Name!,
+                            Kind = x switch
+                            {
+                                Variable y => y.Mutable ? CompletionItemKind.Variable : CompletionItemKind.Constant,
+                                Function => CompletionItemKind.Function,
+                                RecordType => CompletionItemKind.Class,
+                                Module => CompletionItemKind.Module,
+                                _ => CompletionItemKind.Unit
+                            },
+                            Detail = x.ToString(),
+                            InsertText = x.Name,
+                            InsertTextFormat = InsertTextFormat.PlainText,
+                            InsertTextMode = InsertTextMode.AdjustIndentation
+                        }));
+                    }
+
+                    ctx = ctx.Parent;
                 }
-            ));
+            }
+
+            return Task.FromResult(new CompletionList(items));
         }
 
         public override Task<CompletionItem> Handle(CompletionItem request, CancellationToken cancellationToken)

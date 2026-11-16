@@ -1,12 +1,11 @@
 ﻿using System.Diagnostics;
 using Compiler.Ast.Expressions;
-using Compiler.Ast.Expressions.Statements;
 using Compiler.Lexer;
 
 namespace Compiler.CodeGeneration.Artifacts
 {
     [DebuggerDisplay("Module '{Name}'")]
-    internal sealed class Module : IScopeContext, ISymbol
+    internal sealed class Module : IScopeContext, ISymbol, IDebugSymbolProvider
     {
         public string Name { get; }
 
@@ -15,6 +14,18 @@ namespace Compiler.CodeGeneration.Artifacts
         public Function InitializerFunction { get; }
 
         public bool IsRoot => Parent == null;
+
+        IEnumerable<ISymbol> IDebugSymbolProvider.Symbols
+        {
+            get
+            {
+                foreach (var x in modules) yield return x;
+                foreach (var x in recordTypes) yield return x;
+                foreach (var x in distinctTypes) yield return x;
+                foreach (var x in functions) yield return x;
+                foreach (var x in globals) yield return x;
+            }
+        }
 
         private readonly List<Module> modules;
         private readonly List<RecordType> recordTypes;

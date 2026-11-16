@@ -40,16 +40,19 @@ const vscode = __importStar(require("vscode"));
 const node_1 = require("vscode-languageclient/node");
 let client;
 let outputChannel;
-let serverDirectory;
 async function activate(context) {
     outputChannel = outputChannel || vscode.window.createOutputChannel("Cobalt Language Server");
     const config = vscode.workspace.getConfiguration("cobalt");
-    serverDirectory = config.get("toolchainDirectory") || "X:\\Cobalt\\Compiler\\bin\\Debug\\net6.0";
+    const serverDirectory = config.get("toolchainDirectory");
+    if (serverDirectory == null) {
+        return vscode.window.showErrorMessage("Cobalt Toolchain Directory not specified")
+            .then(_ => undefined);
+    }
     const serverPath = path.join(serverDirectory, 'Compiler.exe');
     const serverOptions = {
         command: serverPath,
         transport: node_1.TransportKind.stdio,
-        args: ["--server"],
+        args: ["--language-server"],
         options: {
             cwd: serverDirectory
         }
