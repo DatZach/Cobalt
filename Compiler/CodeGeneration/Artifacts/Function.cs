@@ -3,9 +3,7 @@ using Compiler.Ast.Expressions;
 using Compiler.Ast.Expressions.Statements;
 using Compiler.Interpreter;
 using Compiler.Lexer;
-using Newtonsoft.Json.Linq;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System.Text;
 
 namespace Compiler.CodeGeneration.Artifacts
@@ -49,6 +47,8 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public bool IsDestructor { get; set; } // TODO Yeah definitely needs to be refactored somehow...
 
+        public Token Source { get; } // TODO Eww, move to seperate debug symbol
+
         IEnumerable<ISymbol> IDebugSymbolProvider.Symbols
         {
             get
@@ -77,9 +77,8 @@ namespace Compiler.CodeGeneration.Artifacts
             IScopeContext parent,
             Compiler compiler,
             CallingConvention callingConvention,
-            //IReadOnlyList<Parameter> parameters,
-            //CobType returnType,
-            bool isSignature
+            bool isSignature,
+            Token source
         ) {
             Name = name ?? throw new ArgumentNullException(nameof(name));
             Parent = parent ?? throw new ArgumentNullException(nameof(parent));
@@ -92,6 +91,8 @@ namespace Compiler.CodeGeneration.Artifacts
             IsSignature = isSignature;
             Body = new InstructionBuffer();
             MutatedSymbols = new HashSet<ISymbol>();
+
+            Source = source;
 
             blockScopeStack = new Stack<BlockScope>();
             generics = new List<GenericDefinition>();
@@ -277,7 +278,7 @@ namespace Compiler.CodeGeneration.Artifacts
 
             var concreteName = $"{Name}`{bType}";
 
-            var concreteFunction = module.AllocateFunction(concreteName, CallingConvention);
+            var concreteFunction = module.AllocateFunction(concreteName, CallingConvention, Source);
             concreteFunction.AttachOperator(Operator);
             concreteFunction.AttachReturnType(ReturnType.ToConcreteType(bType));
             foreach (var x in Parameters)

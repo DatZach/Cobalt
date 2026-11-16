@@ -1,5 +1,6 @@
 ﻿using Compiler.Ast.Expressions.Statements;
 using System.Diagnostics;
+using Compiler.Lexer;
 
 namespace Compiler.CodeGeneration.Artifacts
 {
@@ -133,7 +134,7 @@ namespace Compiler.CodeGeneration.Artifacts
             return true;
         }
 
-        public Function AllocateConstructor(string? name, IReadOnlyList<Function.Parameter> parameters, bool isSignature)
+        public Function AllocateConstructor(string? name, IReadOnlyList<Function.Parameter> parameters, bool isSignature, Token source)
         {
             // TODO Not sure that this should be enforced
             if (Type != eRecordType.Struct)
@@ -141,7 +142,7 @@ namespace Compiler.CodeGeneration.Artifacts
 
             name ??= "$ctor";
             
-            var function = new Function(name, this, compiler, CallingConvention.ThisCall, isSignature);
+            var function = new Function(name, this, compiler, CallingConvention.ThisCall, isSignature, source);
             function.AllocateParameter("this", ThisType, false, null);
             foreach (var x in parameters)
                 function.AllocateParameter(x.Name, x.Type, x.IsSpread, x.DefaultValue);
@@ -160,7 +161,7 @@ namespace Compiler.CodeGeneration.Artifacts
             return constructors.FirstOrDefault(x => x.Name == name);
         }
 
-        public Function AllocateDestructor(string? name, IReadOnlyList<Function.Parameter> parameters, CobType returnType, bool isSignature)
+        public Function AllocateDestructor(string? name, IReadOnlyList<Function.Parameter> parameters, CobType returnType, bool isSignature, Token source)
         {
             // TODO Not sure that this should be enforced
             if (Type != eRecordType.Struct)
@@ -168,7 +169,7 @@ namespace Compiler.CodeGeneration.Artifacts
 
             name ??= "$dtor";
 
-            var function = new Function(name, this, compiler, CallingConvention.ThisCall, isSignature);
+            var function = new Function(name, this, compiler, CallingConvention.ThisCall, isSignature, source);
             function.AllocateParameter("this", ThisType, false, null);
             function.AttachReturnType(returnType);
             function.IsDestructor = true;
@@ -187,9 +188,10 @@ namespace Compiler.CodeGeneration.Artifacts
 
         public Function AllocateFunction(
             string name,
-            bool isSignature
+            bool isSignature,
+            Token source
         ) {
-            var function = new Function(name, this, compiler, CallingConvention.ThisCall, isSignature);
+            var function = new Function(name, this, compiler, CallingConvention.ThisCall, isSignature, source);
             function.AllocateParameter("this", ThisType, false, null);
 
             functions.Add(function);
@@ -232,19 +234,19 @@ namespace Compiler.CodeGeneration.Artifacts
             return globals.FirstOrDefault(x => x.Name == name);
         }
 
-        public Field AllocateField(string name, CobType type, bool isFinal, bool hasGetter, bool hasSetter)
+        public Field AllocateField(string name, CobType type, bool isFinal, bool hasGetter, bool hasSetter, Token source)
         {
             Function? getter, setter;
             if (hasGetter)
             {
-                getter = AllocateFunction($"{name}_get", false);
+                getter = AllocateFunction($"{name}_get", false, source);
                 getter.AttachReturnType(type);
             }
             else
                 getter = null;
             if (hasSetter)
             {
-                setter = AllocateFunction($"{name}_set", false);
+                setter = AllocateFunction($"{name}_set", false, source);
                 setter.AllocateParameter("value", type, false, null);
                 setter.AttachReturnType(type);
             }
@@ -288,13 +290,13 @@ namespace Compiler.CodeGeneration.Artifacts
             return uninitializedFields;
         }
 
-        public Indexer AllocateIndexer(CobType keyType, string keyIdent, CobType returnType)
+        public Indexer AllocateIndexer(CobType keyType, string keyIdent, CobType returnType, Token source)
         {
-            var getter = AllocateFunction("$Indexer_$get", false);
+            var getter = AllocateFunction("$Indexer_$get", false, source);
             getter.AllocateParameter(keyIdent, keyType, false, null);
             getter.AttachReturnType(returnType);
 
-            var setter = AllocateFunction("$Indexer_$set", false);
+            var setter = AllocateFunction("$Indexer_$set", false, source);
             setter.AllocateParameter(keyIdent, keyType, false, null);
             setter.AllocateParameter("value", returnType, false, null);
             setter.AttachReturnType(returnType);
@@ -381,7 +383,7 @@ namespace Compiler.CodeGeneration.Artifacts
                     y => new Function.Parameter(y.Name, y.Type.ToConcreteType(pendingBType), y.IsSpread)
                 ).ToList();
 
-                AllocateConstructor(x.Name, parameters, x.IsSignature);
+                AllocateConstructor(x.Name, parameters, x.IsSignature, x.Source);
             }
 
             foreach (var x in pendingSuperType.destructors)
@@ -391,7 +393,7 @@ namespace Compiler.CodeGeneration.Artifacts
                 ).ToList();
 
                 var returnType = x.ReturnType.ToConcreteType(pendingBType);
-                AllocateDestructor(x.Name, parameters, returnType, x.IsSignature);
+                AllocateDestructor(x.Name, parameters, returnType, x.IsSignature, x.Source);
             }
 
             foreach (var x in pendingSuperType.functions)
@@ -401,7 +403,7 @@ namespace Compiler.CodeGeneration.Artifacts
 
                 var returnType = x.ReturnType.ToConcreteType(pendingBType);
 
-                var function = AllocateFunction(x.Name, x.IsSignature);
+                var function = AllocateFunction(x.Name, x.IsSignature, x.Source);
                 foreach (var y in x.Parameters.Skip(1))
                     function.AllocateParameter(y.Name, y.Type.ToConcreteType(pendingBType), y.IsSpread, y.DefaultValue);
                 function.AttachReturnType(returnType);
@@ -410,7 +412,7 @@ namespace Compiler.CodeGeneration.Artifacts
             foreach (var x in pendingSuperType.fields)
             {
                 var fieldType = x.Type.ToConcreteType(pendingBType);
-                AllocateField(x.Name, fieldType, x.IsFinal, x.Getter != null, x.Setter != null);
+                AllocateField(x.Name, fieldType, x.IsFinal, x.Getter != null, x.Setter != null, null);
             }
 
             if (pendingSuperType.Indexer != null)
@@ -418,7 +420,8 @@ namespace Compiler.CodeGeneration.Artifacts
                 Indexer = AllocateIndexer(
                     pendingSuperType.Indexer.KeyType.ToConcreteType(pendingBType),
                     pendingSuperType.Indexer.KeyIdent,
-                    pendingSuperType.Indexer.ReturnType.ToConcreteType(pendingBType)
+                    pendingSuperType.Indexer.ReturnType.ToConcreteType(pendingBType),
+                    null
                 );
             }
 

@@ -49,7 +49,8 @@ namespace Compiler.CodeGeneration.Artifacts
 
             InitializerFunction = AllocateFunction(
                 "$Initializer",
-                CallingConvention.Default
+                CallingConvention.Default,
+                null
             );
         }
 
@@ -128,9 +129,10 @@ namespace Compiler.CodeGeneration.Artifacts
         // TODO Probably refactor callingConvention too
         public Function AllocateFunction(
             string name,
-            CallingConvention callingConvention
+            CallingConvention callingConvention,
+            Token source
         ) {
-            var function = new Function(name, this, compiler, callingConvention, false);
+            var function = new Function(name, this, compiler, callingConvention, false, source);
 
             functions.Add(function);
             compiler.Functions.Add(function);

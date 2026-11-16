@@ -1,4 +1,6 @@
-﻿namespace Compiler.CodeGeneration
+﻿using Compiler.Ast.Expressions;
+
+namespace Compiler.CodeGeneration
 {
     internal sealed class InstructionBuffer
     {
@@ -22,6 +24,14 @@
             labels.Add(label);
 
             return label;
+        }
+
+        public void EmitDebugSymbols(Expression expression)
+        {
+            if (instructions.Count == 0 || instructions[^1].Line != -1)
+                return;
+
+            instructions[^1].Line = expression.Token.Line;
         }
 
         public void Emit(Opcode opcode)

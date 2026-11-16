@@ -1,8 +1,6 @@
-﻿using System.Numerics;
-using System.Reflection;
+﻿using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Text.Json;
 using Compiler.CodeGeneration;
 using Compiler.CodeGeneration.Artifacts;
 using CallingConvention = Compiler.CodeGeneration.Artifacts.CallingConvention;
@@ -13,7 +11,7 @@ namespace Compiler.Interpreter
     {
         public const int MaxRegisters = 32;
 
-        public int IP => stack.Peek().IP;
+        public Stack<Frame> Stack => stack; // TODO IReadOnlyCollection
 
         private Function? userPanicCallback;
 
@@ -35,7 +33,7 @@ namespace Compiler.Interpreter
             stack.Push(ctx);
         }
 
-        public void Step()
+        public void Tick()
         {
             var ctx = stack.Peek();
             var inst = ctx.Function.Body.Instructions[ctx.IP];
@@ -79,14 +77,6 @@ namespace Compiler.Interpreter
                         }
                         else
                             calleeParameters = null;
-
-                        //var native = callee.NativeImport;
-                        //var result = native != null
-                        //    ? nativeLibrariesProxy.Invoke(native, calleeParameters)
-                        //    : ExecuteFunction(callee, calleeParameters);
-
-                        //if (callee.ReturnType != eCobType.None && inst.B.Type != OperandType.None)
-                        //    WriteOperand(inst.B!, result);
 
                         var native = callee.NativeImport;
                         if (native != null)
@@ -711,7 +701,7 @@ namespace Compiler.Interpreter
             nativeLibrariesProxy.Dispose();
         }
 
-        private sealed class Frame
+        public sealed class Frame
         {
             public Function Function { get; }
 
@@ -734,6 +724,22 @@ namespace Compiler.Interpreter
                 Registers = new Variable[MaxRegisters];
                 Parameters = parameters;
                 ReturnOperand = returnOperand;
+            }
+
+            public int ResolveLineFromIP(int ip)
+            {
+                int line = -1;
+                for (int i = 0; i < ip; ++i)
+                {
+                    var ipLine = Function.Body.Instructions[i].Line;
+                    if (ipLine != -1)
+                        line = ipLine;
+                }
+
+                if (line == -1)
+                    return Function.Source.Line;
+
+                return line;
             }
         }
 

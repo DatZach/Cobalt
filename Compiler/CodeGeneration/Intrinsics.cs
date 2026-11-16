@@ -42,7 +42,7 @@ namespace Compiler.CodeGeneration
                 for (var i = 0; i < fieldTypes.Count; ++i)
                 {
                     var fieldType = fieldTypes[i];
-                    recordType.AllocateField($"'{i}", fieldType, true, false, false);
+                    recordType.AllocateField($"'{i}", fieldType, true, false, false, null);
                 }
             }
 

@@ -16,6 +16,8 @@ namespace Compiler.CodeGeneration
 
         public IReadOnlyList<Operand>? D { get; init; }
 
+        public int Line { get; set; } = -1;// TODO Eww, move to seperate debug symbol
+
         public override string ToString()
         {
             if (D != null && B != null) return $"{Opcode,-12}{A}, {B}, ({string.Join(", ", D)})";

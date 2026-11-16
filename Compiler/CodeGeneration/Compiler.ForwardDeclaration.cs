@@ -123,7 +123,8 @@ namespace Compiler.CodeGeneration
             {
                 function = CurrentModule.AllocateFunction(
                     expression.SymbolName,
-                    expression.SymbolTypeName.Function.CallingConvention
+                    expression.SymbolTypeName.Function.CallingConvention,
+                    expression.Token
                 );
 
                 foreach (var x in expression.SymbolTypeName.Function.Parameters)
@@ -458,7 +459,7 @@ namespace Compiler.CodeGeneration
                         else if (i > 0 && recordType.IsBare && recordType.Type == eRecordType.Tuple)
                             messages.Add(Message.IllegalFieldForBareTuple, expression);
 
-                        recordType.AllocateField(fieldName, fieldType, field.IsFinal, field.GetterExpression != null, field.SetterExpression != null);
+                        recordType.AllocateField(fieldName, fieldType, field.IsFinal, field.GetterExpression != null, field.SetterExpression != null, expression.Token);
                     }
 
                     if (expression.Indexer != null)
@@ -467,7 +468,7 @@ namespace Compiler.CodeGeneration
                         var keyIdent = expression.Indexer.KeyIdentifer;
                         var returnType = ResolveTypeFromTypeName(expression.Indexer.ReturnTypeName, expression);
 
-                        recordType.AllocateIndexer(keyType, keyIdent, returnType);
+                        recordType.AllocateIndexer(keyType, keyIdent, returnType, expression.Token);
                     }
                 }
 
@@ -518,7 +519,7 @@ namespace Compiler.CodeGeneration
 
             if (CurrentContext is RecordType recordType)
             {
-                recordType.AllocateConstructor(expression.Name, parameters, expression.Body == null);
+                recordType.AllocateConstructor(expression.Name, parameters, expression.Body == null, expression.Token);
             }
             else
                 messages.Add(Message.CannotDeclareSymbolHere, expression);
@@ -538,7 +539,7 @@ namespace Compiler.CodeGeneration
             if (CurrentContext is RecordType recordType)
             {
                 var returnType = ResolveTypeFromTypeName(expression.ReturnTypeName, expression);
-                recordType.AllocateDestructor(expression.Name, parameters, returnType, expression.Body == null);
+                recordType.AllocateDestructor(expression.Name, parameters, returnType, expression.Body == null, expression.Token);
             }
             else
                 messages.Add(Message.CannotDeclareSymbolHere, expression);
@@ -571,11 +572,11 @@ namespace Compiler.CodeGeneration
                     if (expression.Operator != null)
                         messages.Add(Message.CannotDeclareSymbolHere, expression);
 
-                    function = recordType.AllocateFunction(expression.Name, expression.Body == null);
+                    function = recordType.AllocateFunction(expression.Name, expression.Body == null, expression.Token);
                 }
                 else if (CurrentContext is Module module)
                 {
-                    function = module.AllocateFunction(expression.Name, expression.CallingConvention);
+                    function = module.AllocateFunction(expression.Name, expression.CallingConvention, expression.Token);
                     function.AttachOperator(expression.Operator);
                 }
                 else
@@ -676,7 +677,7 @@ namespace Compiler.CodeGeneration
             {
                 var fieldType = ResolveTypeFromTypeName(expression.Field.TypeName, expression);
                 if (context is RecordType recordType)
-                    recordType.AllocateField(expression.Field.Name, fieldType, expression.Field.IsFinal, expression.Field.GetterExpression != null, expression.Field.SetterExpression != null);
+                    recordType.AllocateField(expression.Field.Name, fieldType, expression.Field.IsFinal, expression.Field.GetterExpression != null, expression.Field.SetterExpression != null, expression.Token);
                 else
                     messages.Add(Message.CannotDeclareSymbolHere, expression);
             }
