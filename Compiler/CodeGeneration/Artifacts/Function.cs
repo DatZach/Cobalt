@@ -58,6 +58,23 @@ namespace Compiler.CodeGeneration.Artifacts
             }
         }
 
+        // TODO Probably should move this out of here, it's debug symbol related so it's mixing concerns
+        public int ResolveLineFromIP(int ip)
+        {
+            int line = -1;
+            for (int i = 0; i < ip; ++i)
+            {
+                var ipLine = Body.Instructions[i].Line;
+                if (ipLine != -1)
+                    line = ipLine;
+            }
+
+            if (line == -1)
+                return Source.Line;
+
+            return line;
+        }
+
         // TODO  HACK Fix this nonsense
         private Function? pendingSuperType;
         private CobType? pendingBType;

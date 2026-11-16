@@ -11,6 +11,9 @@ namespace Compiler.Interpreter
     {
         public const int MaxRegisters = 32;
 
+        public delegate void OnExceptionOccurredDelegate(string errorName, string stackTrace, Exception? nativeException);
+        public event OnExceptionOccurredDelegate OnExceptionOccurred;
+
         public Stack<Frame> Stack => stack; // TODO IReadOnlyCollection
 
         private Function? userPanicCallback;
@@ -549,7 +552,9 @@ namespace Compiler.Interpreter
 
                     Console.ForegroundColor = ConsoleColor.Red; Console.Write("Panic! ");
                     Console.ForegroundColor = ConsoleColor.Gray; Console.WriteLine($"Unhandled '{errorName}' occurred.");
-                    Console.WriteLine(sbStackTrace.ToString());
+                    Console.WriteLine(stackTrace);
+
+                    OnExceptionOccurred?.Invoke(errorName, stackTrace, ex);
                 }
 
                 // Unwind stack
@@ -724,22 +729,6 @@ namespace Compiler.Interpreter
                 Registers = new Variable[MaxRegisters];
                 Parameters = parameters;
                 ReturnOperand = returnOperand;
-            }
-
-            public int ResolveLineFromIP(int ip)
-            {
-                int line = -1;
-                for (int i = 0; i < ip; ++i)
-                {
-                    var ipLine = Function.Body.Instructions[i].Line;
-                    if (ipLine != -1)
-                        line = ipLine;
-                }
-
-                if (line == -1)
-                    return Function.Source.Line;
-
-                return line;
             }
         }
 
