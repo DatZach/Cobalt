@@ -26,12 +26,13 @@ namespace Compiler.CodeGeneration
             return label;
         }
 
-        public void EmitDebugSymbols(Expression expression)
+        public void EmitDebugStepBoundary(Expression expression)
         {
-            if (instructions.Count == 0 || instructions[^1].Line != -1)
+            if (instructions.Count == 0)
                 return;
 
-            instructions[^1].Line = expression.Token.Line;
+            instructions[^1].StartToken = expression.StartToken;
+            instructions[^1].EndToken = expression.EndToken;
         }
 
         public void Emit(Opcode opcode)

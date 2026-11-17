@@ -1,4 +1,5 @@
 ﻿using Compiler.CodeGeneration.Artifacts;
+using Compiler.Lexer;
 
 namespace Compiler.CodeGeneration
 {
@@ -16,7 +17,9 @@ namespace Compiler.CodeGeneration
 
         public IReadOnlyList<Operand>? D { get; init; }
 
-        public int Line { get; set; } = -1;// TODO Eww, move to seperate debug symbol
+        public Token? StartToken { get; set; } = null;// TODO Eww, move to seperate debug symbol
+
+        public Token? EndToken { get; set; } = null;
 
         public override string ToString()
         {

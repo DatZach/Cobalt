@@ -59,20 +59,47 @@ namespace Compiler.CodeGeneration.Artifacts
         }
 
         // TODO Probably should move this out of here, it's debug symbol related so it's mixing concerns
-        public int ResolveLineFromIP(int ip)
-        {
-            int line = -1;
-            for (int i = 0; i < ip; ++i)
+        public bool ResolveSourceCodeRangeForIP(
+            int ip,
+            out int startLine, out int startColumn,
+            out int? endLine, out int? endColumn
+        ) {
+            Token? startToken = null, endToken = null;
+            for (int i = ip; startToken == null && i >= 0; --i)
             {
-                var ipLine = Body.Instructions[i].Line;
-                if (ipLine != -1)
-                    line = ipLine;
+                startToken = Body.Instructions[i].StartToken;
+                endToken = Body.Instructions[i].EndToken;
             }
 
-            if (line == -1)
-                return Source.Line;
+            if (startToken == null)
+            {
+                startLine = -1;
+                startColumn = -1;
+                endLine = null;
+                endColumn = null;
+                return false;
+            }
+            else
+            {
+                // TODO Account for preamble
+                // TODO .Count is O(n), could be improved
+                var preambleLines = 1;
+                
+                startLine = startToken.Line - preambleLines;
+                startColumn = startToken.Column + 1;
+                if (endToken == null || Body.Instructions.Count(x => x.StartToken?.Line == startToken.Line) == 1)
+                {
+                    endLine = null;
+                    endColumn = null;
+                }
+                else
+                {
+                    endLine = endToken.Line - preambleLines;
+                    endColumn = endToken.Column + endToken.Value.Length + 1;
+                }
 
-            return line;
+                return true;
+            }
         }
 
         // TODO  HACK Fix this nonsense

@@ -508,7 +508,7 @@ namespace Compiler.CodeGeneration
                         dstOperand,
                         rhs.Operand
                     );
-                    CurrentFunction.Body.EmitDebugSymbols(expression);
+                    CurrentFunction.Body.EmitDebugStepBoundary(expression);
 
                     rhs.Free();
                 }
@@ -541,8 +541,6 @@ namespace Compiler.CodeGeneration
                         var dstSymbol = CurrentContext.FindSymbol(fieldName);
                         CurrentContext.EmitSetForSymbol(dstSymbol);
                         srcStorage?.Free();
-
-                        CurrentFunction.Body.EmitDebugSymbols(expression);
                     }
 
                     AssignmentRHS = prevAssignmentRHS;
@@ -1211,7 +1209,6 @@ namespace Compiler.CodeGeneration
 
                 CurrentFunction.Body.Emit(Opcode.BitShl, c.Operand, a.Operand, Operand.ImmediateUnsigned(shlValue));
                 CurrentFunction.Body.Emit(Opcode.BitOr, c.Operand, a.Operand, b.Operand);
-                CurrentFunction.Body.EmitDebugSymbols(expression);
                 
                 b.Free();
                 a.Free();
@@ -1235,6 +1232,7 @@ namespace Compiler.CodeGeneration
 
                 var c = CurrentFunction.AllocateRegisterStorage(cType);
                 CurrentFunction.Body.Emit(Opcode.New, c.Operand, cType.ToOperand(artifact));
+                CurrentFunction.Body.EmitDebugStepBoundary(expression);
 
                 if (expression.Left is EmptyExpression)
                     a = new Storage(bType, Operand.ImmediateUnsigned(0));
@@ -1266,7 +1264,6 @@ namespace Compiler.CodeGeneration
                 // TODO type.FindFieldIndex("Start"), etc.
                 CurrentFunction.Body.Emit(Opcode.SetField, c.Operand, Operand.ImmediateUnsigned(0), a.Operand);
                 CurrentFunction.Body.Emit(Opcode.SetField, c.Operand, Operand.ImmediateUnsigned(1), b.Operand);
-                CurrentFunction.Body.EmitDebugSymbols(expression);
 
                 b.Free();
                 a.Free();
@@ -1287,7 +1284,7 @@ namespace Compiler.CodeGeneration
                     var flags = Opflag.None;
                     if (flagSuppressOverflow) flags |= Opflag.SuppressOverflow;
                     CurrentFunction.Body.Emit(binOpcode, flags, c.Operand, a!.Operand, b!.Operand);
-                    CurrentFunction.Body.EmitDebugSymbols(expression);
+                    CurrentFunction.Body.EmitDebugStepBoundary(expression);
                 
                     b.Free();
                     a.Free();
@@ -1308,7 +1305,7 @@ namespace Compiler.CodeGeneration
                         c.Operand,
                         new[] { a!.Operand, b!.Operand }
                     );
-                    CurrentFunction.Body.EmitDebugSymbols(expression);
+                    CurrentFunction.Body.EmitDebugStepBoundary(expression);
                 
                     b.Free();
                     a.Free();
@@ -1350,7 +1347,7 @@ namespace Compiler.CodeGeneration
                     return null;
                 }
 
-                CurrentFunction.Body.EmitDebugSymbols(expression);
+                CurrentFunction.Body.EmitDebugStepBoundary(expression);
 
                 AssignmentRHS = a;
                     expression.Left.Accept(this)?.Free();
@@ -1482,7 +1479,6 @@ namespace Compiler.CodeGeneration
                 if (flagSuppressOverflow) flags |= Opflag.SuppressOverflow;
 
                 CurrentFunction.Body.Emit(opcode, flags, c.Operand, b.Operand);
-                CurrentFunction.Body.EmitDebugSymbols(expression);
 
                 b.Free();
 
@@ -1545,7 +1541,6 @@ namespace Compiler.CodeGeneration
                     lhs.Operand,
                     type.ToOperand(artifact)
                 );
-                CurrentFunction.Body.EmitDebugSymbols(expression);
 
                 // Narrowing
                 // TODO Nested narrowing scopes might not actually work as expected, keep track in Compiler instead?
@@ -1617,7 +1612,6 @@ namespace Compiler.CodeGeneration
                         var d = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
                         CurrentFunction.Body.Emit(Opcode.CmpTyEQ, d.Operand, lhs.Operand, type.ToOperand(artifact));
                         CurrentFunction.Body.Emit(Opcode.JmpF, d.Operand, labelCaseEnd);
-                        CurrentFunction.Body.EmitDebugSymbols(expression);
                         d.Free();
                     }
                     else
@@ -1649,7 +1643,6 @@ namespace Compiler.CodeGeneration
                         var e = CurrentFunction.AllocateRegisterStorage(CobType.Boolean);
                         CurrentFunction.Body.Emit(Opcode.CmpEQ, e.Operand, lhs.Operand, value.Operand);
                         CurrentFunction.Body.Emit(Opcode.JmpF, e.Operand, labelCaseEnd);
-                        CurrentFunction.Body.EmitDebugSymbols(expression);
                         e.Free();
                         value.Free();
                     }
@@ -2023,7 +2016,7 @@ namespace Compiler.CodeGeneration
                 retStorage?.Operand ?? Operand.None,
                 arguments.Select(x => x.Operand).ToList()
             );
-            CurrentFunction.Body.EmitDebugSymbols(expression);
+            CurrentFunction.Body.EmitDebugStepBoundary(expression);
 
             if (function.ReturnType.HasErrorFlag && conditionalStack <= 0 && retStorage != null)
             {
@@ -2085,7 +2078,6 @@ namespace Compiler.CodeGeneration
                     if (mutationStack.Count > 0)
                         mutationStack.Peek().Add(symbol);
 
-                    CurrentFunction.Body.EmitDebugSymbols(expression);
                     return null;
                 }
                 else
@@ -2094,7 +2086,6 @@ namespace Compiler.CodeGeneration
                     if (result == null)
                         messages.Add(Message.IllegalAssignment, expression);
 
-                    CurrentFunction.Body.EmitDebugSymbols(expression);
                     return result;
                 }
             }

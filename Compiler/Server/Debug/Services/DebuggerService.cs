@@ -1,4 +1,5 @@
-﻿using Compiler.Ast;
+﻿using System.Text;
+using Compiler.Ast;
 using Compiler.CodeGeneration.Artifacts;
 using Compiler.Interpreter;
 using Compiler.Lexer;
@@ -11,9 +12,12 @@ namespace Compiler.Server.Debug.Services
 {
     internal class DebuggerService
     {
-        private bool isRunning, singleStep;
+        private bool? signalIsRunning;
+        //private bool isRunning, singleStep;
         private VirtualMachine2? vm;
         private Artifact? artifact;
+
+        private readonly List<CobBreakpoint> breakpoints;
 
         private readonly CobDebugServer debugServer;
 
@@ -21,13 +25,14 @@ namespace Compiler.Server.Debug.Services
         {
             this.debugServer = debugServer;
 
-            breakpoints = new List<Breakpoint>();
+            breakpoints = new List<CobBreakpoint>();
         }
 
         public void Start()
         {
-            singleStep = false;
-            isRunning = true;
+            //singleStep = false;
+            //isRunning = true;
+            signalIsRunning = true;
 
             if (vm == null)
             {
@@ -62,6 +67,59 @@ namespace Compiler.Server.Debug.Services
             }
         }
 
+        private void Task_VirtualMachine()
+        {
+            //var wasRunning = isRunning;
+            var isRunning = signalIsRunning.GetValueOrDefault(false);
+            while (vm != null)
+            {
+                var wasRunning = isRunning;
+
+                var lSignalIsRunning = signalIsRunning;
+                if (lSignalIsRunning != null)
+                {
+                    isRunning = lSignalIsRunning.Value;
+                    signalIsRunning = null;
+                }
+
+                //if (singleStep)
+                //{
+                //    var frame = vm.Stack.Peek();
+                //    if (frame.Function.Body.Instructions[frame.IP].StartToken != null)
+                //        isRunning = false;
+                //}
+                //else
+                if (breakpoints.Count > 0 && wasRunning)
+                {
+                    var frame = vm.Stack.Peek();
+                    for (var i = 0; isRunning && i < breakpoints.Count; ++i)
+                    {
+                        var breakpoint = breakpoints[i];
+                        if (breakpoint.IsTriggered(frame))
+                        {
+                            if (breakpoint.LogMessage != null)
+                                SendOutputLine(OutputEventCategory.Console, breakpoint.LogMessage);
+                            else
+                                isRunning = false;
+                        }
+                    }
+                }
+
+                if (isRunning != wasRunning)
+                {
+                    if (isRunning)
+                        debugServer.Interface.SendContinued(new ContinuedEvent { AllThreadsContinued = true });
+                    else
+                        debugServer.Interface.SendStopped(new StoppedEvent { AllThreadsStopped = true });
+                }
+
+                if (isRunning)
+                    vm.Tick();
+            }
+
+            //debugServer.Shutdown();
+        }
+
         public string? LastError_Name { get; private set; }
         public string? LastError_StackTrace { get; private set; }
         public Exception? LastError_NativeException { get; private set; }
@@ -71,7 +129,7 @@ namespace Compiler.Server.Debug.Services
             LastError_Name = errorName;
             LastError_StackTrace = stackTrace;
             LastError_NativeException = nativeException;
-            isRunning = false;
+            signalIsRunning = false;
 
             debugServer.Interface.SendStopped(new StoppedEvent
             {
@@ -82,87 +140,36 @@ namespace Compiler.Server.Debug.Services
                 AllThreadsStopped = true,
                 ThreadId = 0
             });
-            debugServer.Interface.SendBreakpoint(new BreakpointEvent
-            {
-                Breakpoint = new Breakpoint
-                {
-
-                }
-            });
-        }
-
-        private void Task_VirtualMachine()
-        {
-            var wasRunning = isRunning;
-            while (vm != null)
-            {
-                if (isRunning != wasRunning)
-                {
-                    if (isRunning)
-                        debugServer.Interface.SendContinued(new ContinuedEvent { AllThreadsContinued = true });
-                    else
-                        debugServer.Interface.SendStopped(new StoppedEvent { AllThreadsStopped = true });
-                }
-                if (!isRunning)
-                {
-                    wasRunning = false;
-                    continue;
-                }
-                else
-                    wasRunning = true;
-
-                wasRunning = isRunning;
-                vm.Tick();
-
-                if (singleStep)
-                {
-                    var frame = vm.Stack.Peek();
-                    if (frame.Function.Body.Instructions[frame.IP].Line != -1)
-                        isRunning = false;
-                }
-                else if (breakpoints.Count > 0)
-                {
-                    var frame = vm.Stack.Peek();
-                    foreach (var breakpoint in breakpoints)
-                    {
-                        if (breakpoint.Source.Path.Equals(frame.Function.Source?.Filename, StringComparison.OrdinalIgnoreCase)
-                        &&  breakpoint.Line.Value == frame.Function.ResolveLineFromIP(frame.IP))
-                            isRunning = false;
-                    }
-                }
-            }
-
-            //debugServer.Shutdown();
         }
 
         public void Stop()
         {
-            isRunning = false;
+            signalIsRunning = false;
             vm = null;
             debugServer.Shutdown();
         }
 
         public void Pause()
         {
-            isRunning = false;
+            signalIsRunning = false;
         }
 
         public void StepOver()
         {
-            singleStep = true;
-            isRunning = true;
+            //singleStep = true;
+            signalIsRunning = true;
         }
 
         public void StepIn()
         {
-            singleStep = true;
-            isRunning = true;
+            //singleStep = true;
+            signalIsRunning = true;
         }
 
         public void StepOut()
         {
-            singleStep = true;
-            isRunning = true;
+            //singleStep = true;
+            signalIsRunning = true;
         }
 
         // TODO Make this a property?
@@ -171,53 +178,58 @@ namespace Compiler.Server.Debug.Services
             if (vm == null)
                 return Array.Empty<StackFrame>();
 
-            return vm.Stack.Where(x => x.Function.Source != null).Select((x, i) => new StackFrame
+            var result = new List<StackFrame>();
+            foreach (var frame in vm.Stack)
             {
-                Id = i,
-                Name = x.Function.Name,
-                Source  = new Source
-                {
-                    Name = Path.GetFileNameWithoutExtension(x.Function.Source.Filename),
-                    Path = x.Function.Source.Filename
-                },
-                Line = x.Function.ResolveLineFromIP(x.IP),
-                Column = x.Function.Source.Column,
-                InstructionPointerReference = x.IP.ToString(),
-            }).ToList();
-        }
+                // TODO Remove Function.Source I think
+                if (frame.Function.Source == null)
+                    continue;
 
-        private List<Breakpoint> breakpoints; // TODO Breakpoint doesn't actually store all the important information
+                frame.Function.ResolveSourceCodeRangeForIP(
+                    frame.IP,
+                    out var startLine, out var startColumn,
+                    out var endLine, out var endColumn
+                );
+                result.Add(new StackFrame
+                {
+                    Id = result.Count,
+                    Name = frame.Function.Name,
+                    Source  = new Source
+                    {
+                        Name = Path.GetFileNameWithoutExtension(frame.Function.Source.Filename),
+                        Path = frame.Function.Source.Filename
+                    },
+                    Line = startLine,
+                    Column = startColumn,
+                    EndLine = endLine,
+                    EndColumn = endColumn,
+                    InstructionPointerReference = frame.IP.ToString(),
+                });
+            }
+
+            return result;
+        }
 
         public IReadOnlyList<Breakpoint> ResolveBreakpoints()
         {
-            return breakpoints;
+            return breakpoints.Select(x => new Breakpoint
+            {
+                Source = new Source { Path = x.Path },
+                Line = x.Line,
+                Column = x.Column,
+                Verified = true
+            }).ToList();
         }
 
         public void UpdateBreakpoints(string source, Container<SourceBreakpoint> newBreakpoints)
         {
-            // TODO Condition
-            // TODO LogMessage
+            var result = new List<CobBreakpoint>();
 
-            var result = new List<Breakpoint>();
-            foreach (var x in breakpoints)
-            {
-                if (x.Source?.Path == source)
-                    continue;
+            result.AddRange(breakpoints.Where(x => x.Path != source));
+            result.AddRange(newBreakpoints.Select(x => new CobBreakpoint(this, source, x.Line, x.Column, x.Condition, x.LogMessage)));
 
-                result.Add(x);
-            }
-
-            foreach (var x in newBreakpoints)
-            {
-                result.Add(new Breakpoint
-                {
-                    Source = new Source { Path = source },
-                    Line = x.Line,
-                    Column = x.Column,
-                    Verified = true
-                });
-            }
-            breakpoints = result;
+            breakpoints.Clear();
+            breakpoints.AddRange(result);
         }
 
         public IReadOnlyList<Variable> ResolveVariables()
@@ -289,19 +301,30 @@ namespace Compiler.Server.Debug.Services
 
         public IReadOnlyList<DisassembledInstruction> Disassemble()
         {
-            if (artifact == null || artifact.EntryFunction == null)
+            if (vm == null)
                 return Array.Empty<DisassembledInstruction>();
 
-            return artifact.EntryFunction.Body.Instructions.Select((x, i) => new DisassembledInstruction
+            int line = -1;
+
+            var frame = vm.Stack.Peek();
+            var result = new List<DisassembledInstruction>();
+            for (var i = 0; i < frame.Function.Body.Instructions.Count; ++i)
             {
-                Address = i.ToString("G"),
-                Instruction = x.ToString(),
-                Location = new Source
+                var instruction = frame.Function.Body.Instructions[i];
+                
+                if (instruction.StartToken != null)
+                    line = instruction.StartToken.Line;
+
+                result.Add(new DisassembledInstruction
                 {
-                    Path = artifact.EntryFunction.Source.Filename
-                },
-                Line = artifact.EntryFunction.ResolveLineFromIP(i)
-            }).ToList();
+                    Address = i.ToString("G"),
+                    Instruction = (instruction.StartToken != null ? "# " : "  ") + instruction.ToString(),
+                    Location = new Source { Path = frame.Function.Source.Filename },
+                    Line = line
+                });
+            }
+
+            return result;
         }
 
         public void GoTo(long id)
@@ -310,6 +333,70 @@ namespace Compiler.Server.Debug.Services
                 vm.Stack.Peek().IP = 0;
             else if (id == 1)
                 vm.Stack.Peek().IP = 50;
+        }
+
+        private void SendOutputLine(OutputEventCategory category, string value) => SendOutput(category, value + Environment.NewLine);
+        private void SendOutput(OutputEventCategory category, string value)
+        {
+            var output = category == OutputEventCategory.Console
+                ? EvaluateInterpolation(value)
+                : value;
+            debugServer.Interface.SendOutput(new OutputEvent
+            {
+                Category = category,
+                Output = output
+            });
+        }
+
+        private string EvaluateInterpolation(string value)
+        {
+            var sb = new StringBuilder(value.Length);
+
+            int i = value.IndexOf('{'), j = 0;
+            for (; i != -1; i = value.IndexOf('{', i + 1))
+            {
+                sb.Append(value.Substring(j, i - j));
+                var k = value.IndexOf('}', i + 1);
+                if (k == -1) break;
+                var expression = value.Substring(i + 1, k - i - 1);
+                var result = Evaluate(expression);
+                sb.Append(result?.Value ?? "(null)");
+
+                j = k + 1;
+                i = k;
+            }
+
+            sb.Append(value.Substring(j, value.Length - j));
+
+            return sb.ToString();
+        }
+
+        private sealed record CobBreakpoint(
+           DebuggerService Debugger,
+            string Path,
+            int Line,
+            int? Column,
+            string? Condition,
+            string? LogMessage
+        )
+        {
+            public bool IsTriggered(VirtualMachine2.Frame frame)
+            {
+                var preambleLines = 1; // TODO Implement, obviously
+
+                var token = frame.Function.Body.Instructions[frame.IP].StartToken;
+                if (token == null)
+                    return false;
+
+                if (!Path.Equals(token.Filename, StringComparison.OrdinalIgnoreCase)
+                    ||  Line != token.Line - preambleLines)
+                    return false;
+
+                if (Condition != null)
+                    return Debugger.Evaluate(Condition)?.Value is 1;
+
+                return true;
+            }
         }
     }
 }

@@ -97,8 +97,8 @@ class CobaltDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory 
 
         const serverPath = path.join(serverDirectory, 'Compiler.exe');
 
-        //const pipeName = "eb925160-12d5-485a-8b99-888865cb4ac3"; // For debugging
-        const pipeName = crypto.randomUUID();
+        const pipeName = "eb925160-12d5-485a-8b99-888865cb4ac3"; // For debugging
+        //const pipeName = crypto.randomUUID();
         const pipePath = path.join('\\\\.\\pipe\\', pipeName);
 
         this.server = process.spawn(serverPath, [ _session.configuration.entryCobPath, "--debug=" + pipeName, ..._session.configuration.commandLine ], {
